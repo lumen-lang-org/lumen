@@ -145,6 +145,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             {
                 return .bool;
             }
+            // A bare integer literal compares against an i64 operand as i64
+            // (Expr.num already carries a real i64 value; its type only
+            // *infers* to i32 without this context). Without this,
+            // comparing any i64-returning value (process.hrtime(),
+            // memoryUsage() fields, ...) against a literal like `0` failed
+            // to compile at all.
+            if (left_type == .i64 and right_type == .i32 and cmp.r.* == .num) {
+                cmp.checked_operand_type = .i64;
+                return .bool;
+            }
+            if (right_type == .i64 and left_type == .i32 and cmp.l.* == .num) {
+                cmp.checked_operand_type = .i64;
+                return .bool;
+            }
             // String-backed enum equality uses content comparison.
             if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and
                 left_type == .enum_type and right_type == .enum_type and

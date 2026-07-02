@@ -417,6 +417,7 @@ pub const Program = struct {
     needs_fs_streams: bool = false,
     needs_path_api: bool = false,
     needs_process_api: bool = false,
+    needs_process_uptime: bool = false,
     needs_os_api: bool = false,
     needs_crypto_api: bool = false,
     needs_url_api: bool = false,

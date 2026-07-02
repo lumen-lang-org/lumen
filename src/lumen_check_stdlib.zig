@@ -1581,8 +1581,145 @@ pub fn processCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
         call.checked_type = .string_array;
         return .string_array;
     }
+    // process API completion (spec 050): uptime/hrtime reuse the same
+    // Io.Clock primitive spec 041's time.now()/time.monotonic() already
+    // wired up. uptime() additionally needs a start timestamp recorded once
+    // in main(), gated by its own needs_process_uptime flag (the other
+    // functions in this namespace don't need any main()-time setup).
+    if (std.mem.eql(u8, call.name, "uptime")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        program.needs_process_uptime = true;
+        call.checked_type = .f64;
+        return .f64;
+    }
+    // hrtime() is a scalar i64 nanosecond count, not Node's [seconds, ns]
+    // tuple -- see spec.md's "hrtime shape" section for why: Lumen's i64 is
+    // a real 64-bit integer (not an IEEE-754 double), so it doesn't have
+    // the precision problem the tuple exists to work around in JS.
+    if (std.mem.eql(u8, call.name, "hrtime")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .i64;
+        return .i64;
+    }
+    if (std.mem.eql(u8, call.name, "memoryUsage")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        registerLumenProcessMemory(self) orelse return null;
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .{ .named = "__LumenProcessMemory" };
+        return .{ .named = "__LumenProcessMemory" };
+    }
+    if (std.mem.eql(u8, call.name, "kill")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const pid_t = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isInteger(pid_t)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const sig_t = self.exprType(program, call.args[1], line, col) orelse return null;
+        if (!types.same(.string, sig_t)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .bool;
+        return .bool;
+    }
+    if (std.mem.eql(u8, call.name, "umask")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .i32;
+        return .i32;
+    }
+    if (std.mem.eql(u8, call.name, "setUmask")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const t = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isInteger(t)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .i32;
+        return .i32;
+    }
+    // getuid/getgid/geteuid/getegid (spec 050): POSIX-only, same shape as
+    // the existing pid() -- raw syscalls, 0 fallback on non-Linux targets.
+    if (std.mem.eql(u8, call.name, "getuid") or std.mem.eql(u8, call.name, "getgid") or
+        std.mem.eql(u8, call.name, "geteuid") or std.mem.eql(u8, call.name, "getegid"))
+    {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .i32;
+        return .i32;
+    }
+    if (std.mem.eql(u8, call.name, "abort")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .void;
+        return .void;
+    }
+    // Lumen's own version marker, not Node's -- see spec.md's "version
+    // marker" section.
+    if (std.mem.eql(u8, call.name, "version")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .string;
+        return .string;
+    }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
+}
+
+// Lazily registers the synthetic `__LumenProcessMemory` record type shared
+// by `process.memoryUsage()`, following the same pattern
+// `registerLumenStat`/`registerLumenPathParts` already established. Only
+// `rss`/`vsize` -- see spec.md's "memoryUsage(): which /proc/self/status
+// fields are real" section for why those two and not a faked Node-shaped
+// heap breakdown.
+fn registerLumenProcessMemory(self: *Checker) ?void {
+    if (self.type_decls.get("__LumenProcessMemory") == null) {
+        const fields = self.arena.alloc(ast.TypeField, 2) catch return null;
+        fields[0] = .{ .name = "rss", .annotation = "i64", .checked_type = .i64 };
+        fields[1] = .{ .name = "vsize", .annotation = "i64", .checked_type = .i64 };
+        self.type_decls.put(self.arena, "__LumenProcessMemory", .{ .fields = fields }) catch return null;
+    }
 }
 
 // `os.*` (spec 034): almost entirely two syscalls (uname, sysinfo), no libc.
@@ -1591,9 +1728,8 @@ pub fn processCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
 // with identical values, so this matches Node's actual shape.
 pub fn osCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
     const string_fns = [_][]const u8{
-        "platform", "arch", "type", "release", "version", "machine",
-        "hostname", "endianness", "tmpdir",     "homedir", "EOL",
-        "devNull",
+        "platform", "arch",       "type",   "release", "version", "machine",
+        "hostname", "endianness", "tmpdir", "homedir", "EOL",     "devNull",
     };
     for (string_fns) |name| {
         if (std.mem.eql(u8, call.name, name)) {
