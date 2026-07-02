@@ -364,16 +364,22 @@ pub const Parser = struct {
             try self.expectOp('.');
             if (self.cur != .ident) return error.ParseError;
             const method = self.cur.ident;
-            if (!eq(u8, method, "log") and !eq(u8, method, "error")) {
-                self.last_err = "E_UNSUPPORTED_STD";
-                return error.ParseError;
+            // The six single-`any`-arg print methods (spec 048) share one
+            // dedicated ConsoleLog node: log/info/debug print to stdout,
+            // error/warn print to stderr, trace prints to stderr prefixed
+            // with "Trace: ". See lumen_emit_stmt.zig for the routing.
+            if (eq(u8, method, "log") or eq(u8, method, "error") or eq(u8, method, "warn") or
+                eq(u8, method, "info") or eq(u8, method, "debug") or eq(u8, method, "trace"))
+            {
+                try self.advance();
+                try self.expectOp('(');
+                const value = try self.parseExpr();
+                try self.expectOp(')');
+                try self.expectOp(';');
+                return .{ .console_log = .{ .method = method, .value = value, .line = line, .col = col } };
             }
-            try self.advance();
-            try self.expectOp('(');
-            const value = try self.parseExpr();
-            try self.expectOp(')');
-            try self.expectOp(';');
-            return .{ .console_log = .{ .method = method, .value = value, .line = line, .col = col } };
+            self.last_err = "E_UNSUPPORTED_STD";
+            return error.ParseError;
         }
 
         if (eq(u8, kw, "while")) {

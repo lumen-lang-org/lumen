@@ -460,9 +460,10 @@ pub fn parseArrow(self: *Parser) CompileError!*Expr {
 
 /// Parse the single-expression body of a `defer(() => BODY)` helper. Unlike a
 /// normal statement, the body is followed by `)` (not `;`), so no trailing
-/// semicolon is consumed. `console.log(...)`/`console.error(...)` are
-/// recognized as console_log statements (they have no expression form); any
-/// other expression becomes an expression statement.
+/// semicolon is consumed. `console.log(...)`/`console.error(...)`/`.warn(...)`/
+/// `.info(...)`/`.debug(...)`/`.trace(...)` are recognized as console_log
+/// statements (they have no expression form); any other expression becomes
+/// an expression statement.
 pub fn parseDeferHelperBodyStmt(self: *Parser) CompileError!Stmt {
     const line = self.cur_line;
     const col = self.cur_col;
@@ -471,7 +472,10 @@ pub fn parseDeferHelperBodyStmt(self: *Parser) CompileError!Stmt {
         try self.expectOp('.');
         if (self.cur != .ident) return error.ParseError;
         const method = self.cur.ident;
-        if (!std.mem.eql(u8, method, "log") and !std.mem.eql(u8, method, "error")) {
+        const eq = std.mem.eql;
+        if (!eq(u8, method, "log") and !eq(u8, method, "error") and !eq(u8, method, "warn") and
+            !eq(u8, method, "info") and !eq(u8, method, "debug") and !eq(u8, method, "trace"))
+        {
             self.last_err = "E_UNSUPPORTED_STD";
             return error.ParseError;
         }

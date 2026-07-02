@@ -88,9 +88,13 @@
   <h4 id="console">console</h4>
   <p class="stability-note stability-stable">Stable</p>
   <table>
-    <tr><th>API</th><th>Type</th></tr>
-    <tr><td><code>console.log(x)</code></td><td>any → void</td></tr>
-    <tr><td><code>console.error(x)</code></td><td>any → void</td></tr>
+    <tr><th>API</th><th>Type</th><th>Stream</th></tr>
+    <tr><td><code>console.log(x)</code></td><td>any → void</td><td>stdout</td></tr>
+    <tr><td><code>console.info(x)</code></td><td>any → void</td><td>stdout, alias of <code>log</code></td></tr>
+    <tr><td><code>console.debug(x)</code></td><td>any → void</td><td>stdout, alias of <code>log</code></td></tr>
+    <tr><td><code>console.error(x)</code></td><td>any → void</td><td>stderr</td></tr>
+    <tr><td><code>console.warn(x)</code></td><td>any → void</td><td>stderr, alias of <code>error</code></td></tr>
+    <tr><td><code>console.trace(x)</code></td><td>any → void</td><td>stderr, prints <code>Trace: x</code> &mdash; no call stack (Lumen has none to show)</td></tr>
   </table>
 
   <h4 id="math">Math</h4>
@@ -1409,6 +1413,16 @@ http.createServer(8080, handleRequest);</code></pre>
   <p class="sub">The surface grows in explicit, conformance-backed slices. These
   modules use the same conventional names; some depend on upcoming language
   features (noted below).</p>
+
+  <h4>console</h4>
+  <table>
+    <tr><th>API</th><th>Notes</th></tr>
+    <tr><td><code>console.assert(cond, msg)</code> · <code>console.time(label)</code>/<code>timeEnd(label)</code> · <code>console.count(label)</code>/<code>countReset(label)</code></td><td>real, scoped follow-up (small global timer/counter state in the generated runtime); not attempted in the pass that shipped <code>warn</code>/<code>info</code>/<code>debug</code>/<code>trace</code></td></tr>
+    <tr><td><code>console.group</code>/<code>groupEnd</code></td><td>needs indentation state threaded through every log call site, a bigger, cross-cutting change</td></tr>
+    <tr><td><code>console.table</code> · <code>console.dir</code></td><td>need structured/tabular object formatting; today's <code>printFormat</code> is a flat per-type format-string lookup</td></tr>
+    <tr><td><code>console.clear</code></td><td>terminal-control-code territory, low value</td></tr>
+    <tr><td><code>Console</code> class / custom-stream constructor (<code>new Console(stdout, stderr)</code>)</td><td>needs a <code>Stream</code> abstraction Lumen doesn't have (the same gap blocking <code>process.stdout</code>/<code>stdin</code>/<code>stderr</code>)</td></tr>
+  </table>
 
   <h4>fs</h4>
   <table>

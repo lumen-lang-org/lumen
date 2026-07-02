@@ -367,9 +367,24 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         },
         .console_log => |log| {
             const log_type = log.checked_type orelse return error.ParseError;
-            try body.print(arena, "    std.debug.print(\"{s}\\n\", .{{", .{analysis.printFormat(log_type)});
-            try emitExpr(log.value, body, arena);
-            try body.appendSlice(arena, "});\n");
+            const fmt = analysis.printFormat(log_type);
+            if (std.mem.eql(u8, log.method, "log") or std.mem.eql(u8, log.method, "info") or std.mem.eql(u8, log.method, "debug")) {
+                // Real stdout (see __consoleOut in lumen_compiler.zig's prelude).
+                try body.print(arena, "    __consoleOut(\"{s}\\n\", .{{", .{fmt});
+                try emitExpr(log.value, body, arena);
+                try body.appendSlice(arena, "});\n");
+            } else if (std.mem.eql(u8, log.method, "trace")) {
+                // Real stderr, Node-style "Trace: " prefix. No call stack: Lumen
+                // has no backtrace-walking mechanism to show one (spec 048).
+                try body.print(arena, "    std.debug.print(\"Trace: {s}\\n\", .{{", .{fmt});
+                try emitExpr(log.value, body, arena);
+                try body.appendSlice(arena, "});\n");
+            } else {
+                // error / warn: real stderr, unchanged mechanism.
+                try body.print(arena, "    std.debug.print(\"{s}\\n\", .{{", .{fmt});
+                try emitExpr(log.value, body, arena);
+                try body.appendSlice(arena, "});\n");
+            }
         },
         .while_stmt => |loop| {
             try body.appendSlice(arena, "    while (");
