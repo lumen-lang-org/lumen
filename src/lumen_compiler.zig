@@ -861,7 +861,17 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\fn __openSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8, flags: []const u8) i32 {
             \\    const file = if (std.mem.eql(u8, flags, "w"))
             \\        std.Io.Dir.cwd().createFile(io, path, .{}) catch return -1
-            \\    else
+            \\    else if (std.mem.eql(u8, flags, "a")) blk: {
+            \\        // Append mode (spec 031 revisited again): std.Io.File's
+            \\        // write path issues a raw, position-implicit writev(),
+            \\        // so seating the kernel's own fd offset at EOF once via
+            \\        // a raw lseek is enough -- every later writeSync call
+            \\        // naturally continues from there, no per-call seek or
+            \\        // offset tracking needed.
+            \\        const f = std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false }) catch return -1;
+            \\        if (@import("builtin").os.tag == .linux) _ = std.os.linux.lseek(f.handle, 0, std.os.linux.SEEK.END);
+            \\        break :blk f;
+            \\    } else
             \\        std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_only }) catch return -1;
             \\    __fd_table.append(alloc, file) catch return -1;
             \\    return @intCast(__fd_table.items.len - 1);
@@ -1054,16 +1064,34 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_lchown_sync) {
+        // fs.lchownSync (spec 031 revisited again): must not follow a
+        // symlink, so chownSync's "open the file, use File.setOwner" trick
+        // doesn't apply here -- there's no way to open a path without
+        // following a symlink in this Zig version. But std.os.linux already
+        // has a ready-made lchown raw syscall wrapper (fchownat with
+        // AT.SYMLINK_NOFOLLOW under the hood), the same "raw Linux syscall,
+        // no libc, no std.Io" pattern fs.watch/writevSync already
+        // established. No `io` parameter needed -- this never touches
+        // std.Io at all.
+        try out.appendSlice(arena,
+            \\fn __lchownSync(path: []const u8, uid: i64, gid: i64) void {
+            \\    if (@import("builtin").os.tag != .linux) return;
+            \\    const path_z = std.heap.page_allocator.dupeZ(u8, path) catch return;
+            \\    defer std.heap.page_allocator.free(path_z);
+            \\    const u: std.posix.uid_t = if (uid < 0) ~@as(std.posix.uid_t, 0) else @intCast(uid);
+            \\    const g: std.posix.gid_t = if (gid < 0) ~@as(std.posix.gid_t, 0) else @intCast(gid);
+            \\    _ = std.os.linux.lchown(path_z, u, g);
+            \\}
+            \\
+        );
+    }
     if (program.needs_writev_sync) {
         // fs.writevSync (spec 031 revisited): std.Io.File has no vectored
         // write wrapper in this Zig version (confirmed absent, not just
         // unused), but the raw std.os.linux.writev syscall does exist --
         // the same "raw Linux syscall, no libc" pattern os.uptime()/
-        // fs.watch already established. readvSync is deliberately not
-        // shipped alongside this: Node's readv fills caller-provided
-        // mutable buffers, and Lumen's `string` is immutable, so that
-        // signature doesn't have a natural Lumen shape the way writev's
-        // (read-only chunks in, byte count out) does.
+        // fs.watch already established.
         try out.appendSlice(arena,
             \\fn __writevSync(fd: i32, bufs: []const []const u8) i32 {
             \\    if (@import("builtin").os.tag != .linux) return 0;
@@ -1074,6 +1102,44 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    for (bufs, 0..) |b, i| iov[i] = .{ .base = b.ptr, .len = b.len };
             \\    const n = std.os.linux.writev(handle, iov.ptr, iov.len);
             \\    return @intCast(n);
+            \\}
+            \\
+        );
+    }
+    if (program.needs_readv_sync) {
+        // fs.readvSync (spec 031 revisited again): reframed, not a direct
+        // port of Node's signature. Node's readv fills caller-provided
+        // *mutable* buffers, which has no natural shape given Lumen's
+        // `string` is immutable. Instead this takes int[] sizes and
+        // allocates+owns the buffers itself, doing one real readv syscall
+        // to fill them all, then hands back fresh immutable strings sized
+        // to what was actually read -- same underlying vectored read, a
+        // shape that fits the type system instead of fighting it. readv
+        // fills earlier buffers completely before moving to later ones, so
+        // slicing each allocated buffer against the remaining byte count
+        // (in order) recovers exactly how much each one actually got.
+        try out.appendSlice(arena,
+            \\fn __readvSync(alloc: std.mem.Allocator, fd: i32, sizes: []const i32) []const []const u8 {
+            \\    if (@import("builtin").os.tag != .linux) return &.{};
+            \\    if (fd < 0 or @as(usize, @intCast(fd)) >= __fd_table.items.len) return &.{};
+            \\    const handle = __fd_table.items[@intCast(fd)].handle;
+            \\    const bufs = alloc.alloc([]u8, sizes.len) catch return &.{};
+            \\    const iov = alloc.alloc(std.posix.iovec, sizes.len) catch return &.{};
+            \\    for (sizes, 0..) |sz, i| {
+            \\        const b = alloc.alloc(u8, @intCast(@max(sz, 0))) catch return &.{};
+            \\        bufs[i] = b;
+            \\        iov[i] = .{ .base = b.ptr, .len = b.len };
+            \\    }
+            \\    const rc = std.os.linux.readv(handle, iov.ptr, iov.len);
+            \\    if (@as(isize, @bitCast(rc)) < 0) return &.{};
+            \\    var remaining: usize = rc;
+            \\    const result = alloc.alloc([]const u8, sizes.len) catch return &.{};
+            \\    for (bufs, 0..) |b, i| {
+            \\        const take = @min(b.len, remaining);
+            \\        result[i] = b[0..take];
+            \\        remaining -= take;
+            \\    }
+            \\    return result;
             \\}
             \\
         );
@@ -1174,7 +1240,12 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\        while (offset + @sizeOf(std.os.linux.inotify_event) <= n) {
             \\            const ev: *const std.os.linux.inotify_event = @ptrCast(@alignCast(&buf[offset]));
             \\            const name = ev.getName() orelse path;
-            \\            listener.call(listener.ctx, name);
+            \\            // Node's fs.watch only distinguishes "change" (data
+            \\            // modified) from "rename" (created/deleted/moved),
+            \\            // not inotify's full event granularity -- matching
+            \\            // that convention rather than inventing a new one.
+            \\            const event_type: []const u8 = if (ev.mask & std.os.linux.IN.MODIFY != 0) "change" else "rename";
+            \\            listener.call(listener.ctx, name, event_type);
             \\            offset += @sizeOf(std.os.linux.inotify_event) + ev.len;
             \\        }
             \\    }
@@ -1273,8 +1344,22 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\fn __pathDirname(path: []const u8) []const u8 {
             \\    return std.fs.path.dirname(path) orelse ".";
             \\}
-            \\fn __pathResolve(alloc: std.mem.Allocator, paths: []const []const u8) []const u8 {
-            \\    return std.fs.path.resolve(alloc, paths) catch "";
+            \\fn __pathResolve(io: std.Io, alloc: std.mem.Allocator, paths: []const []const u8) []const u8 {
+            \\    // path.resolve (spec 032 revisited): now anchors a fully-
+            \\    // relative result to the real cwd, matching Node. Always
+            \\    // prepending cwd and letting std.fs.path.resolve's own
+            \\    // left-to-right "cd"-chaining logic run is enough -- if a
+            \\    // later segment is absolute, that logic already resets the
+            \\    // result past the cwd anchor on its own, so there's no need
+            \\    // to separately check whether any input is absolute first.
+            \\    var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
+            \\    const cwd_len = std.process.currentPath(io, &cwd_buf) catch {
+            \\        return std.fs.path.resolve(alloc, paths) catch "";
+            \\    };
+            \\    const full = alloc.alloc([]const u8, paths.len + 1) catch return std.fs.path.resolve(alloc, paths) catch "";
+            \\    full[0] = cwd_buf[0..cwd_len];
+            \\    @memcpy(full[1..], paths);
+            \\    return std.fs.path.resolve(alloc, full) catch "";
             \\}
             \\fn __pathJoin(alloc: std.mem.Allocator, paths: []const []const u8) []const u8 {
             \\    const naive = std.fs.path.join(alloc, paths) catch return "";

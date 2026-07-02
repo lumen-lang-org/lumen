@@ -25,9 +25,21 @@
   section.
 - [x] T7 Commit, push, redeploy `lumen-playground`.
 
-## Phase 2 / deferred (tracked, not scheduled)
+## Phase 2 (2026-07-02, spec 031 phase 6)
+
+- [x] T8 Event-type distinction: `inotify_event.mask` bit-tested for
+  `IN.MODIFY` to derive `"change"`/`"rename"`, passed as a second listener
+  arg. Checker's `makeFuncType` call changed from `&.{.string}` to
+  `&.{.string, .string}`.
+- [x] T9 Verified against a real create/write/write/delete sequence:
+  exactly `rename`/`change`/`change`/`rename`, in order.
+- [x] T10 `zig build test` + a clean, non-concurrent
+  `zig build conformance` run (alongside the rest of spec 031 phase 6).
+- [x] T11 Updated `website/stdlib.html` and `spec.md`'s API table/example.
+- [x] T12 Commit, push, redeploy `lumen-playground`.
+
+## Phase 3 / deferred (tracked, not scheduled)
 
 See spec.md's "Not planned" table: `EventEmitter`-based `FSWatcher` (see
-the design question in spec.md for why this doesn't fit), event-type
-distinction (`rename` vs `change`), recursive directory watching,
-`fs.watchFile`/`unwatchFile`, non-Linux platforms.
+the design question in spec.md for why this doesn't fit), recursive
+directory watching, `fs.watchFile`/`unwatchFile`, non-Linux platforms.

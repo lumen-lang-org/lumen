@@ -37,10 +37,30 @@
   Planned table (`relative`/`matchesGlob`/win32 variants remain, correctly).
 - [x] T15 Commit, push. Redeploy `lumen-playground`: in progress.
 
+## Phase 2 (2026-07-02)
+
+- [x] T16 `path.resolve`'s Node-parity cwd anchor: gave `__pathResolve` an
+  `io` parameter (the one `path.*` function to get one -- every other one
+  stays pure string manipulation) and prepended the real cwd, obtained via
+  `std.process.currentPath` (the same mechanism `process.cwd()` already
+  used, discovered while investigating -- turns out this was never
+  genuinely blocked by the `fs.realpathSync` gap the old notes pointed to,
+  since `process.cwd()` used a different mechanism from the start). Bug
+  hit and fixed: `std.process.currentPath` returns the written length as
+  a `usize`, not a `[]const u8` slice directly -- needed `cwd_buf[0..n]`.
+  Verified: `path.resolve("foo", "bar")` now returns `<cwd>/foo/bar`; an
+  absolute segment still resets the result exactly as before.
+- [x] T17 `zig build test` + a full, clean, non-concurrent
+  `zig build conformance` run alongside the spec 031 phase 5 batch — no
+  regressions.
+- [x] T18 Updated `website/stdlib.html` and `spec.md`'s deviation section
+  and Not-planned table.
+- [x] T19 Commit, push, redeploy `lumen-playground`.
+
 ## Phase 2 / deferred (tracked, not scheduled)
 
-- `path.relative(from, to)` — blocked on no real-cwd-as-string primitive
-  (same root gap as `fs.realpathSync`).
+- `path.relative(from, to)` — not attempted; `path.resolve`'s cwd access
+  (T16 above) removes what used to be the blocker, a real follow-up now.
 - `path.matchesGlob` — blocked on no glob algorithm (same as `fs.globSync`).
 - `path.win32` / `path.posix` / `path.toNamespacedPath` — out of scope,
   POSIX-only target.

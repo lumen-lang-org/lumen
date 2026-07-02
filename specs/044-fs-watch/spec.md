@@ -34,9 +34,24 @@ the primitives available.
 
 | Function | Type | Notes |
 | --- | --- | --- |
-| `fs.watch(path, listener)` | `(string, (string) -> void) -> void` | blocking; calls `listener` with the name of the file that changed on every create/modify/delete/rename event under `path`, forever |
+| `fs.watch(path, listener)` | `(string, (string, string) -> void) -> void` | blocking; calls `listener` with the name of the file that changed and an event type on every create/modify/delete/rename event under `path`, forever |
 
-Node's real callback takes two arguments, `(eventType, filename)`
+**Event-type distinction shipped (2026-07-02 revisit, spec 031 phase 6)**:
+originally shipped with a single-argument `(filename) -> void` callback,
+deliberately dropping Node's `(eventType, filename)` distinction as an
+explicit v1 simplification (see the struck-through reasoning below, kept
+for history). Revisited after finding it wasn't actually extra work:
+`inotify_event.mask` already carries the create/modify/delete/rename
+information, it just wasn't being read. Now `(filename, eventType) -> void`
+-- note the argument order differs from Node's `(eventType, filename)`,
+matching this project's existing "primary payload first" convention rather
+than copying Node's order. `eventType` is `"change"` for a data
+modification or `"rename"` for a create/delete/move, matching Node's own
+two-value granularity, not inotify's full distinction between those.
+Verified against a real create/write/write/delete sequence, producing
+exactly `rename`/`change`/`change`/`rename`.
+
+~~Node's real callback takes two arguments, `(eventType, filename)`
 (`eventType` is `"rename"` or `"change"`). This ships with one: just the
 filename, matching the single-payload-argument shape every other
 callback-taking builtin this session uses (`setInterval`,
@@ -44,7 +59,7 @@ callback-taking builtin this session uses (`setInterval`,
 one-concept-per-callback spirit). The specific create/modify/delete/rename
 distinction is dropped for v1 -- "something changed, here's what" covers
 the common "rebuild on any change" use case; splitting it out is a
-straightforward follow-up if it turns out to matter.
+straightforward follow-up if it turns out to matter.~~
 
 ## Design notes
 

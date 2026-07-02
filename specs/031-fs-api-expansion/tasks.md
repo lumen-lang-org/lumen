@@ -84,3 +84,58 @@
   append-mode `openSync`, stale `fs.realpathSync`-as-blocker references in
   `path.resolve`/`process` cleaned up).
 - [x] T31 Commit, push, redeploy `lumen-playground`.
+
+## Phase 6 (2026-07-02, same day: user asked "how to unblock" the Phase 5
+## leftovers, then to implement everything verified feasible)
+
+- [x] T32 `fs.lchownSync(path, uid, gid)` — `std.os.linux.lchown` already
+  exists as a ready-made raw syscall wrapper (`fchownat` with
+  `AT.SYMLINK_NOFOLLOW` under the hood, found by reading `linux.zig`
+  directly rather than assuming it didn't exist). Same "raw Linux
+  syscall, no libc, no std.Io" shape as `fs.watch`/`writevSync`. Verified
+  with a real symlink: the symlink's owner changed via `stat`, its
+  target's did not.
+- [x] T33 Append-mode `fs.openSync(path, "a")` — re-examined the
+  "no seek primitive" assumption by reading `std.Io.File`'s actual write
+  path (`fileWriteStreaming` in `Io/Threaded.zig`): it issues a raw,
+  position-implicit `writev()` syscall (not `pwritev()`), meaning it uses
+  and advances the kernel's own tracked fd offset. So a single raw
+  `lseek(fd, 0, SEEK_END)` right after opening (via
+  `createFile(.{.truncate = false})`, which creates-or-opens without
+  truncating) correctly seats that offset at EOF, and every later
+  `writeSync` naturally continues from there -- no seek needed on every
+  write, no offset tracking in Lumen code at all. Verified across
+  separate open/close cycles: each new `"a"` open correctly re-seeks to
+  wherever the file currently ends, not just where it ended at the first
+  open.
+- [x] T34 `fs.readvSync(fd, sizes: int[]) -> string[]` — reframed rather
+  than ported: Node's `readv` fills caller-provided mutable buffers, no
+  natural shape given Lumen's `string` is immutable. Takes desired chunk
+  sizes instead, allocates and owns the buffers itself, does one real
+  `readv` syscall, then hands back immutable strings sliced to what was
+  actually read (readv fills earlier buffers completely before later
+  ones, so walking the size list against the syscall's total-bytes
+  return recovers each buffer's real length). Verified both an exact-fit
+  3-chunk read and a short-read case (requested sizes exceeding available
+  data, confirming the trailing chunk comes back empty rather than
+  garbage or an error).
+- [x] T35 `fs.watch`'s event-type distinction — `inotify_event.mask`
+  already carried create/modify/delete/rename info, just wasn't being
+  read. Listener signature changed from `(string) -> void` to
+  `(string, string) -> void`, the second arg `"change"` (data modified)
+  or `"rename"` (created/deleted/moved) -- matching Node's own two-value
+  `fs.watch` convention, not inotify's full granularity. Verified against
+  real file create/write/write/delete: produced exactly
+  rename/change/change/rename.
+- [x] T36 `zig build test` + a full, clean, non-concurrent
+  `zig build conformance` run covering T32-T35 together (path.resolve's
+  cwd anchor, spec 032, verified in the same run).
+- [x] T37 Updated `website/stdlib.html` (new per-function blocks for
+  `lchownSync`/`readvSync`, `fs.watch`'s doc + example signature,
+  `openSync`'s append-mode doc, Not-planned table narrowed further).
+- [x] T38 Commit, push, redeploy `lumen-playground`.
+
+Remaining genuinely blocked: `fs.opendirSync`/`globSync` (need a
+directory-iterator class / real glob algorithm -- same shape as Streams,
+just not attempted yet), `fs.promises.*` beyond the async trio (needs
+lower-level async op submission), recursive/non-Linux `fs.watch`.

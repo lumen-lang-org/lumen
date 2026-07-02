@@ -552,8 +552,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[2], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "lchownSync")) {
+                try w.appendSlice(arena, "__lchownSync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[2], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "writevSync")) {
                 try w.appendSlice(arena, "__writevSync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "readvSync")) {
+                try w.appendSlice(arena, "__readvSync(__alloc, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
@@ -640,7 +654,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 try w.appendSlice(arena, " })");
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "resolve")) {
-                try w.appendSlice(arena, "__pathResolve(__alloc, &.{ ");
+                try w.appendSlice(arena, "__pathResolve(__io, __alloc, &.{ ");
                 for (cl.args, 0..) |a, i| {
                     if (i > 0) try w.appendSlice(arena, ", ");
                     try emitExpr(a, w, arena);

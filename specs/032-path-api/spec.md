@@ -56,17 +56,28 @@ exactly like `cpSync(src, dest, recursive?)` already does.
 `path.dirname` returns `"."` for that `null` case specifically to match
 Node's documented behavior, rather than surfacing the empty/null distinction.
 
-**Deviation from Node, `path.resolve`**: Node's `path.resolve(...)` always
-returns an absolute path -- if no argument is absolute, it implicitly
-prepends `process.cwd()`. Zig's `std.fs.path.resolve` explicitly does *not*
-do this (its doc comment: "will not convert relative paths to an absolute
-path, use `Io.Dir.realpath` instead"), and Lumen has no working
-`Io.Dir.realpath` to call (the same root gap already documented as blocking
-`fs.realpathSync`). So `path.resolve("a", "b")` returns the normalized
-relative path `"a/b"`, not an absolute path anchored at the real working
-directory. This matches `path.resolve` exactly whenever at least one argument
-is itself absolute (the common case), and is a documented, deliberate
-deviation otherwise.
+**`path.resolve` now anchors to the real working directory (2026-07-02
+revisit)**: the deviation below was written when `fs.realpathSync` and
+`process.cwd()` were both believed blocked for the same reason. That
+assumption turned out to be stale for both -- `fs.realpathSync` now works
+(see spec 031 phase 5), and it turns out `process.cwd()` had already shipped
+using a *different* mechanism (`std.process.currentPath`), so `path.resolve`
+didn't even need the `fs.realpathSync` fix to unblock it. `path.resolve` is
+the one `path.*` function that now takes an `io` parameter (a real
+architecture change from every other `path.*` function, which stay pure
+string manipulation) and prepends the real cwd via that same
+`std.process.currentPath` call before running `std.fs.path.resolve`'s own
+left-to-right "cd"-chaining logic -- if a later segment is absolute, that
+logic already resets the result past the cwd anchor on its own, so there's
+no separate "is any argument absolute" check needed. Verified: a fully
+relative input now resolves to `<real cwd>/...`, matching Node exactly; an
+absolute segment still resets the result exactly as before.
+
+Original deviation, kept for history: Zig's `std.fs.path.resolve`
+explicitly does *not* anchor to cwd on its own (its doc comment: "will not
+convert relative paths to an absolute path, use `Io.Dir.realpath`
+instead") -- `__pathResolve` supplies that anchoring itself now rather than
+relying on `std.fs.path.resolve` to do it.
 
 **`path.parse`/`path.format` are the second and third record-returning
 builtins**, following the exact mechanism `fs.statSync` introduced: a
@@ -80,7 +91,7 @@ argument against the same synthetic shape rather than registering a new one.
 
 | Function | Blocker |
 | --- | --- |
-| `path.relative(from, to)` | needs the real OS working directory as a string to resolve relative `from`/`to` against (Zig's own `std.fs.path.relative` takes an explicit `cwd: []const u8` parameter -- there is no `Io.Dir.realpath`/`getCwd`-equivalent string accessor in this Zig version to supply it, the same root gap as `fs.realpathSync`) |
+| `path.relative(from, to)` | not attempted this pass; `path.resolve` shipping real cwd access (see above) removes what used to be the blocker here too -- a real, separate follow-up now, not a new gap |
 | `path.matchesGlob(path, pattern)` | needs a real glob algorithm (same blocker already documented for `fs.globSync`) |
 | `path.win32`, `path.posix`, `path.toNamespacedPath` | Lumen targets POSIX only; no Windows path emulation planned |
 

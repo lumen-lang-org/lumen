@@ -130,7 +130,29 @@ and found several were wrong:
 | `fs.realpathSync(path)` | The "only a raw libc binding" note was stale. This Zig version's `std.Io.Dir` has a real `realPathFileAlloc`, dispatching to a genuine per-OS implementation (confirmed by reading `Io/Threaded.zig`'s `dirRealPathFile`, not a stub). Shipped; falls back to returning `path` unchanged on error. Verified against a real symlink, not just a plain file. |
 | `fs.chownSync(path, uid, gid)` | Still true that path-based `Dir.setFileOwner` panics unconditionally. But `File.setOwner` (the fd-based one `fchownSync` already uses) is a real, working implementation -- so this opens the file first (the same "open, then use the file-level method" pattern `chmodSync` already established) and calls that instead, sidestepping the broken path-level wrapper entirely. Verified with a real ownership change confirmed via `stat` (running as root in the dev container). |
 | `fs.writevSync(fd, buffers)` | `std.Io.File` genuinely has no vectored-write wrapper, but the raw `std.os.linux.writev` syscall exists -- the same "raw Linux syscall, no libc" pattern `os.uptime()`/`fs.watch` already established. Ran into one real bug while shipping this: `std.os.linux.iovec_const` is a private alias, not the type to actually reference -- `std.posix.iovec_const` is. Shipped; verified with a 3-chunk write reassembling correctly in one syscall. `readvSync` is deliberately not shipped alongside it: Node's `readv` fills caller-provided *mutable* buffers, and Lumen's `string` is immutable, so that signature has no natural Lumen shape the way `writevSync`'s (read-only chunks in, byte count out) does. |
-| `fs.lchownSync(path, uid, gid)` | Still genuinely blocked, but for a more precise reason now: unlike `chownSync`, this one must *not* follow a symlink, and `std.Io.Dir.OpenFileOptions` has no "don't follow symlinks" field to open one without following it (confirmed by reading the struct directly) -- so there's no path-level handle to call `setOwner` on the way `chownSync` does. Would need a raw `fchownat(..., AT_SYMLINK_NOFOLLOW)` syscall instead, not attempted this pass. |
+| `fs.lchownSync(path, uid, gid)` | At the time of Phase 5, believed still genuinely blocked for a precise reason: `std.Io.Dir.OpenFileOptions` has no "don't follow symlinks" field, so there's no path-level handle to call `setOwner` on the way `chownSync` does. Turned out that reasoning, while correct, wasn't the whole picture -- see Phase 6. |
+
+### Phase 6 -- same day, going one level lower than `std.Io.Dir`/`File`: `lchownSync`, append-mode `openSync`, `readvSync`, `fs.watch` event types
+
+Phase 5 stopped at "no `std.Io.Dir`/`File`-level primitive exists" for
+`lchownSync` and append-mode `openSync`, and declined to ship `readvSync` at
+all. Asked "how to unblock them" rather than leaving that as the final
+answer, and re-examined each one level lower, at the raw `std.os.linux`
+syscall layer `fs.watch`/`writevSync` already used successfully:
+
+| Function | What was actually true |
+| --- | --- |
+| `fs.lchownSync(path, uid, gid)` | `std.os.linux.lchown` already exists as a ready-made raw syscall wrapper (`fchownat(AT.FDCWD, path, owner, group, AT.SYMLINK_NOFOLLOW)` under the hood) -- found by reading `linux.zig` directly instead of stopping at "no `std.Io` primitive." Same "raw Linux syscall, no libc, no `std.Io`" shape as `fs.watch`. Shipped; verified with a real symlink -- the symlink's owner changed via `stat`, its target's did not. |
+| Append-mode `fs.openSync(path, "a")` | The "needs a seek primitive" note was true but incomplete: `std.Io.File`'s actual write path (`fileWriteStreaming` in `Io/Threaded.zig`) issues a raw, *position-implicit* `writev()` syscall, not `pwritev()` -- meaning it uses and advances the kernel's own tracked fd offset. So a single raw `lseek(fd, 0, SEEK_END)` right after opening (via `createFile(.{.truncate = false})`, which creates-or-opens without truncating existing content) correctly seats that offset at EOF, and every later `writeSync` naturally continues from there with no further seeking. Shipped; verified across separate open/close cycles -- each new `"a"` open correctly re-seeks to wherever the file currently ends, not just where it ended at the first open. |
+| `fs.readvSync(fd, sizes: int[]) -> string[]` | Reframed rather than ported, as anticipated in Phase 5: takes desired chunk sizes instead of caller-provided mutable buffers, allocates and owns the buffers itself, does one real `readv` syscall, then hands back immutable strings sliced to what was actually read. Shipped; verified both an exact-fit multi-chunk read and a short-read case (requested sizes exceeding available data) to confirm the trailing chunk comes back empty rather than garbage. |
+| `fs.watch`'s event-type distinction | `inotify_event.mask` already carried the create/modify/delete/rename distinction; it just wasn't being read. Listener signature changed from `(string) -> void` to `(string, string) -> void` (`"change"` or `"rename"`, matching Node's own two-value convention, not inotify's full granularity). Verified against real file create/write/write/delete: produced exactly rename/change/change/rename. |
+
+Also confirmed (not shipped this pass, see spec 032): `path.resolve`'s
+long-standing Node-parity gap (anchoring a fully-relative result to the real
+working directory) was never actually blocked by the `fs.realpathSync` gap
+the old notes pointed to -- `process.cwd()` had already shipped via a
+*different* mechanism (`std.process.currentPath`) from the start. Shipped in
+spec 032, not here, since it's a `path.*` change.
 
 `fs.cpSync(src, dest, recursive?)` and `fs.mkdtempSync(prefix)` **shipped** (see
 Available now).
@@ -168,12 +190,14 @@ not a replacement.
 | Group | Needs |
 | --- | --- |
 | `fs.opendirSync`, `fs.globSync` | a directory-iterator class / a real glob algorithm — `readdirSync` itself **shipped** (Phase 3, two-pass array fill) |
-| `fs.readvSync`, append-mode `openSync` ("a") | `readv` fills caller-provided mutable buffers, no natural Lumen shape given `string` is immutable (`writevSync` **shipped**, Phase 5); append mode needs a seek primitive not available here (unrelated to async `fs.appendFile`, which computes its start offset from a stat call instead of seeking) |
 | `fs.statfsSync` | see Phase 2 blockers above |
-| `fs.lchownSync` | needs a raw `fchownat(..., AT_SYMLINK_NOFOLLOW)` syscall — see Phase 5 (`chownSync` itself **shipped**) |
 | Remaining async/callback functions (`fs.unlink`, `fs.mkdir`, `fs.stat`, ... most of the ~54) and `fs.promises.*` beyond `readFile`/`writeFile`/`appendFile` | the underlying async runtime only exposes read/write/close as true async ops (confirmed by reading its io_uring backend directly) -- no unlink/mkdir/stat op exists to build on without submitting raw low-level requests ourselves, a bigger undertaking than this milestone |
-| `fs.watch`/`watchFile`/`unwatchFile` | no watcher/listener infra -- `fs.watch(path, listener)` itself **shipped** (spec 044) |
+| `fs.watchFile`/`unwatchFile`, recursive watching, non-Linux `fs.watch` | `fs.watch(path, listener)` itself and its event-type distinction **shipped** (spec 044, Phase 6) |
 | `fs.openAsBlob` | no `Blob` type |
+
+`fs.readvSync`, append-mode `openSync("a")`, and `fs.lchownSync` all
+**shipped** (Phase 6, below) after re-checking the assumptions above instead
+of trusting them.
 
 ## Requirements
 

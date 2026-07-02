@@ -1044,6 +1044,22 @@ pub fn fsCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
         call.checked_type = .void;
         return .void;
     }
+    if (std.mem.eql(u8, call.name, "lchownSync")) {
+        if (call.args.len != 3) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const path_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        const uid_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        const gid_type = self.exprType(program, call.args[2], line, col) orelse return null;
+        if (!types.same(.string, path_type) or !types.isInteger(uid_type) or !types.isInteger(gid_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.needs_lchown_sync = true;
+        call.checked_type = .void;
+        return .void;
+    }
     if (std.mem.eql(u8, call.name, "writevSync")) {
         if (call.args.len != 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
@@ -1059,6 +1075,22 @@ pub fn fsCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
         program.needs_writev_sync = true;
         call.checked_type = .i32;
         return .i32;
+    }
+    if (std.mem.eql(u8, call.name, "readvSync")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const fd_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        const sizes_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        if (!types.isInteger(fd_type) or !types.same(.i32_array, sizes_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_readv_sync = true;
+        call.checked_type = .string_array;
+        return .string_array;
     }
     if (std.mem.eql(u8, call.name, "fsyncSync") or std.mem.eql(u8, call.name, "fdatasyncSync")) {
         if (call.args.len != 1) {
@@ -1150,7 +1182,7 @@ pub fn fsCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
-        const want = self.makeFuncType(&.{.string}, .void) orelse return null;
+        const want = self.makeFuncType(&.{ .string, .string }, .void) orelse return null;
         self.ensureAssignable(program, want, call.args[1], line, col) catch {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
