@@ -166,6 +166,32 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             }
             value.* = .{ .tuple_lit = .{ .items = items, .tuple_type = expected } };
         },
+        .i64 => {
+            // A bare integer literal (`const x: i64 = 5;`) carries a real
+            // i64 value in the AST already (Expr.num is i64, not i32), but
+            // its *inferred* type without this context defaults to i32 --
+            // so the generic path below would reject it as a mismatch.
+            // Found while reviewing spec 050's new i64-returning functions
+            // (process.hrtime()/memoryUsage()): those values couldn't even
+            // be compared against a literal (`mem.rss > 0` failed to
+            // compile) without this. Only bare literals get this pass --
+            // an i32-*typed variable* still can't implicitly narrow/widen
+            // into an i64 slot, matching every other integer width here.
+            if (value.* == .num) return;
+            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+        },
+        .f64 => {
+            // Same gap as .i64 above, hit by the same review pass:
+            // `process.uptime() >= 0` (a bare int literal against an f64
+            // value) failed for the identical reason. A bare integer
+            // literal is comptime_int at the Zig emit layer, which Zig
+            // itself coerces to f64 without any extra cast needed here --
+            // this is purely a checker-side gap, not an emit-side one.
+            if (value.* == .num) return;
+            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+        },
         else => {
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
