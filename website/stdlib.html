@@ -42,37 +42,11 @@
 
 <section class="wrap">
   <div class="docs">
-  <select class="docs-nav-mobile" onchange="if(this.value) location.hash = this.value">
-    <option value="">Jump to section&hellip;</option>
-    <optgroup label="Available now">
-      <option value="#console">console</option>
-      <option value="#math">Math</option>
-      <option value="#strings">String methods</option>
-      <option value="#arrays">Array methods</option>
-      <option value="#collections">Collections</option>
-      <option value="#events">events</option>
-      <option value="#async">async / await</option>
-      <option value="#ffi">C FFI</option>
-      <option value="#errors">Errors</option>
-      <option value="#fs">fs</option>
-      <option value="#path">path</option>
-      <option value="#process">process</option>
-      <option value="#os">os</option>
-      <option value="#crypto">crypto</option>
-      <option value="#url">url</option>
-      <option value="#child_process">child_process</option>
-      <option value="#assert">assert</option>
-      <option value="#time">time</option>
-      <option value="#http">http</option>
-    </optgroup>
-    <optgroup label="Planned">
-      <option value="#planned">Roadmap</option>
-    </optgroup>
-    <optgroup label="Packages">
-      <option value="#community">Community</option>
-    </optgroup>
-  </select>
-  <aside class="docs-nav"><nav>
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">Jump to section</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
     <p class="docs-nav-title">Available now</p>
     <a href="#console">console</a>
     <a href="#math">Math</a>
@@ -1609,13 +1583,17 @@ console.log(codes.get(404) ?? "?"); // "Not Found"</code></pre>
   });
   if (!sections.length || !('IntersectionObserver' in window)) return;
 
+  var toggleLabel = document.getElementById('docs-nav-toggle-label');
   var current = null;
   function setActive(id) {
     if (id === current) return;
     current = id;
     navLinks.forEach(function (l) { l.classList.remove('active'); });
     var match = sections.find(function (s) { return s.id === id; });
-    if (match) match.link.classList.add('active');
+    if (match) {
+      match.link.classList.add('active');
+      if (toggleLabel) toggleLabel.textContent = match.link.textContent;
+    }
   }
 
   // Track sections crossing a line near the top of the viewport (below the
@@ -1629,6 +1607,31 @@ console.log(codes.get(404) ?? "?"); // "Not Found"</code></pre>
 
   sections.forEach(function (s) { observer.observe(s.el); });
   setActive(sections[0].id);
+})();
+
+// Mobile "jump to section" toggle: a custom button + panel (not a native
+// <select>, so the open state is fully styleable) that shows/hides the same
+// sidebar nav used on desktop. Closes on link click or an outside click.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
 })();
 </script>
 </body>
