@@ -403,6 +403,13 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 return self.inferenceFail(log.line, log.col, "cannot infer console.log argument type");
             if (log_type == .void) return self.fail(log.line, log.col, "E_VOID_VALUE");
             log.checked_type = log_type;
+            // log/info/debug print to real stdout via the __consoleOut
+            // runtime helper, which needs __io; error/warn/trace keep using
+            // std.debug.print (real stderr) directly and need no io at all.
+            if (std.mem.eql(u8, log.method, "log") or std.mem.eql(u8, log.method, "info") or std.mem.eql(u8, log.method, "debug")) {
+                program.uses_io = true;
+                program.needs_console_stdout = true;
+            }
         },
         .while_stmt => |*loop| {
             const cond_type = self.exprType(program, loop.cond, loop.line, loop.col) orelse

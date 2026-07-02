@@ -92,7 +92,14 @@ fn checkCompileRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_path
     }
 
     const expected = case.expect.stdout orelse "";
-    const actual = trimTrailingNewlines(run.stderr);
+    // Concatenate stdout+stderr rather than picking one statically: spec 048
+    // fixed a real bug where console.log/error both landed on stderr
+    // (std.debug.print, unconditionally); some older manifest cases (e.g.
+    // console-stdlib.ts's console.error case) were written against that
+    // buggy routing. Concatenating keeps every existing case's expectation
+    // correct regardless of which real stream a case's output lands on.
+    const combined = std.fmt.allocPrint(arena, "{s}{s}", .{ run.stdout, run.stderr }) catch return false;
+    const actual = trimTrailingNewlines(combined);
     if (!std.mem.eql(u8, actual, expected)) {
         std.debug.print("FAIL {s}: stdout mismatch\nexpected:\n{s}\nactual:\n{s}\n", .{ case.id, expected, actual });
         return false;

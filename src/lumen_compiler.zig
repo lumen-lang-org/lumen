@@ -1509,6 +1509,37 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_console_stdout) {
+        // console.log/info/debug (spec 048): a real stdout writer. Unlike
+        // std.debug.print (which always targets stderr -- the mechanism
+        // console.error/warn/trace still use directly), stdout needs the
+        // __io-backed std.Io.File writer, the same pattern the compiler
+        // CLI's own error reporting already uses for stderr.
+        //
+        // Bug found in review (spec 046's Streams work hit the same class
+        // of bug earlier this session): File.writer() defaults to
+        // *positional* writing (each write happens via a position that
+        // resets per Writer instance, not a continuing stream position) --
+        // its own doc comment says so explicitly ("Positional is more
+        // threadsafe, since the global seek position is not affected").
+        // Since __consoleOut creates a fresh Writer on every call, every
+        // call after the first silently overwrote the previous one instead
+        // of appending, when stdout was a redirected file/pipe (as the
+        // conformance harness itself does) -- confirmed directly: three
+        // console.log calls to a file only left the last line's content.
+        // writerStreaming() is the sequential-append variant Streams
+        // already established as the correct choice for a real stream like
+        // stdout, not a seekable file.
+        try out.appendSlice(arena,
+            \\fn __consoleOut(comptime fmt: []const u8, args: anytype) void {
+            \\    var buf: [4096]u8 = undefined;
+            \\    var w = std.Io.File.stdout().writerStreaming(__io, &buf);
+            \\    w.interface.print(fmt, args) catch return;
+            \\    w.interface.flush() catch {};
+            \\}
+            \\
+        );
+    }
     if (program.needs_http_module) {
         // http.request/get (spec 042): one-shot client request via
         // std.http.Client.fetch, with a real method/payload/response body

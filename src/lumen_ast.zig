@@ -434,6 +434,10 @@ pub const Program = struct {
     needs_map: bool = false,
     needs_set: bool = false,
     needs_event_emitter: bool = false,
+    // console.log/info/debug (spec 048): a real stdout writer is needed --
+    // console.error/warn/trace keep using std.debug.print (real stderr)
+    // directly and don't need this.
+    needs_console_stdout: bool = false,
     // Async/await: emit the event-loop + Promise runtime and drain the loop in main.
     needs_async: bool = false,
 };
