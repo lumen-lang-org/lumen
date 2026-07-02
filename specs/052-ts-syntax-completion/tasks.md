@@ -10,7 +10,15 @@ Every task names its files and a real `.ts` program that exercises it, plus
 
 ## Phase 1 — green-lit syntax features
 
-- [ ] **T1 — `readonly` arrays / `ReadonlyArray<T>` (Cluster D, S).** DO FIRST
+**Progress (batch 1 shipped):** T1, T2, T4, T6 done and verified — see the
+`[x]` marks. Also fixed a pre-existing false-positive in the
+`E_DYNAMIC_PROPERTY_WRITE` lexer pre-scan (it flagged `readonly [A, B] =`
+tuple annotations as indexed writes). Two pre-existing limitations surfaced
+while testing and are explicitly NOT part of this spec: nested array types
+(`int[][]`) don't parse, and a `throw` from inside a called function isn't
+caught by an enclosing `try` (cross-function throw) — both predate spec 052.
+
+- [x] **T1 — `readonly` arrays / `ReadonlyArray<T>` (Cluster D, S).** DO FIRST
   — it stabilizes the annotation grammar. Files: `src/lumen_parser_expr.zig`
   (strip a leading `readonly` at the top of `parseTypeAnnotation`; extend the
   `Array` special-case in `parseTypeMember` to also match `ReadonlyArray`,
@@ -19,7 +27,7 @@ Every task names its files and a real `.ts` program that exercises it, plus
   tuple, and a nested `ReadonlyArray<readonly int[]>` all compile, run, and
   behave identically to their mutable-typed equivalents.
 
-- [ ] **T2 — Object-literal shorthand `{ x }` + static computed keys
+- [x] **T2 — Object-literal shorthand `{ x }` + static computed keys
   `{ ["k"]: v }` (Cluster E, S).** File: `src/lumen_parser_expr.zig` only
   (object-literal loop ~611-633). Shorthand synthesizes a `var_ref` value;
   computed key accepts a string-literal key only and rejects any dynamic key
@@ -45,7 +53,7 @@ Every task names its files and a real `.ts` program that exercises it, plus
   a comparison/multiply from the `op[0]` trap); a `readonly`/float `&=` is
   rejected.
 
-- [ ] **T4 — Optional catch binding `catch { ... }` (Cluster B, S).** DO
+- [x] **T4 — Optional catch binding `catch { ... }` (Cluster B, S).** DO
   before T5. Files: `src/lumen_ast.zig` (`catch_name: ?[]const u8`),
   `src/lumen_parser.zig` (:525-529, guard the paren block on `(`),
   `src/lumen_check.zig` (`declareCatch`, wrap body in `if (catch_name) |n|`),
@@ -75,7 +83,7 @@ Every task names its files and a real `.ts` program that exercises it, plus
   names in declaration order; `for (const i in arr)` yields string indices;
   for-in over a Map/scalar is rejected.
 
-- [ ] **T6 — `satisfies` operator (Cluster C, S).** DO before/with T7 (batch
+- [x] **T6 — `satisfies` operator (Cluster C, S).** DO before/with T7 (batch
   the `Expr`-union edits). Files: `src/lumen_ast.zig` (`satisfies` variant,
   `checked_type` = SOURCE type), `src/lumen_parser_expr.zig` (extend the
   `as` postfix loop in `parseUnary`), `src/lumen_check_expr.zig` (directional

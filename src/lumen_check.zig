@@ -342,11 +342,13 @@ pub const Checker = struct {
     }
 
     pub fn declareCatch(self: *Checker, stmt: *ast.TryStmt) CompileError!void {
+        // Optional catch binding (spec 052): `catch { ... }` binds nothing.
+        const name = stmt.catch_name orelse return;
         const scope = self.currentScope();
-        if (scope.get(stmt.catch_name) != null) return self.fail(stmt.line, stmt.col, "E_DUPLICATE_BINDING");
-        const emit_name = try self.freshEmitName(stmt.catch_name);
+        if (scope.get(name) != null) return self.fail(stmt.line, stmt.col, "E_DUPLICATE_BINDING");
+        const emit_name = try self.freshEmitName(name);
         stmt.catch_emit_name = emit_name;
-        scope.put(self.arena, stmt.catch_name, .{ .ty = .error_obj, .mutable = false, .emit_name = emit_name }) catch return error.OutOfMemory;
+        scope.put(self.arena, name, .{ .ty = .error_obj, .mutable = false, .emit_name = emit_name }) catch return error.OutOfMemory;
     }
 
     fn declareType(self: *Checker, name: []const u8, fields: []ast.TypeField, string_literals: ?[][]const u8, int_literals: ?[]i64, line: u32, col: u32) CompileError!void {

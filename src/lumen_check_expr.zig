@@ -889,6 +889,25 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         },
         .cast => |*c| {
             const target = self.typeFromAnnotation(c.annotation, line, col) catch return null;
+            if (c.is_satisfies) {
+                // `expr satisfies T` (spec 052): verify expr is assignable to
+                // T using full structural assignability (which also validates
+                // object/array literals against T, unlike `as`), and take T
+                // as the result type. TS's "satisfies keeps the operand's own
+                // narrower type" nuance is moot in Lumen -- there are no
+                // value-level literal types or scalar unions for the operand
+                // to carry a narrower type than T, so an `int` is `int` and a
+                // record typed as T is T. The distinction from `as T` is that
+                // satisfies does a real assignability check (a non-assignable
+                // value is a type error) rather than a representation-only
+                // assertion. Documented as a divergence.
+                self.ensureAssignable(program, target, c.inner, line, col) catch {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                };
+                c.checked_type = target;
+                return target;
+            }
             const source = self.exprType(program, c.inner, line, col) orelse return null;
             if (!self.castAllowed(source, target)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};

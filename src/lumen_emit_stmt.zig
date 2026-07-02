@@ -556,12 +556,18 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 if (analysis.stmtAlwaysThrows(try_body_stmt)) break;
             }
             try body.appendSlice(arena, "    }\n");
-            const catch_emit = try_stmt.catch_emit_name orelse try_stmt.catch_name;
-            try body.print(arena, "    if ({s}) |{s}| {{\n", .{ slot, catch_emit });
-            // Zig rejects an unused capture, so discard the binding when the
-            // catch body never reads it.
-            if (!bodyUsesName(try_stmt.catch_body, try_stmt.catch_name)) {
-                try body.print(arena, "    _ = {s};\n", .{catch_emit});
+            if (try_stmt.catch_name) |catch_name| {
+                const catch_emit = try_stmt.catch_emit_name orelse catch_name;
+                try body.print(arena, "    if ({s}) |{s}| {{\n", .{ slot, catch_emit });
+                // Zig rejects an unused capture, so discard the binding when
+                // the catch body never reads it.
+                if (!bodyUsesName(try_stmt.catch_body, catch_name)) {
+                    try body.print(arena, "    _ = {s};\n", .{catch_emit});
+                }
+            } else {
+                // Optional catch binding (spec 052): run the catch body on
+                // any error without capturing it -- no binding to discard.
+                try body.print(arena, "    if ({s} != null) {{\n", .{slot});
             }
             for (try_stmt.catch_body) |*catch_stmt| {
                 try emitStmtWithThrow(catch_stmt, decls, body, arena, throw_target, switch_break_target, options);

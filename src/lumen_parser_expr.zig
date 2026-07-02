@@ -47,7 +47,11 @@ pub fn parseTypeMember(self: *Parser) CompileError![]const u8 {
             if (self.isOp(',')) try self.advance() else break;
         }
         try self.consumeTypeArgClose();
-        if (std.mem.eql(u8, base, "Array")) {
+        if (std.mem.eql(u8, base, "Array") or std.mem.eql(u8, base, "ReadonlyArray")) {
+            // `Array<X>` and `ReadonlyArray<X>` both desugar to `X[]`.
+            // `readonly` is a compile-time immutability marker with no
+            // runtime representation here (spec 052), so the two collapse
+            // to the same lowered type.
             if (args.items.len != 1) return error.ParseError;
             base = std.fmt.allocPrint(self.arena, "{s}[]", .{args.items[0]}) catch return error.OutOfMemory;
         } else {
@@ -137,6 +141,23 @@ pub fn parseTupleType(self: *Parser) CompileError![]const u8 {
 
 pub fn parseTypeAnnotation(self: *Parser) CompileError![]const u8 {
     const eq = std.mem.eql;
+    // A leading `readonly` modifier (`readonly int[]`, `readonly [A, B]`,
+    // `readonly string[]`) is a compile-time immutability marker with no
+    // runtime representation (spec 052) -- strip it and parse the underlying
+    // type. `readonly` is not a lexer keyword, so it arrives as a plain
+    // ident; only strip it when a type genuinely follows (a `(`/`[`/ident),
+    // never when `readonly` is itself the whole annotation.
+    if (self.cur == .ident and eq(u8, self.cur.ident, "readonly")) {
+        const save = self.lex;
+        const save_cur = self.cur;
+        try self.advance();
+        if (self.isOp('(') or self.isOp('[') or self.cur == .ident) {
+            // fall through with `readonly` consumed
+        } else {
+            self.lex = save; // `readonly` was actually the type name; restore
+            self.cur = save_cur;
+        }
+    }
     if (self.isOp('(')) return self.parseFunctionType();
     if (self.isOp('[')) return self.parseTupleType();
     var base = try self.parseTypeMember();
@@ -356,11 +377,14 @@ pub fn parseUnary(self: *Parser) CompileError!*Expr {
         return self.node(.{ .bnot = try self.parseUnary() });
     }
     var e = try self.parsePostfix();
-    // Postfix `as T` type assertion (erased at emit; checked for safety).
-    while (self.isKw("as")) {
+    // Postfix `as T` type assertion and `satisfies T` (spec 052), both
+    // erased at emit; the checker distinguishes them (satisfies keeps the
+    // operand's own type instead of widening to T).
+    while (self.isKw("as") or self.isKw("satisfies")) {
+        const is_satisfies = self.isKw("satisfies");
         try self.advance();
         const annotation = try self.parseTypeAnnotation();
-        e = try self.node(.{ .cast = .{ .inner = e, .annotation = annotation } });
+        e = try self.node(.{ .cast = .{ .inner = e, .annotation = annotation, .is_satisfies = is_satisfies } });
     }
     return e;
 }
@@ -620,9 +644,33 @@ pub fn parsePrimary(self: *Parser) CompileError!*Expr {
                 if (self.isOp(',')) try self.advance() else break;
                 continue;
             }
+            // Static computed key `["literal"]: v` (spec 052). Only a
+            // string-literal key is allowed -- a closed record shape has no
+            // room for a dynamic (runtime-`expr`) key, so `{ [k]: v }` with
+            // a non-literal key is a deliberate parse error.
+            if (self.isOp('[')) {
+                try self.advance();
+                if (self.cur != .str) return error.ParseError;
+                const key = self.cur.str;
+                try self.advance();
+                try self.expectOp(']');
+                try self.expectOp(':');
+                const cv = try self.parseExpr();
+                try fields.append(self.arena, .{ .name = key, .value = cv });
+                if (self.isOp(',')) try self.advance() else break;
+                continue;
+            }
             if (self.cur != .ident) return error.ParseError;
             const fname = self.cur.ident;
             try self.advance();
+            // Shorthand `{ x }` (spec 052): no `: value` follows, so `x`
+            // desugars to `x: x` -- a reference to the same-named binding.
+            if (!self.isOp(':')) {
+                const ref = try self.node(.{ .var_ref = .{ .name = fname } });
+                try fields.append(self.arena, .{ .name = fname, .value = ref });
+                if (self.isOp(',')) try self.advance() else break;
+                continue;
+            }
             try self.expectOp(':');
             const v = try self.parseExpr();
             try fields.append(self.arena, .{ .name = fname, .value = v });

@@ -417,7 +417,7 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
             for (sc.args, 0..) |it, i| c[i] = try self.cloneExpr(it);
             break :blk .{ .static_call = .{ .namespace = sc.namespace, .name = sc.name, .args = c } };
         },
-        .cast => |c| .{ .cast = .{ .inner = try self.cloneExpr(c.inner), .annotation = try self.substCur(c.annotation) } },
+        .cast => |c| .{ .cast = .{ .inner = try self.cloneExpr(c.inner), .annotation = try self.substCur(c.annotation), .is_satisfies = c.is_satisfies } },
     };
     return p;
 }

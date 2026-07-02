@@ -98,7 +98,9 @@ fn rejectUnsupportedDynamic(source: []const u8, diag: *Diag) CompileError!void {
                 prev_was_dot = false;
                 // A declaration keyword before `[` is array destructuring, not an
                 // indexed dynamic write, so it must not start a write candidate.
-                prev_was_ident = !(eq(u8, name, "let") or eq(u8, name, "const") or eq(u8, name, "var"));
+                // `readonly` before `[` is a `readonly [A, B]` tuple type
+                // annotation (spec 052), likewise never an indexed write.
+                prev_was_ident = !(eq(u8, name, "let") or eq(u8, name, "const") or eq(u8, name, "var") or eq(u8, name, "readonly"));
             },
             .op => |ch| {
                 if (bracket_depth > 0 and ch != '[' and ch != ']') bracket_has_content = true;

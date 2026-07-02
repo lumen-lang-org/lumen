@@ -522,11 +522,17 @@ pub const Parser = struct {
             const try_body = try self.parseBlock();
             if (!self.isKw("catch")) return error.ParseError;
             try self.advance();
-            try self.expectOp('(');
-            if (self.cur != .ident) return error.ParseError;
-            const catch_name = self.cur.ident;
-            try self.advance();
-            try self.expectOp(')');
+            // Optional catch binding (spec 052): `catch { ... }` with no
+            // `(e)` discards the error. `catch ()` (empty parens) stays a
+            // parse error -- an opened paren must name a binding.
+            var catch_name: ?[]const u8 = null;
+            if (self.isOp('(')) {
+                try self.advance();
+                if (self.cur != .ident) return error.ParseError;
+                catch_name = self.cur.ident;
+                try self.advance();
+                try self.expectOp(')');
+            }
             const catch_body = try self.parseBlock();
             var finally_body: ?[]Stmt = null;
             if (self.isKw("finally")) {
