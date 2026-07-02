@@ -1289,6 +1289,8 @@ console.log(elapsed);</code></pre>
     <a href="#http-request">request</a>
     <a href="#http-get">get</a>
     <a href="#http-createServer">createServer</a>
+    <a href="#http-METHODS">METHODS</a>
+    <a href="#http-STATUS_CODES">STATUS_CODES</a>
   </div>
 
   <div class="api" id="http-request">
@@ -1325,15 +1327,14 @@ console.log(r.body.includes("Example Domain")); // true</code></pre>
   <div class="api" id="http-createServer">
     <h5><code>http.createServer(port, handler)</code></h5>
     <p class="sub">(int, (HttpRequest) → HttpResponse) → void &mdash;
-    blocking accept loop, calls <code>handler</code> per request, never
-    returns. <code>handler</code> must be a named function (block-bodied
-    inline arrow functions don't parse in this position yet), and returns
-    the <em>same</em> <code>{ status, body, ok, headers }</code> record
-    the client side uses (<code>ok</code> goes unused server-side;
-    <code>headers</code> is written into the real response, one line per
-    entry). Superseded the old canned-response <code>serve()</code>
-    global, which always returned the same body to every request; this
-    one genuinely inspects each request.</p>
+    accepts connections forever, never returns. <code>handler</code> must
+    be a named function (block-bodied inline arrow functions don't parse
+    in this position yet), and returns the <em>same</em> <code>{ status,
+    body, ok, headers }</code> record the client side uses (<code>ok</code>
+    goes unused server-side; <code>headers</code> is written into the real
+    response, one line per entry). Superseded the old canned-response
+    <code>serve()</code> global, which always returned the same body to
+    every request; this one genuinely inspects each request.</p>
 <pre><code class="lumen">function handleRequest(req: HttpRequest): HttpResponse {
   const headers = new Map&lt;string, string&gt;();
   headers.set("X-Powered-By", "lumen");
@@ -1344,6 +1345,25 @@ console.log(r.body.includes("Example Domain")); // true</code></pre>
 }
 
 http.createServer(8080, handleRequest);</code></pre>
+    <p class="sub"><strong>Concurrent</strong>: each accepted connection's
+    full handling (including its keep-alive requests) now runs on a
+    worker thread from a dedicated thread pool, so <code>accept()</code>
+    loops back for the next connection immediately instead of waiting for
+    earlier ones to finish -- a genuinely blocking or slow handler on one
+    connection no longer stalls every other client. Verified against a
+    real compiled binary: three concurrent requests to a handler doing
+    ~5s of real CPU work each completed in ~5.1s total (not ~15s), and a
+    trivial request fired mid-flight against a slow one returned in under
+    a millisecond. <strong>A handler now genuinely runs on multiple OS
+    threads at once</strong> &mdash; a handler that reads or mutates
+    shared global state without its own synchronization has a real data
+    race, unlike Node's single-threaded <code>http.createServer</code>;
+    Lumen has no general-purpose locking primitive yet, so this is a
+    documented trade-off, not a solved problem. Still no idle-connection
+    timeout: a connection stays open as long as the client keeps sending
+    requests. (Under <code>--wasm</code>: unchanged from before, still a
+    single-connection-at-a-time loop -- wasm32-wasi has no real OS
+    threads.)</p>
     <p class="sub"><strong>~1.1&ndash;1.2&times; faster than Node's native
     <code>http.createServer</code></strong> on 300 sequential GETs (same
     Node.js client hitting both servers, isolating the server as the only
@@ -1353,9 +1373,29 @@ http.createServer(8080, handleRequest);</code></pre>
     <em>slower</em> than Node; this server now supports HTTP keep-alive
     (the connection stays open and serves further requests until the
     client sends <code>Connection: close</code>), the same thing Node's
-    server does by default. No idle-connection timeout yet, and still one
-    connection served at a time (no concurrency), just no longer paying a
-    fresh handshake for every request on the same connection.</p>
+    server does by default.</p>
+  </div>
+
+  <div class="api" id="http-METHODS">
+    <h5><code>http.METHODS()</code></h5>
+    <p class="sub">() → <code>string[]</code> &mdash; the 35 HTTP method
+    name strings (<code>"ACL"</code>, <code>"BIND"</code>, ...,
+    <code>"UNSUBSCRIBE"</code>), alphabetically sorted, matching Node's own
+    <code>http.METHODS</code> value exactly. Called as a zero-arg function
+    rather than read as a property, the same shape <code>Math.PI()</code>/
+    <code>os.EOL()</code> already use &mdash; Lumen has no static namespace
+    property access.</p>
+<pre><code class="lumen">const methods = http.METHODS();
+console.log(methods.length); // 35</code></pre>
+  </div>
+
+  <div class="api" id="http-STATUS_CODES">
+    <h5><code>http.STATUS_CODES()</code></h5>
+    <p class="sub">() → <code>Map&lt;int, string&gt;</code> &mdash; every
+    standard HTTP status code (100 through 511) mapped to its reason
+    phrase, verbatim from Node's own <code>STATUS_CODES</code> table.</p>
+<pre><code class="lumen">const codes = http.STATUS_CODES();
+console.log(codes.get(404) ?? "?"); // "Not Found"</code></pre>
   </div>
 
   <h3 id="planned">Planned</h3>
@@ -1437,12 +1477,14 @@ http.createServer(8080, handleRequest);</code></pre>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
     <tr><td>Idle keep-alive connection timeouts</td><td>a connection stays open indefinitely as long as the client keeps sending requests and doesn't send <code>Connection: close</code></td></tr>
-    <tr><td>Concurrent/multi-connection serving</td><td>still one connection served at a time (though its requests are now handled with keep-alive); real concurrency is a separate, later feature</td></tr>
     <tr><td>Response headers on the client side</td><td><code>http.request</code>'s own request headers and <code>http.createServer</code>'s response headers both shipped, via <code>Map&lt;string, string&gt;</code>; reading real response headers on the client needs a lower-level request flow than what's wired up yet -- confirmed reachable, deliberately deferred rather than rewriting an already-working, already-benchmarked call under time pressure</td></tr>
     <tr><td>Case-insensitive header lookup, repeated header/query values as an array</td><td><code>Map&lt;string, string&gt;</code>'s exact-match, last-write-wins lookup is what's available now</td></tr>
+    <tr><td>A general-purpose locking primitive for handler-shared state</td><td>concurrent serving (shipped) means a handler now genuinely runs on multiple OS threads; a handler that mutates shared global state without its own synchronization has a real data race -- documented, not solved, since Lumen has no <code>Mutex</code>-shaped stdlib type yet</td></tr>
     <tr><td>Real <code>Server</code>/<code>IncomingMessage</code>/<code>ServerResponse</code>/<code>ClientRequest</code>/<code>Agent</code> classes</td><td>Node's classes bundle request/response data with an event mechanism; <code>EventEmitter</code> alone doesn't supply the data half, which still needs the header-collection/streaming gaps closed first</td></tr>
     <tr><td>Server lifecycle events (<code>'error'</code>, <code>'close'</code>) via <code>EventEmitter&lt;T&gt;</code></td><td>genuinely reachable now that <code>EventEmitter</code> exists &mdash; a real follow-up</td></tr>
-    <tr><td>Streaming request/response bodies, concurrent serving, <code>METHODS</code>/<code>STATUS_CODES</code>, HTTPS/TLS configuration, WebSocket upgrade</td><td>each a real, separate feature</td></tr>
+    <tr><td>Streaming request/response bodies</td><td>needs a <em>network</em>-backed <code>ReadableStream</code>/<code>WritableStream</code> (spec 046 shipped file-backed streams only, a deliberately separate backing type -- see spec 046's "why file-backed only")</td></tr>
+    <tr><td>HTTPS/TLS-specific configuration</td><td><code>std.http.Client</code> already handles basic TLS internally for <code>https://</code> URLs; exposing it as configurable is a real, separate feature, disproportionately large for a single pass</td></tr>
+    <tr><td>WebSocket upgrade</td><td>a full protocol implementation (handshake, frame parsing/masking, ping/pong) -- a separate feature on the scale of <code>http</code> itself, not an extension of it</td></tr>
   </table>
 
   <h3 id="community">Community packages</h3>

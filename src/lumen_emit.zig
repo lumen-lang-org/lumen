@@ -722,6 +722,10 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "METHODS")) {
+                try w.appendSlice(arena, "__httpMethods()");
+            } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "STATUS_CODES")) {
+                try w.appendSlice(arena, "__httpStatusCodes()");
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "sep")) {
                 try w.appendSlice(arena, "@as([]const u8, \"/\")");
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "delimiter")) {
@@ -1148,6 +1152,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
 /// variant's object literal can omit the other variants' fields.
 pub const CompileOptions = struct {
     runtime_locations: bool = true,
+    // Threaded down from the CLI's `--wasm` flag (spec 049): wasm32-wasi has
+    // no real OS threads, and the CLI's own libxev-wiring gate hard-fails any
+    // wasm build whose generated source textually contains `@import("xev")`
+    // (see `compileFile` in `lumen.zig`) -- so `http.createServer`'s
+    // thread-pool-backed concurrent codegen must not emit that import at all
+    // under `--wasm`, falling back to the old single-connection-at-a-time
+    // loop there instead.
+    wasm: bool = false,
 };
 
 /// Collect the inheritance chain from a root ancestor down to `c` (inclusive).

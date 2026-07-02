@@ -976,6 +976,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     var diag: compiler.Diag = .{};
     var zig_src = compiler.compileToZigWithOptions(arena, source, path, &diag, .{
         .runtime_locations = mode.runtimeLocations(),
+        .wasm = wasm,
     }) catch {
         try printDiag(err, source, path, diag);
         return 1;
