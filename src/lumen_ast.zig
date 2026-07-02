@@ -395,6 +395,10 @@ pub const Program = struct {
     needs_async_read_file: bool = false,
     needs_async_write_file: bool = false,
     needs_async_append_file: bool = false,
+    needs_async_unlink: bool = false,
+    needs_async_mkdir: bool = false,
+    needs_async_rmdir: bool = false,
+    needs_async_stat: bool = false,
     needs_lstat_sync: bool = false,
     needs_fstat_sync: bool = false,
     needs_fchmod_sync: bool = false,
@@ -436,6 +440,7 @@ pub const Program = struct {
     needs_event_emitter: bool = false,
     // Async/await: emit the event-loop + Promise runtime and drain the loop in main.
     needs_async: bool = false,
+    needs_thread_pool_fs: bool = false,
 };
 
 pub const Expr = union(enum) {

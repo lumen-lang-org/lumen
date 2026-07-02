@@ -275,6 +275,10 @@ console.log(emitter.listenerCount("greet")); // 1</code></pre>
     <a href="#fs-readFile">readFile</a>
     <a href="#fs-writeFile">writeFile</a>
     <a href="#fs-appendFile">appendFile</a>
+    <a href="#fs-unlink">unlink</a>
+    <a href="#fs-mkdir">mkdir</a>
+    <a href="#fs-rmdir">rmdir</a>
+    <a href="#fs-stat">stat</a>
     <a href="#fs-writeFileSync">writeFileSync</a>
     <a href="#fs-appendFileSync">appendFileSync</a>
     <a href="#fs-existsSync">existsSync</a>
@@ -357,6 +361,58 @@ console.log(data);</code></pre>
   await fs.appendFile("log.txt", "line one\n");
   await fs.appendFile("log.txt", "line two\n");
   console.log("done");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-unlink">
+    <h5><code>fs.unlink(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested, including 5 concurrent thread-pool calls in flight at once.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;void&gt;</code> &mdash;
+    <strong>runs on a real thread pool</strong>, unlike
+    <code>readFile</code>/<code>writeFile</code>/<code>appendFile</code>
+    above. <code>libxev</code>'s async operation set (checked directly
+    across its io_uring/kqueue/IOCP backends) has no unlink/mkdir/rmdir/stat
+    primitive on any of them, so this dispatches the blocking syscall to a
+    worker thread and bridges the result back to the main thread via
+    <code>xev.Async</code> &mdash; the same mechanism Node's own libuv uses
+    for most of its async <code>fs</code>, and the same one
+    <code>libxev</code>'s own kqueue backend already relies on internally
+    for its file I/O. Genuinely cross-platform, not a Linux-only shortcut
+    (a faster Linux-only path exists via raw io_uring ops but was
+    deliberately not taken).</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.unlink("stale.txt");
+  console.log("gone");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-mkdir">
+    <h5><code>fs.mkdir(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;void&gt;</code> &mdash; thread-pool
+    backed, see <code>fs.unlink</code> above. No <code>recursive</code>
+    option this pass, matching <code>mkdirSync</code>'s default-false
+    convention.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.mkdir("build");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-rmdir">
+    <h5><code>fs.rmdir(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;void&gt;</code> &mdash; thread-pool
+    backed, see <code>fs.unlink</code> above.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.rmdir("build");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-stat">
+    <h5><code>fs.stat(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested, cross-checked against statSync on the same paths.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;Stats&gt;</code> &mdash; thread-pool
+    backed, see <code>fs.unlink</code> above. Same <code>Stats</code> shape
+    as <code>fs.statSync</code>.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  const st = await fs.stat("notes.txt");
+  console.log(st.size);
 }</code></pre>
   </div>
 
@@ -1366,7 +1422,7 @@ http.createServer(8080, handleRequest);</code></pre>
   <h4>fs</h4>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
-    <tr><td><code>fs.promises.*</code> / most async callback variants (<code>fs.unlink</code>, <code>fs.mkdir</code>, <code>fs.stat</code>, ... most of Node's ~54)</td><td><code>fs.readFile</code>, <code>fs.writeFile</code>, and <code>fs.appendFile</code> are wired to the event loop; the rest needs lower-level async ops the runtime doesn't expose yet</td></tr>
+    <tr><td><code>fs.promises.*</code> / most other async callback variants (<code>fs.rename</code>, <code>fs.chmod</code>, <code>fs.readdir</code>, ... most of Node's ~54)</td><td><code>fs.readFile</code>/<code>writeFile</code>/<code>appendFile</code> are true async (io_uring, no thread); <code>fs.unlink</code>/<code>mkdir</code>/<code>rmdir</code>/<code>stat</code> are thread-pool-backed (spec 047) -- every other one needs the same thread-pool wrapping, mechanically the same pattern now that it's proven, just not done yet</td></tr>
     <tr><td><code>fs.watch</code> recursive watching, non-Linux platforms; <code>fs.watchFile</code>/<code>unwatchFile</code></td><td><code>fs.watch(path, listener)</code> itself and its create/change/rename event-type distinction shipped (Linux, flat, one filename per event); each of these is a real, separate follow-up</td></tr>
     <tr><td><code>fs.opendirSync(path)</code> · <code>fs.globSync(pattern)</code></td><td>need a directory-iterator class / a real glob algorithm</td></tr>
     <tr><td><code>fs.statfsSync(path)</code></td><td>filesystem-level stats; platform-specific, low value for now</td></tr>

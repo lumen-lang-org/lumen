@@ -392,6 +392,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "unlink")) {
+                try w.appendSlice(arena, "__unlinkAsync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "mkdir")) {
+                try w.appendSlice(arena, "__mkdirAsync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "rmdir")) {
+                try w.appendSlice(arena, "__rmdirAsync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "stat")) {
+                try w.appendSlice(arena, "__statAsync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "existsSync")) {
                 try w.appendSlice(arena, "__existsSync(__io, ");
                 try emitExpr(cl.args[0], w, arena);

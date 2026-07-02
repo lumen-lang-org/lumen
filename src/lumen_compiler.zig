@@ -848,6 +848,160 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_thread_pool_fs) {
+        // Shared plumbing for async fs beyond readFile/writeFile/appendFile
+        // (spec 047): those three are true async on libxev's io_uring
+        // backend (no thread involved), but libxev's OperationType union has
+        // no unlink/mkdir/rmdir/stat op on any backend (checked directly),
+        // so those run a real ThreadPool.Task on a worker thread instead --
+        // the same shape Node's own libuv uses for most of its async fs, and
+        // the same mechanism libxev's own kqueue backend already relies on
+        // internally for its file I/O (kqueue has no native completion-based
+        // filesystem I/O either). One shared ThreadPool + one shared
+        // xev.Async bridge per program, not one per call.
+        //
+        // LumenPromise.resolve() is a plain, non-atomic field write, and
+        // LumenLoop.driveUntil/.drain poll it from the main thread while
+        // pumping __xev_loop.run() -- calling .resolve() directly from a
+        // worker thread would race that poll. So workers never resolve a
+        // promise themselves: they push a completion record onto this
+        // mutex-protected queue and wake the loop via xev.Async.notify();
+        // only the main-thread wake-up callback below actually calls
+        // .resolve(), keeping LumenPromise itself completely unchanged.
+        try out.appendSlice(arena,
+            \\const __FsDone = struct { ctx: *anyopaque, finish: *const fn (*anyopaque) void };
+            \\var __fs_pool: xev.ThreadPool = undefined;
+            \\var __fs_async: xev.Async = undefined;
+            \\var __fs_async_c: xev.Completion = undefined;
+            \\var __fs_done_mutex: std.Io.Mutex = .init;
+            \\var __fs_done_queue: std.ArrayListUnmanaged(__FsDone) = .empty;
+            \\fn __fsThreadPoolInit() void {
+            \\    __fs_pool = xev.ThreadPool.init(.{});
+            \\    __fs_async = xev.Async.init() catch unreachable;
+            \\    __fs_async.wait(&__xev_loop, &__fs_async_c, void, null, __fsOnWake);
+            \\}
+            \\fn __fsOnWake(_: ?*void, _: *xev.Loop, _: *xev.Completion, r: xev.Async.WaitError!void) xev.CallbackAction {
+            \\    _ = r catch {};
+            \\    __fs_done_mutex.lock(__io) catch unreachable;
+            \\    const items = __fs_done_queue.toOwnedSlice(__alloc) catch &.{};
+            \\    __fs_done_mutex.unlock(__io);
+            \\    for (items) |it| it.finish(it.ctx);
+            \\    return .rearm;
+            \\}
+            \\fn __fsPushDone(ctx: *anyopaque, finish: *const fn (*anyopaque) void) void {
+            \\    __fs_done_mutex.lock(__io) catch unreachable;
+            \\    __fs_done_queue.append(__alloc, .{ .ctx = ctx, .finish = finish }) catch {};
+            \\    __fs_done_mutex.unlock(__io);
+            \\    __fs_async.notify() catch {};
+            \\}
+            \\
+        );
+    }
+    if (program.needs_async_unlink) {
+        try out.appendSlice(arena,
+            \\const __UnlinkState = struct {
+            \\    task: xev.ThreadPool.Task = .{ .callback = work },
+            \\    path: []const u8,
+            \\    promise: *LumenPromise(void),
+            \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        const self: *__UnlinkState = @fieldParentPtr("task", t);
+            \\        std.Io.Dir.cwd().deleteFile(__io, self.path) catch {};
+            \\        __fsPushDone(self, finish);
+            \\    }
+            \\    fn finish(ctx: *anyopaque) void {
+            \\        const self: *__UnlinkState = @ptrCast(@alignCast(ctx));
+            \\        self.promise.resolve({});
+            \\    }
+            \\};
+            \\fn __unlinkAsync(path: []const u8) *LumenPromise(void) {
+            \\    const p = LumenPromise(void).create();
+            \\    const st = __alloc.create(__UnlinkState) catch unreachable;
+            \\    st.* = .{ .path = path, .promise = p };
+            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    return p;
+            \\}
+            \\
+        );
+    }
+    if (program.needs_async_mkdir) {
+        try out.appendSlice(arena,
+            \\const __MkdirState = struct {
+            \\    task: xev.ThreadPool.Task = .{ .callback = work },
+            \\    path: []const u8,
+            \\    promise: *LumenPromise(void),
+            \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        const self: *__MkdirState = @fieldParentPtr("task", t);
+            \\        std.Io.Dir.cwd().createDir(__io, self.path, std.Io.File.Permissions.default_dir) catch {};
+            \\        __fsPushDone(self, finish);
+            \\    }
+            \\    fn finish(ctx: *anyopaque) void {
+            \\        const self: *__MkdirState = @ptrCast(@alignCast(ctx));
+            \\        self.promise.resolve({});
+            \\    }
+            \\};
+            \\fn __mkdirAsync(path: []const u8) *LumenPromise(void) {
+            \\    const p = LumenPromise(void).create();
+            \\    const st = __alloc.create(__MkdirState) catch unreachable;
+            \\    st.* = .{ .path = path, .promise = p };
+            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    return p;
+            \\}
+            \\
+        );
+    }
+    if (program.needs_async_rmdir) {
+        try out.appendSlice(arena,
+            \\const __RmdirState = struct {
+            \\    task: xev.ThreadPool.Task = .{ .callback = work },
+            \\    path: []const u8,
+            \\    promise: *LumenPromise(void),
+            \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        const self: *__RmdirState = @fieldParentPtr("task", t);
+            \\        std.Io.Dir.cwd().deleteDir(__io, self.path) catch {};
+            \\        __fsPushDone(self, finish);
+            \\    }
+            \\    fn finish(ctx: *anyopaque) void {
+            \\        const self: *__RmdirState = @ptrCast(@alignCast(ctx));
+            \\        self.promise.resolve({});
+            \\    }
+            \\};
+            \\fn __rmdirAsync(path: []const u8) *LumenPromise(void) {
+            \\    const p = LumenPromise(void).create();
+            \\    const st = __alloc.create(__RmdirState) catch unreachable;
+            \\    st.* = .{ .path = path, .promise = p };
+            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    return p;
+            \\}
+            \\
+        );
+    }
+    if (program.needs_async_stat) {
+        try out.appendSlice(arena,
+            \\const __StatState = struct {
+            \\    task: xev.ThreadPool.Task = .{ .callback = work },
+            \\    path: []const u8,
+            \\    result: __LumenStat = undefined,
+            \\    promise: *LumenPromise(__LumenStat),
+            \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        const self: *__StatState = @fieldParentPtr("task", t);
+            \\        self.result = __statSync(__io, self.path);
+            \\        __fsPushDone(self, finish);
+            \\    }
+            \\    fn finish(ctx: *anyopaque) void {
+            \\        const self: *__StatState = @ptrCast(@alignCast(ctx));
+            \\        self.promise.resolve(self.result);
+            \\    }
+            \\};
+            \\fn __statAsync(path: []const u8) *LumenPromise(__LumenStat) {
+            \\    const p = LumenPromise(__LumenStat).create();
+            \\    const st = __alloc.create(__StatState) catch unreachable;
+            \\    st.* = .{ .path = path, .promise = p };
+            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    return p;
+            \\}
+            \\
+        );
+    }
     if (program.needs_fd_api) {
         // A Lumen "fd" is an index into this table, not a raw OS handle (so the
         // type stays a plain `int`). openSync supports only "r" (read, must
@@ -1816,13 +1970,34 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         if (program.needs_async) {
             try out.appendSlice(arena, "    LumenLoop.init();\n");
         }
+        if (program.needs_thread_pool_fs) {
+            try out.appendSlice(arena, "    __fsThreadPoolInit();\n");
+        }
     } else {
         try out.appendSlice(arena, "pub fn main() void {\n");
     }
     try out.appendSlice(arena, body.items);
-    // Drain any remaining timers/microtasks so fire-and-forget setTimeout
-    // callbacks run before the program exits.
-    if (program.needs_async) try out.appendSlice(arena, "    LumenLoop.drain();\n");
+    if (program.needs_thread_pool_fs) {
+        // LumenLoop.drain() (below) runs the loop with RunMode.until_done,
+        // whose only stop condition is "no active completions left"
+        // (verified by reading the io_uring backend's tick_ directly). The
+        // xev.Async wait this program registers to bridge thread-pool
+        // completions back to the main thread is deliberately persistent
+        // (it re-arms every time, by design -- it has to stay armed to
+        // catch *future* completions), so it never lets that count reach
+        // zero: drain() would hang forever. Any explicit `await` the user
+        // wrote has already run by this point in `main`'s body anyway, so
+        // this skips drain and exits directly -- the same "exit rather than
+        // wait for a background thread pool to naturally join" shape most
+        // programs with one use. xev.ThreadPool's own worker threads block
+        // forever waiting for more work otherwise, with nothing to join
+        // them once there's no more application work left.
+        try out.appendSlice(arena, "    std.process.exit(0);\n");
+    } else if (program.needs_async) {
+        // Drain any remaining timers/microtasks so fire-and-forget
+        // setTimeout callbacks run before the program exits.
+        try out.appendSlice(arena, "    LumenLoop.drain();\n");
+    }
     try out.appendSlice(arena, "}\n");
     return out.items;
 }

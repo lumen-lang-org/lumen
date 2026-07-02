@@ -946,6 +946,95 @@ pub fn fsCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
         program.needs_async_append_file = true;
         return result;
     }
+    if (std.mem.eql(u8, call.name, "unlink")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const path_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, path_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        // `fs.unlink(path)` -> `Promise<void>` (spec 047): unlike
+        // readFile/writeFile/appendFile, this runs on a real thread pool --
+        // libxev's own OperationType union has no async unlink primitive on
+        // any backend (checked directly), so this dispatches the blocking
+        // syscall to a worker thread and bridges the result back via
+        // xev.Async, the same pattern libxev's own kqueue backend uses
+        // internally for its file I/O.
+        const p = self.arena.create(types.Type) catch return null;
+        p.* = .void;
+        const result = types.Type{ .promise_type = p };
+        call.checked_type = result;
+        program.uses_io = true;
+        program.needs_async = true;
+        program.needs_thread_pool_fs = true;
+        program.needs_async_unlink = true;
+        return result;
+    }
+    if (std.mem.eql(u8, call.name, "mkdir")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const path_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, path_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const p = self.arena.create(types.Type) catch return null;
+        p.* = .void;
+        const result = types.Type{ .promise_type = p };
+        call.checked_type = result;
+        program.uses_io = true;
+        program.needs_async = true;
+        program.needs_thread_pool_fs = true;
+        program.needs_async_mkdir = true;
+        return result;
+    }
+    if (std.mem.eql(u8, call.name, "rmdir")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const path_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, path_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const p = self.arena.create(types.Type) catch return null;
+        p.* = .void;
+        const result = types.Type{ .promise_type = p };
+        call.checked_type = result;
+        program.uses_io = true;
+        program.needs_async = true;
+        program.needs_thread_pool_fs = true;
+        program.needs_async_rmdir = true;
+        return result;
+    }
+    if (std.mem.eql(u8, call.name, "stat")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const path_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, path_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        registerLumenStat(self) orelse return null;
+        const p = self.arena.create(types.Type) catch return null;
+        p.* = .{ .named = "__LumenStat" };
+        const result = types.Type{ .promise_type = p };
+        call.checked_type = result;
+        program.uses_io = true;
+        program.needs_async = true;
+        program.needs_thread_pool_fs = true;
+        program.needs_stat_sync = true;
+        program.needs_async_stat = true;
+        return result;
+    }
     if (std.mem.eql(u8, call.name, "lstatSync")) {
         if (call.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
