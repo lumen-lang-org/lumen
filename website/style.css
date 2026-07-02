@@ -227,14 +227,27 @@ th { color: var(--muted); font-weight: 600; }
 .docs-nav a.active { color: var(--fg); font-weight: 600; border-left-color: var(--accent); }
 .docs-nav-title { color: var(--fg); font-weight: 650; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; margin: 16px 0 6px 14px; }
 .docs-nav-title:first-child { margin-top: 0; }
+/* Mobile-only "jump to section" dropdown: replaces the sidebar nav below
+   820px, where it collapses to a wrapped row of links easy to lose track
+   of while scrolling. Sticky so a section is always one tap away. */
+.docs-nav-mobile { display: none; }
 @media (max-width: 820px) {
   .docs { grid-template-columns: 1fr; gap: 0; }
-  .docs-nav { position: static; margin: 0 0 26px; }
-  .docs-nav nav { flex-flow: row wrap; gap: 4px 6px; border-left: none; }
-  .docs-nav a { border-left: none; padding: 4px 0; }
-  .docs-nav a:hover { border-left-color: transparent; }
-  .docs-nav a.active { border-left-color: transparent; text-decoration: underline; text-underline-offset: 3px; }
-  .docs-nav-title { width: 100%; margin: 10px 0 2px; }
+  .docs-nav { display: none; }
+  .docs-nav-mobile {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    width: 100%;
+    margin: 0 0 18px;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
 }
 
 /* Playground */

@@ -42,6 +42,36 @@
 
 <section class="wrap">
   <div class="docs">
+  <select class="docs-nav-mobile" onchange="if(this.value) location.hash = this.value">
+    <option value="">Jump to section&hellip;</option>
+    <optgroup label="Available now">
+      <option value="#console">console</option>
+      <option value="#math">Math</option>
+      <option value="#strings">String methods</option>
+      <option value="#arrays">Array methods</option>
+      <option value="#collections">Collections</option>
+      <option value="#events">events</option>
+      <option value="#async">async / await</option>
+      <option value="#ffi">C FFI</option>
+      <option value="#errors">Errors</option>
+      <option value="#fs">fs</option>
+      <option value="#path">path</option>
+      <option value="#process">process</option>
+      <option value="#os">os</option>
+      <option value="#crypto">crypto</option>
+      <option value="#url">url</option>
+      <option value="#child_process">child_process</option>
+      <option value="#assert">assert</option>
+      <option value="#time">time</option>
+      <option value="#http">http</option>
+    </optgroup>
+    <optgroup label="Planned">
+      <option value="#planned">Roadmap</option>
+    </optgroup>
+    <optgroup label="Packages">
+      <option value="#community">Community</option>
+    </optgroup>
+  </select>
   <aside class="docs-nav"><nav>
     <p class="docs-nav-title">Available now</p>
     <a href="#console">console</a>
