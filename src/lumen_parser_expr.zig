@@ -381,6 +381,15 @@ pub fn parsePostfixFrom(self: *Parser, base: *Expr) CompileError!*Expr {
             if (self.cur != .ident) return error.ParseError;
             const name = self.cur.ident;
             try self.advance();
+            // Explicit generic namespace call `Namespace.method<T>(...)`
+            // (JSON.parse<T> is the first of these -- see spec 051). Only
+            // treated as type arguments when a `(` provably follows the
+            // matching `>`, the same guard the free-function `f<T>(...)`
+            // parse site uses.
+            var static_type_args: [][]const u8 = &.{};
+            if (self.isCmp("<") and self.looksLikeTypeArgs()) {
+                static_type_args = try self.parseTypeArgs();
+            }
             if (self.isOp('(')) {
                 try self.expectOp('(');
                 var args: std.ArrayListUnmanaged(*Expr) = .empty;
@@ -390,7 +399,7 @@ pub fn parsePostfixFrom(self: *Parser, base: *Expr) CompileError!*Expr {
                 }
                 try self.expectOp(')');
                 if (e.* == .var_ref and Parser.isStdNamespace(e.var_ref.name)) {
-                    e = try self.node(.{ .static_call = .{ .namespace = e.var_ref.name, .name = name, .args = try args.toOwnedSlice(self.arena) } });
+                    e = try self.node(.{ .static_call = .{ .namespace = e.var_ref.name, .name = name, .args = try args.toOwnedSlice(self.arena), .type_args = static_type_args } });
                 } else {
                     // instance method call: obj.method(args)
                     e = try self.node(.{ .method_call = .{ .obj = e, .name = name, .args = try args.toOwnedSlice(self.arena) } });

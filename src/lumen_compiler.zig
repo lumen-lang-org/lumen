@@ -2046,6 +2046,31 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_json) {
+        // JSON.stringify/JSON.parse<T> (spec 051): thin wrappers around
+        // std.json's own automatic struct/slice reflection. Lumen record
+        // types already lower to real Zig structs with matching field
+        // names, confirmed directly (not assumed) that
+        // Stringify.valueAlloc/parseFromSlice both round-trip an arbitrary
+        // struct correctly with zero custom (de)serialization code. Parse
+        // failures fall back to std.mem.zeroes(T), the same "fallback,
+        // don't crash" shape every other fallible builtin here uses --
+        // for a string field this is a valid empty slice, not a null
+        // dereference risk (confirmed, not assumed). The Parsed(T)
+        // wrapper's own arena is deliberately never deinit'd, matching
+        // this runtime's established "arena everything, reclaim on exit"
+        // convention elsewhere.
+        try out.appendSlice(arena,
+            \\fn __jsonStringify(alloc: std.mem.Allocator, value: anytype) []const u8 {
+            \\    return std.json.Stringify.valueAlloc(alloc, value, .{}) catch "";
+            \\}
+            \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) T {
+            \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch return std.mem.zeroes(T);
+            \\    return parsed.value;
+            \\}
+            \\
+        );
+    }
     if (program.needs_process_api) {
         // cwd/chdir/env go through Io-abstracted (cwd/chdir) or entry-captured
         // (env, same mechanism as __args) primitives -- none of these need

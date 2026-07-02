@@ -742,6 +742,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "__httpMethods()");
             } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "STATUS_CODES")) {
                 try w.appendSlice(arena, "__httpStatusCodes()");
+            } else if (std.mem.eql(u8, cl.namespace, "JSON") and std.mem.eql(u8, cl.name, "stringify")) {
+                try w.appendSlice(arena, "__jsonStringify(__alloc, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "JSON") and std.mem.eql(u8, cl.name, "parse")) {
+                const result_type = cl.checked_arg_type orelse .void;
+                const zig_name = types.zigName(arena, result_type) catch "void";
+                try w.print(arena, "__jsonParse({s}, __alloc, ", .{zig_name});
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "sep")) {
                 try w.appendSlice(arena, "@as([]const u8, \"/\")");
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "delimiter")) {

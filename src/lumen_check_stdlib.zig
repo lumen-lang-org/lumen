@@ -492,6 +492,7 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "assert")) return self.assertCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "time")) return self.timeCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "http")) return self.httpCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "JSON")) return self.jsonCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Promise")) return self.promiseCallType(program, call, line, col);
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
@@ -2099,6 +2100,77 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
     }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
+}
+
+// `JSON.*` (spec 051): thin wrappers around std.json's own automatic struct
+// reflection -- Lumen record types already lower to real Zig structs with
+// matching field names, confirmed directly (not assumed) that
+// std.json.Stringify.valueAlloc/parseFromSlice both work on an arbitrary
+// struct with zero custom (de)serialization code needed.
+pub fn jsonCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    if (std.mem.eql(u8, call.name, "stringify")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        // T is inferred from the argument, same as every other Lumen
+        // builtin -- no explicit type argument needed (there's a real
+        // value to infer from, unlike parse<T> below).
+        const value_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!jsonSerializable(value_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_arg_type = value_type;
+        program.uses_io = true;
+        program.needs_json = true;
+        call.checked_type = .string;
+        return .string;
+    }
+    if (std.mem.eql(u8, call.name, "parse")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        if (call.type_args.len != 1) {
+            // JSON.parse<T>(text) -- T can't be inferred from a string,
+            // unlike stringify's value argument above.
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const text_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, text_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const result_type = self.typeFromAnnotation(call.type_args[0], line, col) catch return null;
+        if (!jsonSerializable(result_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_arg_type = result_type;
+        program.uses_io = true;
+        program.needs_json = true;
+        call.checked_type = result_type;
+        return result_type;
+    }
+    _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+// Whether `t` is a type std.json's automatic struct/slice reflection can
+// round-trip directly: primitives, named records (which lower to real Zig
+// structs with matching field names), and arrays of either. Map/Set/tuple
+// deliberately excluded -- those lower to Lumen-specific runtime types
+// (LumenMap/LumenSet/positional structs) std.json's default reflection
+// doesn't understand the shape of (see spec 051's "Not planned" table).
+fn jsonSerializable(t: types.Type) bool {
+    return switch (t) {
+        .string, .i32, .i64, .f64, .bool => true,
+        .named => true,
+        .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array => true,
+        else => false,
+    };
 }
 
 // Lazily registers the synthetic `__LumenHttpResponse` record type returned

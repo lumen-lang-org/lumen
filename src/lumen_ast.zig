@@ -342,6 +342,10 @@ pub const StaticCall = struct {
     namespace: []const u8,
     name: []const u8,
     args: []*Expr,
+    // Explicit `Namespace.method<T>(...)` type arguments -- JSON.parse<T>
+    // (spec 051) is the first namespace call needing one; every other
+    // static_call's namespace/name pair alone determines its signature.
+    type_args: [][]const u8 = &.{},
     checked_type: ?types.Type = null,
     checked_arg_type: ?types.Type = null,
 };
@@ -427,6 +431,7 @@ pub const Program = struct {
     needs_http_module: bool = false,
     needs_http_server: bool = false,
     needs_http_constants: bool = false,
+    needs_json: bool = false,
     needs_rmdir_sync: bool = false,
     needs_rm_sync: bool = false,
     needs_truncate_sync: bool = false,

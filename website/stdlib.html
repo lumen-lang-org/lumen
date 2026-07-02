@@ -67,6 +67,7 @@
     <a href="#assert">assert</a>
     <a href="#time">time</a>
     <a href="#http">http</a>
+    <a href="#json">JSON</a>
     <p class="docs-nav-title">Planned</p>
     <a href="#planned">Roadmap</a>
     <p class="docs-nav-title">Packages</p>
@@ -1549,6 +1550,53 @@ console.log(methods.length); // 35</code></pre>
 console.log(codes.get(404) ?? "?"); // "Not Found"</code></pre>
   </div>
 
+  <h4 id="json">JSON</h4>
+  <p class="stability-note stability-experimental">Experimental &mdash; new
+  this milestone, not yet covered by the conformance suite; manually
+  smoke-tested including a round-trip, primitives, and malformed/
+  wrong-shape input.</p>
+  <p class="sub">Thin wrappers around Zig's own <code>std.json</code>, which
+  already reflects automatically over any struct &mdash; and Lumen's record
+  types already lower to real Zig structs with matching field names, so no
+  custom per-field (de)serialization code was needed. <strong>Deviation from
+  Node</strong>: <code>JSON.parse&lt;T&gt;</code> takes an explicit type
+  argument (there's no dynamic/<code>any</code> value to hand back) and
+  returns <code>T</code>'s zero value on any parse failure &mdash; malformed
+  JSON, a missing field, a type mismatch &mdash; rather than throwing, the
+  same fallback shape every other fallible builtin here uses. Works for
+  primitives, named record types, and arrays of either;
+  <code>Map</code>/<code>Set</code>/tuples are not supported as
+  <code>T</code> this pass (see Planned below).</p>
+
+  <div class="api-list">
+    <a href="#json-stringify">stringify</a>
+    <a href="#json-parse">parse</a>
+  </div>
+
+  <div class="api" id="json-stringify">
+    <h5><code>JSON.stringify(value)</code></h5>
+    <p class="sub">T → string &mdash; <code>T</code> inferred from
+    <code>value</code>, the same as every other Lumen builtin. Empty string
+    on an encode failure.</p>
+<pre><code class="lumen">type Person = { name: string, age: int, active: bool };
+const p: Person = { name: "Ada", age: 30, active: true };
+console.log(JSON.stringify(p)); // {"name":"Ada","age":30,"active":true}</code></pre>
+  </div>
+
+  <div class="api" id="json-parse">
+    <h5><code>JSON.parse&lt;T&gt;(text)</code></h5>
+    <p class="sub">string → T &mdash; the first explicit type argument on a
+    namespace call in Lumen (every other generic call site is a free
+    function/class). <code>T</code>'s zero value on any parse failure, see
+    above.</p>
+<pre><code class="lumen">type Person = { name: string, age: int, active: bool };
+const p: Person = JSON.parse&lt;Person&gt;('{"name":"Grace","age":45,"active":false}');
+console.log(p.name); // Grace
+
+const broken: Person = JSON.parse&lt;Person&gt;("not json");
+console.log(broken.name); // "" -- zeroed fallback, not a crash</code></pre>
+  </div>
+
   <h3 id="planned">Planned</h3>
   <p class="sub">The surface grows in explicit, conformance-backed slices. These
   modules use the same conventional names; some depend on upcoming language
@@ -1657,9 +1705,10 @@ console.log(codes.get(404) ?? "?"); // "Not Found"</code></pre>
   are imported by URL. They include <code>quickjs</code>, which embeds a
   JavaScript sandbox through the C FFI for running untrusted scripts from Lumen.</p>
 
-  <p class="note">Lumen is statically typed and has no dynamic <code>JSON</code> value,
-  <code>JSON.parse&lt;T&gt;</code> arrives later. The built-in library is a fixed,
-  contracted surface; everything else ships as explicit
+  <p class="note">Lumen is statically typed and has no dynamic <code>JSON</code> value
+  &mdash; <code>JSON.parse&lt;T&gt;</code> requires a type argument and gives you
+  exactly that shape back, never a shape you inspect at runtime. The built-in
+  library is a fixed, contracted surface; everything else ships as explicit
   <a href="https://github.com/lumen-lang-org/std-contrib">community packages</a>.</p>
 
   </div>

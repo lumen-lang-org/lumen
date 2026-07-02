@@ -101,6 +101,7 @@ pub const Checker = struct {
     pub const assertCallType = check_stdlib.assertCallType;
     pub const timeCallType = check_stdlib.timeCallType;
     pub const httpCallType = check_stdlib.httpCallType;
+    pub const jsonCallType = check_stdlib.jsonCallType;
     pub const promiseCallType = check_stdlib.promiseCallType;
     pub const mathCallType = check_stdlib.mathCallType;
     pub const stringCallType = check_stdlib.stringCallType;
