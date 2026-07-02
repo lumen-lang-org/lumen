@@ -41,28 +41,6 @@
 </div></nav>
 
 <section class="wrap">
-  <h2>Standard library</h2>
-  <p class="sub stdlib-intro">Familiar, conventional APIs, the names you already know
-  (<code>fs.readFileSync</code>, <code>path.join</code>, <code>process.cwd</code>),
-  statically typed and compiled to native code. Each section carries a
-  Node-style stability index
-  (<span class="stability-pill stability-stable">Stable</span>
-  <span class="stability-pill stability-experimental">Experimental</span>
-  <span class="stability-pill stability-deprecated">Deprecated</span>),
-  with individual functions getting their own pill when they differ &mdash;
-  usually because they sit on a newer, less-proven part of the runtime, like
-  the async I/O path.</p>
-  <p class="sub stdlib-intro">A separate tag marks target availability, since that's an
-  independent question from stability:
-  <span class="target-pill target-native-only">Native only</span> means the
-  function is rejected outright when compiling to WebAssembly (the whole
-  async/await surface, since the playground's in-browser target doesn't
-  support it yet);
-  <span class="target-pill target-wasm-limited">Wasm: limited</span> means it
-  compiles under WebAssembly but returns fallback/zeroed values there instead
-  of real data, because the underlying call it needs is Linux-specific.
-  Anything without either tag works the same on both targets.</p>
-
   <div class="docs">
   <aside class="docs-nav"><nav>
     <p class="docs-nav-title">Available now</p>
@@ -91,6 +69,19 @@
     <a href="#community">Community</a>
   </nav></aside>
   <div class="docs-main">
+
+  <h2>Standard library</h2>
+  <p class="sub stdlib-intro">Familiar, conventional APIs
+  (<code>fs.readFileSync</code>, <code>path.join</code>, <code>process.cwd</code>),
+  statically typed and compiled to native code. Each function carries a
+  stability pill
+  (<span class="stability-pill stability-stable">Stable</span>
+  <span class="stability-pill stability-experimental">Experimental</span>
+  <span class="stability-pill stability-deprecated">Deprecated</span>)
+  and, where it differs from the rest of its section, a target pill
+  (<span class="target-pill target-native-only">Native only</span>
+  <span class="target-pill target-wasm-limited">Wasm: limited</span>)
+  marking WebAssembly support &mdash; hover either for details.</p>
 
   <h3>Available now</h3>
 
