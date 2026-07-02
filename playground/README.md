@@ -72,7 +72,36 @@ fly launch --no-deploy \
 fly deploy \
   --config playground/fly.toml \
   --dockerfile playground/Dockerfile
+
+# Warm the compile cache so the first visitor after this deploy doesn't pay
+# for a cold compile on one of play.html's prefilled examples (see "Cache
+# warming" below).
+python3 playground/warm_cache.py https://<your-app>.fly.dev
 ```
+
+### Cache warming
+
+`server.zig` caches compiled wasm by exact source-body match (a small,
+in-memory, FIFO-evicted cache — see its own doc comment), but that cache is
+empty on every fresh process: a new deploy, or Fly starting a fresh machine
+after scaling to zero. Since most playground visits load one of
+`website/play.html`'s prefilled examples and click Run without editing, the
+very first visitor after either of those would otherwise pay for a full
+compile that every subsequent visitor gets instantly.
+
+`playground/warm_cache.py` extracts every example straight from
+`play.html` (mirroring its own frontend extraction exactly, so it never
+needs updating when examples change) and `POST`s each one to `/compile`,
+populating the cache before real traffic arrives:
+
+```sh
+python3 playground/warm_cache.py https://<your-app>.fly.dev
+```
+
+Run it right after every `fly deploy`. It has no effect on a cold start
+from scale-to-zero (nothing triggers it automatically there yet) — that
+first request after idling still pays for one real compile per example
+that gets hit before someone deploys again.
 
 ### Scale to zero
 
