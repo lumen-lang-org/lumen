@@ -1922,6 +1922,37 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = .void;
         return .void;
     }
+    // `http.METHODS`/`STATUS_CODES` (spec 049): zero-arg "functions" for
+    // what are really constants, the same deviation `Math.PI()`/`os.EOL()`
+    // already established -- Lumen has no static namespace member/property
+    // access, only namespace *calls*.
+    if (std.mem.eql(u8, call.name, "METHODS")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_http_constants = true;
+        call.checked_type = .string_array;
+        return .string_array;
+    }
+    if (std.mem.eql(u8, call.name, "STATUS_CODES")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const key_ty = self.arena.create(types.Type) catch return null;
+        key_ty.* = .i32;
+        const val_ty = self.arena.create(types.Type) catch return null;
+        val_ty.* = .string;
+        const map_ty = self.arena.create(types.MapType) catch return null;
+        map_ty.* = .{ .key = key_ty, .value = val_ty };
+        program.uses_io = true;
+        program.needs_http_constants = true;
+        program.needs_map = true;
+        call.checked_type = .{ .map_type = map_ty };
+        return .{ .map_type = map_ty };
+    }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
 }
