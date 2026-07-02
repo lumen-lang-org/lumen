@@ -768,6 +768,36 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "__processPid()");
             } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "argv")) {
                 try w.appendSlice(arena, "__args");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "uptime")) {
+                try w.appendSlice(arena, "__processUptime()");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "hrtime")) {
+                try w.appendSlice(arena, "__processHrtime(__io)");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "memoryUsage")) {
+                try w.appendSlice(arena, "__processMemoryUsage(__io, __alloc)");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "kill")) {
+                try w.appendSlice(arena, "__processKill(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "umask")) {
+                try w.appendSlice(arena, "__processUmaskGet()");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "setUmask")) {
+                try w.appendSlice(arena, "__processUmaskSet(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "getuid")) {
+                try w.appendSlice(arena, "__processGetuid()");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "getgid")) {
+                try w.appendSlice(arena, "__processGetgid()");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "geteuid")) {
+                try w.appendSlice(arena, "__processGeteuid()");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "getegid")) {
+                try w.appendSlice(arena, "__processGetegid()");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "abort")) {
+                try w.appendSlice(arena, "std.process.abort()");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "version")) {
+                try w.appendSlice(arena, "@as([]const u8, LUMEN_VERSION)");
             } else if (std.mem.eql(u8, cl.namespace, "os") and std.mem.eql(u8, cl.name, "platform")) {
                 try w.appendSlice(arena, "__processPlatform()");
             } else if (std.mem.eql(u8, cl.namespace, "os") and std.mem.eql(u8, cl.name, "arch")) {

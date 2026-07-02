@@ -2089,6 +2089,103 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\}
             \\
         );
+        // process API completion (spec 050). uptime()/hrtime() reuse the
+        // same Io.Clock primitive spec 041's time.now()/time.monotonic()
+        // already wired up. memoryUsage() reads /proc/self/status with the
+        // same readFileAlloc primitive fs.readFileSync already uses. kill/
+        // umask/getuid-family are raw Linux syscalls, no libc. version() is
+        // a hardcoded marker -- see spec.md for why it isn't Node's.
+        try out.appendSlice(arena,
+            \\const LUMEN_VERSION: []const u8 = "0.3.1";
+            \\fn __processHrtime(io: std.Io) i64 {
+            \\    const ts = std.Io.Clock.now(.awake, io);
+            \\    return @intCast(ts.nanoseconds);
+            \\}
+            \\pub const __LumenProcessMemory = struct { rss: i64, vsize: i64 };
+            \\fn __processStatusField(text: []const u8, label: []const u8) i64 {
+            \\    var lines = std.mem.splitScalar(u8, text, '\n');
+            \\    while (lines.next()) |line| {
+            \\        if (!std.mem.startsWith(u8, line, label)) continue;
+            \\        const rest = std.mem.trim(u8, line[label.len..], " \t");
+            \\        var it = std.mem.splitScalar(u8, rest, ' ');
+            \\        const num = it.next() orelse return 0;
+            \\        const kb = std.fmt.parseInt(i64, num, 10) catch return 0;
+            \\        return kb * 1024;
+            \\    }
+            \\    return 0;
+            \\}
+            \\fn __processMemoryUsage(io: std.Io, alloc: std.mem.Allocator) __LumenProcessMemory {
+            \\    // /proc entries report st_size == 0, which silently short-circuits
+            \\    // Dir.readFileAlloc's default *positional* reader (confirmed by
+            \\    // testing directly: it returns a 0-length read for this exact
+            \\    // path). readerStreaming does a real sequential read loop instead
+            \\    // and reads the real content correctly -- same fix fs.readFileSync
+            \\    // doesn't need for ordinary files, but /proc pseudo-files do.
+            \\    var file = std.Io.Dir.cwd().openFile(io, "/proc/self/status", .{}) catch return .{ .rss = 0, .vsize = 0 };
+            \\    defer file.close(io);
+            \\    var buf: [512]u8 = undefined;
+            \\    var file_reader = file.readerStreaming(io, &buf);
+            \\    const text = file_reader.interface.allocRemaining(alloc, .limited(64 * 1024)) catch return .{ .rss = 0, .vsize = 0 };
+            \\    return .{
+            \\        .rss = __processStatusField(text, "VmRSS:"),
+            \\        .vsize = __processStatusField(text, "VmSize:"),
+            \\    };
+            \\}
+            \\fn __processSignalFromName(name: []const u8) std.os.linux.SIG {
+            \\    const stripped = if (std.mem.startsWith(u8, name, "SIG")) name[3..] else name;
+            \\    return std.meta.stringToEnum(std.os.linux.SIG, stripped) orelse @enumFromInt(0);
+            \\}
+            \\fn __processKill(pid: i32, signal: []const u8) bool {
+            \\    if (@import("builtin").os.tag != .linux) return false;
+            \\    const sig = __processSignalFromName(signal);
+            \\    std.posix.kill(pid, sig) catch return false;
+            \\    return true;
+            \\}
+            \\fn __processUmaskRaw(mask: u32) u32 {
+            \\    if (@import("builtin").os.tag != .linux) return 0;
+            \\    return @truncate(std.os.linux.syscall1(.umask, @as(u64, mask)));
+            \\}
+            \\fn __processUmaskGet() i32 {
+            \\    const old = __processUmaskRaw(0o022);
+            \\    _ = __processUmaskRaw(old);
+            \\    return @intCast(old);
+            \\}
+            \\fn __processUmaskSet(mask: i32) i32 {
+            \\    return @intCast(__processUmaskRaw(@intCast(mask)));
+            \\}
+            \\fn __processGetuid() i32 {
+            \\    if (@import("builtin").os.tag != .linux) return 0;
+            \\    return @intCast(std.os.linux.getuid());
+            \\}
+            \\fn __processGetgid() i32 {
+            \\    if (@import("builtin").os.tag != .linux) return 0;
+            \\    return @intCast(std.os.linux.getgid());
+            \\}
+            \\fn __processGeteuid() i32 {
+            \\    if (@import("builtin").os.tag != .linux) return 0;
+            \\    return @intCast(std.os.linux.geteuid());
+            \\}
+            \\fn __processGetegid() i32 {
+            \\    if (@import("builtin").os.tag != .linux) return 0;
+            \\    return @intCast(std.os.linux.getegid());
+            \\}
+            \\
+        );
+    }
+    if (program.needs_process_uptime) {
+        // A separate block (not folded into needs_process_api above)
+        // because this is the only process.* function needing code to run
+        // unconditionally in main() before user code -- recording a start
+        // timestamp -- which the rest of the namespace doesn't need.
+        try out.appendSlice(arena,
+            \\var __process_start_ns: i64 = 0;
+            \\fn __processUptime() f64 {
+            \\    const ts = std.Io.Clock.now(.awake, __io);
+            \\    const elapsed_ns = @as(i64, @intCast(ts.nanoseconds)) - __process_start_ns;
+            \\    return @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000_000.0;
+            \\}
+            \\
+        );
     }
     if (program.needs_os_api) {
         // Two raw Linux syscalls cover almost this whole namespace: uname()
@@ -2225,6 +2322,9 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         }
         if (program.needs_process_api) {
             try out.appendSlice(arena, "    __environ = __init.minimal.environ;\n");
+        }
+        if (program.needs_process_uptime) {
+            try out.appendSlice(arena, "    __process_start_ns = @intCast(std.Io.Clock.now(.awake, __io).nanoseconds);\n");
         }
         if (program.needs_async) {
             try out.appendSlice(arena, "    LumenLoop.init();\n");
