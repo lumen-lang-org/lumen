@@ -1933,6 +1933,14 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         }
         program.uses_io = true;
         program.needs_http_constants = true;
+        // __httpMethods() and __httpStatusCodes() are emitted together
+        // under one needs_http_constants-gated block, so a program using
+        // METHODS without STATUS_CODES still needs LumenMap in scope for
+        // the latter to reference -- confirmed as a real bug: `http.METHODS()`
+        // alone failed to compile with "use of undeclared identifier
+        // 'LumenMap'" before this fix, since only STATUS_CODES's branch set
+        // needs_map.
+        program.needs_map = true;
         call.checked_type = .string_array;
         return .string_array;
     }
