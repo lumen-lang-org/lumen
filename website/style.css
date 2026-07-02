@@ -204,7 +204,7 @@ p code, li code, td code { background: var(--panel); border: 1px solid var(--bor
 .card p { margin: 0; color: var(--muted); font-size: 14px; }
 
 /* Tables */
-table { width: 100%; border-collapse: collapse; margin: 0 0 24px; font-size: 14px; }
+table { width: 100%; max-width: 760px; border-collapse: collapse; margin: 0 0 24px; font-size: 14px; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { color: var(--muted); font-weight: 600; }
 
