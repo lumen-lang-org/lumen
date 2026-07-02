@@ -162,6 +162,7 @@ h4 { font-size: 14px; margin: 24px 0 8px; font-weight: 650; color: var(--muted);
   border-radius: 999px;
   border: 1px solid;
   line-height: 1.6;
+  white-space: nowrap;
 }
 .stability-stable { color: #15803d; border-color: #15803d66; background: #15803d1a; }
 .stability-experimental { color: #b45309; border-color: #b4530966; background: #b453091a; }
@@ -180,6 +181,7 @@ h4 { font-size: 14px; margin: 24px 0 8px; font-weight: 650; color: var(--muted);
   border-radius: 999px;
   border: 1px solid;
   line-height: 1.6;
+  white-space: nowrap;
 }
 .target-native-only { color: #6d28d9; border-color: #6d28d966; background: #6d28d91a; }
 .target-wasm-limited { color: #0e7490; border-color: #0e749066; background: #0e74901a; }
