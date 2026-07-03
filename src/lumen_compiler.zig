@@ -1444,6 +1444,32 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\        if (n == 0) return "";
             \\        return __sa().dupe(u8, scratch[0..n]) catch "";
             \\    }
+            \\    // readLine() (spec 053): takeDelimiterInclusive is the same
+            \\    // primitive __httpCreateServer's request-line/header parsing
+            \\    // already proved out for "read up to and including the next
+            \\    // \n" over a std.Io.Reader interface. Deliberately does NOT
+            \\    // strip the trailing terminator (see spec.md's "Line
+            \\    // reading" section): stripping it would make a genuinely
+            \\    // blank line and true end-of-stream both collapse to the
+            \\    // same "", making a `while (readLine() != "")` loop stop
+            \\    // early on ordinary blank input lines -- a real correctness
+            \\    // bug, confirmed directly by testing piped input containing
+            \\    // a blank line before fixing this. Only true EOF (checked
+            \\    // via takeDelimiterInclusive's EndOfStream, then draining
+            \\    // whatever partial bytes -- if any -- are still buffered
+            \\    // for a final unterminated line) returns "".
+            \\    fn readLine(self: *LumenReadableStream) []const u8 {
+            \\        if (self.file == null) return "";
+            \\        const raw = self.reader.interface.takeDelimiterInclusive('\n') catch |e| blk: {
+            \\            if (e != error.EndOfStream) break :blk "";
+            \\            const left = self.reader.interface.buffered();
+            \\            if (left.len == 0) break :blk "";
+            \\            self.reader.interface.toss(left.len);
+            \\            break :blk left;
+            \\        };
+            \\        if (raw.len == 0) return "";
+            \\        return __sa().dupe(u8, raw) catch "";
+            \\    }
             \\    fn close(self: *LumenReadableStream) void {
             \\        if (self.file) |f| f.close(self.io);
             \\    }
@@ -1456,6 +1482,13 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    file: ?std.Io.File,
             \\    io: std.Io,
             \\    writer: std.Io.File.Writer = undefined,
+            \\    // flush_each_write (spec 053): off by default so
+            \\    // fs.createWriteStream's existing buffered-until-close
+            \\    // behavior is unchanged; process.stdout()/stderr() turn this
+            \\    // on so writes interleave correctly with console.log, which
+            \\    // flushes every call -- see spec 053's "unflushed stdout
+            \\    // writes" section.
+            \\    flush_each_write: bool = false,
             \\    fn __init(io: std.Io, file: ?std.Io.File) *LumenWritableStream {
             \\        const p = __sa().create(LumenWritableStream) catch unreachable;
             \\        p.* = .{ .file = file, .io = io };
@@ -1468,6 +1501,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    fn write(self: *LumenWritableStream, chunk: []const u8) void {
             \\        if (self.file == null) return;
             \\        self.writer.interface.writeAll(chunk) catch {};
+            \\        if (self.flush_each_write) self.writer.interface.flush() catch {};
             \\    }
             \\    fn close(self: *LumenWritableStream) void {
             \\        if (self.file) |f| {
@@ -1479,6 +1513,28 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\fn __fsCreateWriteStream(io: std.Io, path: []const u8) *LumenWritableStream {
             \\    const file = std.Io.Dir.cwd().createFile(io, path, .{}) catch null;
             \\    return LumenWritableStream.__init(io, file);
+            \\}
+            \\
+        );
+    }
+    if (program.needs_process_stdio) {
+        // process.stdin()/stdout()/stderr() (spec 053): the exact spec
+        // 046 stream types, just constructed straight from the real stdio
+        // File instead of an opened path -- see spec.md's "Why reuse spec
+        // 046's types verbatim" section.
+        try out.appendSlice(arena,
+            \\fn __processStdin(io: std.Io) *LumenReadableStream {
+            \\    return LumenReadableStream.__init(io, std.Io.File.stdin());
+            \\}
+            \\fn __processStdout(io: std.Io) *LumenWritableStream {
+            \\    const s = LumenWritableStream.__init(io, std.Io.File.stdout());
+            \\    s.flush_each_write = true;
+            \\    return s;
+            \\}
+            \\fn __processStderr(io: std.Io) *LumenWritableStream {
+            \\    const s = LumenWritableStream.__init(io, std.Io.File.stderr());
+            \\    s.flush_each_write = true;
+            \\    return s;
             \\}
             \\
         );

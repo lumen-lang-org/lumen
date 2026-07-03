@@ -60,6 +60,7 @@
     <a href="#fs">fs</a>
     <a href="#path">path</a>
     <a href="#process">process</a>
+    <a href="#stdio-streams">stdio streams</a>
     <a href="#os">os</a>
     <a href="#crypto">crypto</a>
     <a href="#url">url</a>
@@ -1074,6 +1075,85 @@ console.log("never runs");</code></pre>
     Lumen's own version marker, matching the repository's latest release
     tag. Bumped by hand alongside future tags.</p>
 <pre><code class="lumen">console.log(process.version());</code></pre>
+  </div>
+
+  <h4 id="stdio-streams">stdio streams</h4>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new this milestone, not yet covered by the conformance suite &mdash;
+  manually smoke-tested with real piped/redirected stdin (single-line,
+  multi-line, a blank line mid-input, and a final line with no trailing
+  newline) and with real fd separation between stdout/stderr.</p>
+  <p class="sub"><code>process.stdin()</code>/<code>stdout()</code>/
+  <code>stderr()</code> reuse the exact <code>ReadableStream</code>/
+  <code>WritableStream</code> types <a href="#fs-createReadStream">
+  <code>fs.createReadStream</code>/<code>createWriteStream</code></a> return,
+  just wired to the process's real stdio file descriptors instead of an
+  opened file &mdash; every method below (<code>.read()</code>/
+  <code>.close()</code>/<code>.write()</code>) already works on them.
+  <code>stdout()</code>/<code>stderr()</code> flush after every
+  <code>.write()</code> call (unlike a file-backed <code>WritableStream</code>,
+  which still buffers until <code>.close()</code>), so writes interleave
+  correctly, in order, with <code>console.log</code> in the same run.</p>
+
+  <div class="api-list">
+    <a href="#process-stdin">stdin</a>
+    <a href="#process-stdout">stdout</a>
+    <a href="#process-stderr">stderr</a>
+    <a href="#readablestream-readLine">ReadableStream.readLine</a>
+  </div>
+
+  <div class="api" id="process-stdin">
+    <h5><code>process.stdin()</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested with real piped/redirected input.">Experimental</span></h5>
+    <p class="sub">→ <code>ReadableStream</code> &mdash; each call allocates a
+    fresh wrapper around the same real stdin file descriptor (no shared/
+    cached instance). <code>.read()</code> (64KB chunks) works exactly as it
+    does on any other <code>ReadableStream</code>; see
+    <code>ReadableStream.readLine()</code> below for line-oriented reading.</p>
+<pre><code class="lumen">const input = process.stdin();
+const chunk: string = input.read();
+console.log(chunk);</code></pre>
+  </div>
+
+  <div class="api" id="process-stdout">
+    <h5><code>process.stdout()</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested for correct interleaving with console.log.">Experimental</span></h5>
+    <p class="sub">→ <code>WritableStream</code> &mdash; <code>.write(chunk)</code>
+    flushes immediately, every call, so it interleaves correctly with
+    <code>console.log</code>. Closing it (<code>.close()</code>) closes the
+    real stdout fd &mdash; usually not something a program needs to do
+    before it exits.</p>
+<pre><code class="lumen">console.log("before");
+process.stdout().write("interleaved\n");
+console.log("after");</code></pre>
+  </div>
+
+  <div class="api" id="process-stderr">
+    <h5><code>process.stderr()</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested with real shell fd redirection (1>/dev/null vs 2>/dev/null).">Experimental</span></h5>
+    <p class="sub">→ <code>WritableStream</code> &mdash; same shape as
+    <code>process.stdout()</code>, wired to fd 2 instead of fd 1.</p>
+<pre><code class="lumen">process.stderr().write("warning: low disk space\n");</code></pre>
+  </div>
+
+  <div class="api" id="readablestream-readLine">
+    <h5><code>ReadableStream.readLine()</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested for blank lines and a final unterminated line.">Experimental</span></h5>
+    <p class="sub">→ string &mdash; available on <em>any</em>
+    <code>ReadableStream</code> (<code>process.stdin()</code> or
+    <code>fs.createReadStream(...)</code> alike). Returns the next line
+    <strong>with its trailing <code>\n</code>/<code>\r\n</code> kept, not
+    stripped</strong> &mdash; deliberate: stripping it would make a
+    genuinely blank line indistinguishable from real end-of-stream (both
+    would be <code>""</code>), silently truncating a
+    <code>while (line != "")</code> read loop on ordinary blank input
+    lines. <code>""</code> means true EOF only; call <code>.trim()</code>
+    for a stripped line. A final line with no trailing newline (a piped
+    input cut off mid-line) is still returned intact, not dropped.</p>
+<pre><code class="lumen">const input = process.stdin();
+while (true) {
+  const raw: string = input.readLine();
+  if (raw == "") {
+    break;
+  }
+  console.log(raw.trim());
+}</code></pre>
   </div>
 
   <h4 id="os">os</h4>

@@ -819,6 +819,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "std.process.abort()");
             } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "version")) {
                 try w.appendSlice(arena, "@as([]const u8, LUMEN_VERSION)");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "stdin")) {
+                try w.appendSlice(arena, "__processStdin(__io)");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "stdout")) {
+                try w.appendSlice(arena, "__processStdout(__io)");
+            } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "stderr")) {
+                try w.appendSlice(arena, "__processStderr(__io)");
             } else if (std.mem.eql(u8, cl.namespace, "os") and std.mem.eql(u8, cl.name, "platform")) {
                 try w.appendSlice(arena, "__processPlatform()");
             } else if (std.mem.eql(u8, cl.namespace, "os") and std.mem.eql(u8, cl.name, "arch")) {
