@@ -389,6 +389,14 @@ pub const Lexer = struct {
             while (self.i < self.src.len and isIdentPart(self.src[self.i])) self.i += 1;
             return .{ .ident = self.src[start..self.i] };
         }
+        // `#name` ECMAScript private field (spec 052): lexed as a single ident
+        // whose text includes the leading `#`, so `#x` and `x` stay distinct.
+        if (c == '#' and self.i + 1 < self.src.len and isIdentStart(self.src[self.i + 1])) {
+            const start = self.i;
+            self.i += 1; // consume '#'
+            while (self.i < self.src.len and isIdentPart(self.src[self.i])) self.i += 1;
+            return .{ .ident = self.src[start..self.i] };
+        }
         return error.ParseError;
     }
 };

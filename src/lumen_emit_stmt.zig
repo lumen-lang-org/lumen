@@ -282,9 +282,11 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try lv.print(arena, "{s}.__static_{s}_{s}", .{ owner, owner, ma.field });
             } else if (ma.obj) |obj| {
                 try emitExpr(obj, &lv, arena);
-                try lv.print(arena, ".{s}", .{ma.field});
+                try lv.appendSlice(arena, ".");
+                try emit_mod.emitFieldName(&lv, arena, ma.field);
             } else {
-                try lv.print(arena, "self.{s}", .{ma.field});
+                try lv.appendSlice(arena, "self.");
+                try emit_mod.emitFieldName(&lv, arena, ma.field);
             }
             const lvs = lv.items;
             try body.print(arena, "    {s} = ", .{lvs});

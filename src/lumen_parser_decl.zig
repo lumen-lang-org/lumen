@@ -418,6 +418,10 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
         const member = self.cur.ident;
         const m_line = self.cur_line;
         const m_col = self.cur_col;
+        // `#name` is a hard-private field (spec 052): its `#` makes it
+        // private regardless of any keyword, and `#x` stays distinct from a
+        // public `x`. Fields only this pass; `#` methods are out of scope.
+        if (member.len > 0 and member[0] == '#') visibility = .private;
         try self.advance();
         if (accessor == .none and std.mem.eql(u8, member, "constructor")) {
             ctor_params = try self.parseParamList();

@@ -105,7 +105,7 @@ caught by an enclosing `try` (cross-function throw) — both predate spec 052.
   void-returning `a?.m()` is rejected. Document the local-short-circuit
   divergence in the example.
 
-- [ ] **T8 — `#private` fields (Cluster F, S).** DO after T3 (shares the lexer
+- [x] **T8 — `#private` fields (Cluster F, S).** DO after T3 (shares the lexer
   file). Files: `src/lumen_lexer.zig` (`#`-prefixed ident token, slice
   includes the `#`), `src/lumen_parser_decl.zig` (force `.private` when
   `member[0] == '#'`; optional `E_MODIFIER_CONFLICT`), `src/lumen_emit_class.zig`

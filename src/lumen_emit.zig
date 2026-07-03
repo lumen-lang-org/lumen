@@ -82,6 +82,17 @@ fn emitRawStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: []
     try w.append(arena, '"');
 }
 
+/// Emits a struct field name, quoting an ECMAScript `#private` name (spec 052)
+/// as `@"#name"` since Zig identifiers can't start with `#`. Ordinary names
+/// pass through unchanged.
+pub fn emitFieldName(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, name: []const u8) CompileError!void {
+    if (name.len > 0 and name[0] == '#') {
+        try w.print(arena, "@\"{s}\"", .{name});
+    } else {
+        try w.appendSlice(arena, name);
+    }
+}
+
 pub fn emitStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: []const u8) CompileError!void {
     try w.append(arena, '"');
     var i: usize = 0;
@@ -1156,7 +1167,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 const ft = try types.zigName(arena, fa.chain_field_type orelse .none);
                 try w.appendSlice(arena, "(if (");
                 try emitExpr(fa.obj, w, arena);
-                try w.print(arena, ") |__oc| @as(?{s}, __oc.{s}) else null)", .{ ft, fa.name });
+                try w.print(arena, ") |__oc| @as(?{s}, __oc.", .{ft});
+                try emitFieldName(w, arena, fa.name);
+                try w.appendSlice(arena, ") else null)");
             } else if (fa.enum_value) |ev| {
                 switch (ev) {
                     .int => |n| try w.print(arena, "{d}", .{n}),
@@ -1181,7 +1194,8 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, ".__get_{s}()", .{fa.name});
             } else {
                 try emitExpr(fa.obj, w, arena);
-                try w.print(arena, ".{s}", .{fa.name});
+                try w.appendSlice(arena, ".");
+                try emitFieldName(w, arena, fa.name);
             }
         },
         .index => |idx| {

@@ -68,7 +68,9 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     for (chain) |cc| {
         for (cc.fields) |field| {
             if (field.is_static) continue;
-            try decls.print(arena, "    {s}: {s},\n", .{ field.name, try types.zigName(arena, field.checked_type orelse return error.ParseError) });
+            try decls.appendSlice(arena, "    ");
+            try emit_mod.emitFieldName(decls, arena, field.name);
+            try decls.print(arena, ": {s},\n", .{try types.zigName(arena, field.checked_type orelse return error.ParseError)});
         }
     }
 
