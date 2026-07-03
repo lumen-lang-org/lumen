@@ -98,10 +98,10 @@ console.log(`distance² = ${distanceSq(origin, p)}`);  // distance² = 25</code>
   <div class="grid">
     <div class="card"><h3>Static types</h3><p>Local inference, <code>int</code>/<code>i64</code>/<code>number</code>/<code>bool</code>/<code>string</code>, float &amp; hex/binary literals.</p></div>
     <div class="card"><h3>Records &amp; interfaces</h3><p>Closed object shapes, nested records, arrays of records, <code>enum</code>s.</p></div>
-    <div class="card"><h3>Full control flow</h3><p><code>if</code>/<code>else if</code>, <code>while</code>, <code>do</code>, C&#8209;style <code>for</code>, <code>for…of</code>, <code>switch</code>, ternary.</p></div>
-    <div class="card"><h3>Null safety</h3><p><code>T | null</code>, optional <code>?</code> fields, <code>??</code>, <code>?.</code>, and <code>if (x != null)</code> narrowing.</p></div>
+    <div class="card"><h3>Full control flow</h3><p><code>if</code>/<code>else if</code>, <code>while</code>, <code>do</code>, C&#8209;style <code>for</code>, <code>for…of</code>, <code>for…in</code>, <code>switch</code>, ternary, and labeled <code>break</code>/<code>continue</code>.</p></div>
+    <div class="card"><h3>Null safety</h3><p><code>T | null</code>, optional <code>?</code> fields, <code>??</code>, optional chaining <code>?.</code> on fields and <code>?.[i]</code>, and <code>if (x != null)</code> narrowing.</p></div>
     <div class="card"><h3>First-class functions</h3><p>Function types, arrow functions, and capturing closures.</p></div>
-    <div class="card"><h3>Classes &amp; inheritance</h3><p><code>extends</code>, <code>super</code>, <code>public</code>/<code>private</code>/<code>protected</code>, <code>static</code>, <code>readonly</code>, and <code>get</code>/<code>set</code>.</p></div>
+    <div class="card"><h3>Classes &amp; inheritance</h3><p><code>extends</code>, <code>super</code>, <code>public</code>/<code>private</code>/<code>protected</code>, <code>#private</code> fields, <code>static</code>, <code>readonly</code>, and <code>get</code>/<code>set</code>.</p></div>
     <div class="card"><h3>Template literals</h3><p><code>`hi ${name}`</code> with string &amp; numeric interpolation.</p></div>
     <div class="card"><h3>Regex</h3><p><code>/pattern/</code> literals and <code>.test()</code>. Anchored patterns compile to specialized native matchers at build time, <strong>~3&times; faster than V8</strong> on checks like semver and identifiers. Everything else falls back to a built-in engine &mdash; every pattern works, not just the fast-path ones.</p></div>
     <div class="card"><h3>defer</h3><p>Scope&#8209;exit cleanup, last&#8209;in&#8209;first&#8209;out.</p></div>
@@ -110,13 +110,14 @@ console.log(`distance² = ${distanceSq(origin, p)}`);  // distance² = 25</code>
     <div class="card"><h3>String methods</h3><p><code>split</code>, <code>slice</code>, <code>trim</code>, <code>includes</code>, <code>indexOf</code>, <code>replace</code>, <code>repeat</code>, <code>padStart</code>, <code>toUpperCase</code>, and more.</p></div>
     <div class="card"><h3>Array methods</h3><p><code>map</code>, <code>filter</code>, <code>reduce</code>, <code>forEach</code>, <code>find</code>, <code>some</code>, <code>every</code>, <code>includes</code>, <code>indexOf</code>, <code>join</code>.</p></div>
     <div class="card"><h3>Generics</h3><p>Generic functions, classes, and interfaces with <code>Array&lt;T&gt;</code>, monomorphized at compile time, no boxing.</p></div>
-    <div class="card"><h3>Type aliases &amp; unions</h3><p><code>type</code> aliases, discriminated unions narrowed by a literal tag, and <code>as</code> assertions.</p></div>
-    <div class="card"><h3>Error handling</h3><p><code>try</code>/<code>catch</code>/<code>finally</code> and <code>throw</code>, with a readable <code>.message</code> on the caught error.</p></div>
+    <div class="card"><h3>Type aliases &amp; unions</h3><p><code>type</code> aliases, discriminated unions narrowed by a literal tag, <code>as</code> assertions, <code>satisfies</code>, and <code>readonly</code> arrays.</p></div>
+    <div class="card"><h3>Error handling</h3><p><code>try</code>/<code>catch</code>/<code>finally</code> and <code>throw</code>, with a readable <code>.message</code> on the caught error; optional catch binding (<code>catch { }</code>).</p></div>
+    <div class="card"><h3>Operators</h3><p>Full arithmetic, bitwise, and shift set, with every compound-assignment form (<code>+=</code>, <code>&amp;&amp;=</code>, <code>??=</code>, <code>&lt;&lt;=</code>, <code>**=</code>, and more).</p></div>
     <div class="card"><h3>Maps, Sets &amp; tuples</h3><p><code>Map&lt;K, V&gt;</code>, <code>Set&lt;T&gt;</code>, and fixed-shape tuple types like <code>[int, string]</code>.</p></div>
     <div class="card"><h3>EventEmitter</h3><p>Statically-typed <code>EventEmitter&lt;T&gt;</code>, one payload type per instance. <strong>~3.5&times; faster than Node's native EventEmitter</strong> on a tight emit loop (10M emits, one listener).</p></div>
     <div class="card"><h3>async / await</h3><p><code>async</code> functions return <code>Promise&lt;T&gt;</code> and <code>await</code> resolves them on a fast native event loop.</p></div>
-    <div class="card"><h3>Flexible parameters</h3><p>Default values, rest parameters, and spread, checked statically, no <code>arguments</code> object.</p></div>
-    <div class="card"><h3>URL imports</h3><p>Import a default export from a relative file or an <code>https://</code> URL, a package is just a URL.</p></div>
+    <div class="card"><h3>Flexible parameters</h3><p>Default values, rest parameters, and spread, checked statically, no <code>arguments</code> object. Object shorthand <code>{ x }</code> and computed keys.</p></div>
+    <div class="card"><h3>Modules</h3><p>Default, named, and <code>import * as ns</code> imports, and <code>export … from</code> re-exports, from a relative file or an <code>https://</code> URL &mdash; a package is just a URL.</p></div>
     <div class="card"><h3>Native output</h3><p>Compiles to a small, fast, dependency&#8209;free native binary.</p></div>
   </div>
 </section>
