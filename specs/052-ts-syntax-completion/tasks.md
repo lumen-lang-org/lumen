@@ -63,7 +63,7 @@ caught by an enclosing `try` (cross-function throw) — both predate spec 052.
   finally {}` and bare `catch {}` both work; `catch ()` (empty parens) is
   still a parse error; the classic `catch (e) { ... }` is unaffected.
 
-- [ ] **T5 — Labeled statements + `for...in` (Cluster B, M+M, PAIRED
+- [~] **T5 (for...in DONE, labeled statements pending) — Labeled statements + `for...in` (Cluster B, M+M, PAIRED
   SLICE).** DO after T4; these two share the loop structs and the `for`-parse
   block, so land them together but sequentially internally (labeled first,
   then for-in). Files (labeled): `src/lumen_ast.zig` (`label` on the four loop
@@ -116,7 +116,7 @@ caught by an enclosing `try` (cross-function throw) — both predate spec 052.
   methods, a public `secret` coexists distinctly, and `obj.#secret` from
   outside the class is `E_PRIVATE_ACCESS`.
 
-- [ ] **T9 — Re-exports `export { a } from` / `export * from` (Cluster G, M,
+- [x] **T9 — Re-exports `export { a } from` / `export * from` (Cluster G, M,
   ISOLATED).** File: `src/lumen.zig` only (textual inliner). Add
   `reexport_all` Kind + update the 4 Kind switches; add `parseReExport`
   (require the ` from "` marker, reuse import validation + `parseNamedBindings`);

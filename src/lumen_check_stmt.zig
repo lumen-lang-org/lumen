@@ -488,6 +488,34 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             defer self.loop_depth -= 1;
             try self.checkBlock(program, loop.body);
         },
+        .for_in_stmt => |*loop| {
+            // for...in (spec 052): iterate a record's field names or an
+            // array's indices, both as `string`. Map/Set/scalar iterables
+            // are rejected -- there's no meaningful key set for them here.
+            const iter_type = self.exprType(program, loop.iterable, loop.line, loop.col) orelse
+                return self.inferenceFail(loop.line, loop.col, "cannot infer for-in iterable type");
+            if (iter_type == .named) {
+                const decl = self.type_decls.get(iter_type.named) orelse
+                    return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+                const names = self.arena.alloc([]const u8, decl.fields.len) catch return error.OutOfMemory;
+                for (decl.fields, 0..) |f, i| names[i] = f.name;
+                loop.key_names = names;
+            } else if (types.isArray(iter_type)) {
+                loop.key_names = null; // runtime indices
+                program.uses_io = true; // the index->string uses __alloc
+            } else {
+                return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+            }
+            try self.pushScope();
+            defer self.popScope();
+            const scope = self.currentScope();
+            const emit_name = try self.freshEmitName(loop.binding);
+            loop.binding_emit_name = emit_name;
+            scope.put(self.arena, loop.binding, .{ .ty = .string, .mutable = loop.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
+            self.loop_depth += 1;
+            defer self.loop_depth -= 1;
+            try self.checkBlock(program, loop.body);
+        },
         .if_stmt => |*branch| {
             const cond_type = self.exprType(program, branch.cond, branch.line, branch.col) orelse
                 return self.inferenceFail(branch.line, branch.col, "cannot infer if condition type");

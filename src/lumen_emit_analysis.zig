@@ -43,6 +43,7 @@ pub fn stmtCanThrow(stmt: *const Stmt) bool {
         .do_while_stmt => |w| bodyCanThrow(w.body),
         .for_stmt => |f| bodyCanThrow(f.body),
         .for_of_stmt => |f| bodyCanThrow(f.body),
+        .for_in_stmt => |f| bodyCanThrow(f.body),
         .if_stmt => |b| bodyCanThrow(b.then_body) or (b.else_body != null and bodyCanThrow(b.else_body.?)),
         .switch_stmt => |sw| blk: {
             for (sw.cases) |cse| if (bodyCanThrow(cse.body)) break :blk true;
@@ -165,6 +166,7 @@ pub fn stmtUsesThis(stmt: *const Stmt) bool {
         .do_while_stmt => |w| exprUsesThis(w.cond) or bodyUsesThis(w.body),
         .for_stmt => |f| exprUsesThis(f.init.init) or exprUsesThis(f.cond) or exprUsesThis(f.update.value) or bodyUsesThis(f.body),
         .for_of_stmt => |f| exprUsesThis(f.iterable) or bodyUsesThis(f.body),
+        .for_in_stmt => |f| exprUsesThis(f.iterable) or bodyUsesThis(f.body),
         .if_stmt => |b| exprUsesThis(b.cond) or bodyUsesThis(b.then_body) or (b.else_body != null and bodyUsesThis(b.else_body.?)),
         .switch_stmt => |sw| blk: {
             if (exprUsesThis(sw.value)) break :blk true;

@@ -262,6 +262,22 @@ pub const ForOfStmt = struct {
     col: u32,
 };
 
+/// `for (const k in x) { ... }` (spec 052). The binding is always `string`
+/// -- record field names or array indices as strings, matching JS/TS. The
+/// checker fills `key_names` for a record iterable (the fixed field-name
+/// list, iterated in declaration order) and leaves it null for an array
+/// (indices `0..len` stringified at runtime).
+pub const ForInStmt = struct {
+    mutable: bool,
+    binding: []const u8,
+    binding_emit_name: ?[]const u8 = null,
+    iterable: *Expr,
+    key_names: ?[]const []const u8 = null, // record field names, or null for an array
+    body: []Stmt,
+    line: u32,
+    col: u32,
+};
+
 pub const IfStmt = struct {
     cond: *Expr,
     then_body: []Stmt,
@@ -374,6 +390,7 @@ pub const Stmt = union(enum) {
     do_while_stmt: DoWhileStmt,
     for_stmt: ForStmt,
     for_of_stmt: ForOfStmt,
+    for_in_stmt: ForInStmt,
     if_stmt: IfStmt,
     switch_stmt: SwitchStmt,
     return_stmt: ReturnStmt,

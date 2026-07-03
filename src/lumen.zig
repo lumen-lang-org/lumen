@@ -166,13 +166,67 @@ fn parseExportList(arena: std.mem.Allocator, trimmed: []const u8) !?[]const Name
     return try parseNamedBindings(arena, inner);
 }
 
+/// A `export { a, b } from "..."` or `export * from "..."` re-export (spec 052).
+/// `binds` is null for the `export *` (re-export-all) form.
+const ReExport = struct { binds: ?[]const NamedBinding, spec: []const u8 };
+
+/// Parses a re-export line -- a `export { ... } from "..."` list or an
+/// `export * from "..."` -- reusing the same ` from "<spec>"` marker and
+/// local/URL/`.ts` validation as `import`. Returns null when the line is not
+/// a `from`-bearing re-export (a plain `export { a }` with no `from` is a
+/// re-export *of local symbols* and stays with `parseExportList`).
+fn parseReExport(arena: std.mem.Allocator, trimmed: []const u8) !?ReExport {
+    if (!std.mem.startsWith(u8, trimmed, "export ")) return null;
+    const marker = " from \"";
+    const marker_pos = std.mem.indexOf(u8, trimmed, marker) orelse return null;
+    const clause = std.mem.trim(u8, trimmed["export ".len..marker_pos], " \t");
+    const spec_start = marker_pos + marker.len;
+    const spec_end = std.mem.indexOfScalarPos(u8, trimmed, spec_start, '"') orelse return error.InvalidImport;
+    const spec = trimmed[spec_start..spec_end];
+    const is_local = std.mem.startsWith(u8, spec, "./") or std.mem.startsWith(u8, spec, "../");
+    const is_url = std.mem.startsWith(u8, spec, "https://");
+    if (!is_local and !is_url) return error.InvalidImport;
+    if (!std.mem.endsWith(u8, spec, ".ts")) return error.InvalidImport;
+
+    if (std.mem.eql(u8, clause, "*")) return .{ .binds = null, .spec = spec };
+    if (std.mem.startsWith(u8, clause, "{")) {
+        if (!std.mem.endsWith(u8, clause, "}")) return error.InvalidImport;
+        const inner = clause[1 .. clause.len - 1];
+        return .{ .binds = try parseNamedBindings(arena, inner), .spec = spec };
+    }
+    return error.InvalidImport;
+}
+
 /// Collects every symbol a module exports: default-function name (if any),
 /// `export function/const/let NAME` declarations, and `export { a, b }` lists.
 /// Used to validate that named imports refer to real exports.
-fn collectExports(arena: std.mem.Allocator, source: []const u8, set: *std.StringHashMapUnmanaged(void)) !void {
+fn collectExports(arena: std.mem.Allocator, io: std.Io, module_path: []const u8, is_url: bool, source: []const u8, set: *std.StringHashMapUnmanaged(void), depth: u8) !void {
+    if (depth > 16) return;
+    const dir = if (is_url) blk: {
+        const slash = std.mem.lastIndexOfScalar(u8, module_path, '/') orelse break :blk ".";
+        break :blk module_path[0..slash];
+    } else (std.fs.path.dirname(module_path) orelse ".");
     var lines = std.mem.splitScalar(u8, source, '\n');
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
+        // A `from`-bearing re-export (spec 052) is checked first: `export
+        // { a } from` exports the listed aliases; `export * from` re-exports
+        // every symbol of the source module, which requires reading it.
+        if (try parseReExport(arena, trimmed)) |re| {
+            if (re.binds) |binds| {
+                for (binds) |b| try set.put(arena, b.alias, {});
+            } else {
+                // `export * from "spec"` -- resolve and recurse to enumerate
+                // the source's own exports. Local only; a star re-export from
+                // a URL is left unenumerated (best-effort, rare).
+                if (std.mem.startsWith(u8, re.spec, "https://")) continue;
+                const child = if (is_url) re.spec else std.fs.path.join(arena, &.{ dir, re.spec }) catch continue;
+                if (is_url) continue;
+                const child_src = std.Io.Dir.cwd().readFileAlloc(io, child, arena, .limited(16 * 1024 * 1024)) catch continue;
+                try collectExports(arena, io, child, false, child_src, set, depth + 1);
+            }
+            continue;
+        }
         if (parseNamedExportDecl(trimmed)) |ne| {
             try set.put(arena, ne.name, {});
         } else if (try parseExportList(arena, trimmed)) |binds| {
@@ -257,7 +311,7 @@ fn validateNamedImport(
     else
         std.Io.Dir.cwd().readFileAlloc(io, key, arena, .limited(16 * 1024 * 1024)) catch return error.ImportReadFailed;
     var exports: std.StringHashMapUnmanaged(void) = .empty;
-    try collectExports(arena, source, &exports);
+    try collectExports(arena, io, if (is_url) path else key, is_url, source, &exports, 0);
     for (binds) |b| if (exports.get(b.name) == null) return error.MissingExport;
 }
 
@@ -360,7 +414,7 @@ fn appendExpandedSource(
     if (import_kind) |kind| switch (kind) {
         .named => |binds| {
             var exports: std.StringHashMapUnmanaged(void) = .empty;
-            try collectExports(arena, source, &exports);
+            try collectExports(arena, io, if (is_url) path else key, is_url, source, &exports, 0);
             for (binds) |b| if (exports.get(b.name) == null) return error.MissingExport;
         },
         .default => {},
@@ -421,6 +475,23 @@ fn appendExpandedSource(
             continue;
         }
         if (try appendExportDefaultFunction(arena, out, trimmed, default_name)) continue;
+        // `export { a } from "..."` / `export * from "..."` (spec 052):
+        // inline the source module (its symbols flow into the flat program),
+        // renaming `a as b` re-exports so importers see the alias. Must be
+        // checked before parseExportList below, since a re-export also starts
+        // with `export {`. The re-export line itself emits nothing.
+        if (try parseReExport(arena, trimmed)) |re| {
+            const child_is_url = std.mem.startsWith(u8, re.spec, "https://");
+            const re_path = if (child_is_url)
+                re.spec
+            else if (is_url)
+                try joinUrl(arena, dir, re.spec)
+            else
+                try std.fs.path.join(arena, &.{ dir, re.spec });
+            const re_kind: ?ImportSpec.Kind = if (re.binds) |b| .{ .named = b } else null;
+            try appendExpandedSource(arena, io, re_path, out, visiting, emitted, re_kind, depth + 1);
+            continue;
+        }
         // `export { a, b }` re-export lists carry no declaration of their own:
         // the underlying functions/consts are emitted from their own lines.
         if (try parseExportList(arena, trimmed)) |_| continue;

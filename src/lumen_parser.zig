@@ -425,6 +425,15 @@ pub const Parser = struct {
                 const body = try self.parseBlock();
                 return .{ .for_of_stmt = .{ .mutable = !is_const, .binding = init_name, .iterable = iterable, .body = body, .line = line, .col = col } };
             }
+            // for...in: `for (const|let name in x) { ... }` (spec 052) --
+            // iterates a record's field names / an array's indices as strings.
+            if (self.isKw("in")) {
+                try self.advance();
+                const iterable = try self.parseExpr();
+                try self.expectOp(')');
+                const body = try self.parseBlock();
+                return .{ .for_in_stmt = .{ .mutable = !is_const, .binding = init_name, .iterable = iterable, .body = body, .line = line, .col = col } };
+            }
             // C-style for loops require a reassignable binding for the update step.
             if (is_const) return error.ParseError;
             var annotation: ?[]const u8 = null;

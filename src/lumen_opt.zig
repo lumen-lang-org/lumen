@@ -58,6 +58,7 @@ fn collectReturnsStmt(s: *const Stmt, list: *std.ArrayListUnmanaged(*const Expr)
         .do_while_stmt => |w| try collectReturns(w.body, list, arena),
         .for_stmt => |f| try collectReturns(f.body, list, arena),
         .for_of_stmt => |f| try collectReturns(f.body, list, arena),
+        .for_in_stmt => |f| try collectReturns(f.body, list, arena),
         .if_stmt => |b| {
             try collectReturns(b.then_body, list, arena);
             if (b.else_body) |eb| try collectReturns(eb, list, arena);
@@ -119,6 +120,7 @@ pub fn collectDestPassable(stmts: []Stmt, map: *std.StringHashMapUnmanaged([]con
         .do_while_stmt => |*w| try collectDestPassable(w.body, map, arena),
         .for_stmt => |*f| try collectDestPassable(f.body, map, arena),
         .for_of_stmt => |*f| try collectDestPassable(f.body, map, arena),
+        .for_in_stmt => |*f| try collectDestPassable(f.body, map, arena),
         .if_stmt => |*b| {
             try collectDestPassable(b.then_body, map, arena);
             if (b.else_body) |eb| try collectDestPassable(eb, map, arena);
@@ -155,6 +157,7 @@ fn markBuilderPartsStmt(s: *Stmt, map: *const std.StringHashMapUnmanaged([]const
         .do_while_stmt => |*w| try markBuilderParts(w.body, map, arena),
         .for_stmt => |*f| try markBuilderParts(f.body, map, arena),
         .for_of_stmt => |*f| try markBuilderParts(f.body, map, arena),
+        .for_in_stmt => |*f| try markBuilderParts(f.body, map, arena),
         .if_stmt => |*b| {
             try markBuilderParts(b.then_body, map, arena);
             if (b.else_body) |eb| try markBuilderParts(eb, map, arena);
@@ -289,6 +292,10 @@ fn accDisqStmt(stmt: *const Stmt, name: []const u8, arena: std.mem.Allocator) Co
             if (std.mem.eql(u8, f.binding, name)) return true;
             return accBadRef(f.iterable, name) or (try accDisqBody(f.body, name, arena));
         },
+        .for_in_stmt => |f| {
+            if (std.mem.eql(u8, f.binding, name)) return true;
+            return accBadRef(f.iterable, name) or (try accDisqBody(f.body, name, arena));
+        },
         .if_stmt => |b| return accBadRef(b.cond, name) or (try accDisqBody(b.then_body, name, arena)) or (b.else_body != null and (try accDisqBody(b.else_body.?, name, arena))),
         .switch_stmt => |sw| {
             if (accBadRef(sw.value, name)) return true;
@@ -327,6 +334,7 @@ fn accCountDeclsStmt(stmt: *const Stmt, name: []const u8) usize {
         .do_while_stmt => |w| accCountDecls(w.body, name),
         .for_stmt => |f| accCountDecls(f.body, name),
         .for_of_stmt => |f| accCountDecls(f.body, name),
+        .for_in_stmt => |f| accCountDecls(f.body, name),
         .if_stmt => |b| accCountDecls(b.then_body, name) + (if (b.else_body) |eb| accCountDecls(eb, name) else 0),
         .switch_stmt => |sw| blk: {
             var c: usize = 0;
@@ -375,6 +383,10 @@ fn markAccStmt(stmt: *Stmt, name: []const u8) void {
             markAccBody(f.body, name);
         },
         .for_of_stmt => |*f| {
+            markAccExpr(f.iterable, name);
+            markAccBody(f.body, name);
+        },
+        .for_in_stmt => |*f| {
             markAccExpr(f.iterable, name);
             markAccBody(f.body, name);
         },
@@ -490,6 +502,7 @@ fn accRecurseFns(stmt: *Stmt, arena: std.mem.Allocator) CompileError!void {
         .do_while_stmt => |*w| for (w.body) |*b| try accRecurseFns(b, arena),
         .for_stmt => |*f| for (f.body) |*b| try accRecurseFns(b, arena),
         .for_of_stmt => |*f| for (f.body) |*b| try accRecurseFns(b, arena),
+        .for_in_stmt => |*f| for (f.body) |*b| try accRecurseFns(b, arena),
         .if_stmt => |*b| {
             for (b.then_body) |*x| try accRecurseFns(x, arena);
             if (b.else_body) |eb| for (eb) |*x| try accRecurseFns(x, arena);
@@ -587,6 +600,7 @@ fn stmtUsesName(stmt: *const Stmt, name: []const u8) bool {
         .do_while_stmt => |w| exprUsesName(w.cond, name) or bodyUsesName(w.body, name),
         .for_stmt => |f| exprUsesName(f.init.init, name) or exprUsesName(f.cond, name) or exprUsesName(f.update.value, name) or bodyUsesName(f.body, name),
         .for_of_stmt => |f| exprUsesName(f.iterable, name) or bodyUsesName(f.body, name),
+        .for_in_stmt => |f| exprUsesName(f.iterable, name) or bodyUsesName(f.body, name),
         .if_stmt => |b| exprUsesName(b.cond, name) or bodyUsesName(b.then_body, name) or (b.else_body != null and bodyUsesName(b.else_body.?, name)),
         .switch_stmt => |sw| blk: {
             if (exprUsesName(sw.value, name)) break :blk true;

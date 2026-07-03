@@ -82,7 +82,7 @@ fn emitRawStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: []
     try w.append(arena, '"');
 }
 
-fn emitStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: []const u8) CompileError!void {
+pub fn emitStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: []const u8) CompileError!void {
     try w.append(arena, '"');
     var i: usize = 0;
     while (i < s.len) : (i += 1) {

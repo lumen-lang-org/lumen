@@ -153,6 +153,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             .do_while_stmt => |loop| .{ .line = loop.line, .col = loop.col },
             .for_stmt => |loop| .{ .line = loop.line, .col = loop.col },
             .for_of_stmt => |loop| .{ .line = loop.line, .col = loop.col },
+            .for_in_stmt => |loop| .{ .line = loop.line, .col = loop.col },
             .if_stmt => |branch| .{ .line = branch.line, .col = branch.col },
             .switch_stmt => |switch_stmt| .{ .line = switch_stmt.line, .col = switch_stmt.col },
             .return_stmt => |ret| .{ .line = ret.line, .col = ret.col },
@@ -463,6 +464,40 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             }
             for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
+            try body.appendSlice(arena, "    }\n");
+        },
+        .for_in_stmt => |loop| {
+            const binding = loop.binding_emit_name orelse loop.binding;
+            try body.appendSlice(arena, "    {\n");
+            if (loop.key_names) |names| {
+                // Record: iterate the fixed field-name list. The iterable
+                // value itself isn't needed (keys come from its type), but
+                // evaluate it for side-effect parity with JS.
+                try body.appendSlice(arena, "    _ = ");
+                try emitExpr(loop.iterable, body, arena);
+                try body.appendSlice(arena, ";\n");
+                try body.appendSlice(arena, "    const __forin_keys = [_][]const u8{");
+                for (names, 0..) |n, i| {
+                    if (i > 0) try body.appendSlice(arena, ", ");
+                    try emit_mod.emitStrLit(body, arena, n);
+                }
+                try body.appendSlice(arena, "};\n");
+                try body.print(arena, "    for (__forin_keys) |__forin_k| {{\n    const {s}: []const u8 = __forin_k;\n", .{binding});
+                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try body.appendSlice(arena, "    }\n");
+            } else {
+                // Array: iterate indices 0..len as strings.
+                const seq = try std.fmt.allocPrint(arena, "__forin_seq_{d}_{d}", .{ loop.line, loop.col });
+                const idx = try std.fmt.allocPrint(arena, "__forin_idx_{d}_{d}", .{ loop.line, loop.col });
+                try body.print(arena, "    const {s} = ", .{seq});
+                try emitExpr(loop.iterable, body, arena);
+                try body.appendSlice(arena, ";\n");
+                try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
+                try body.print(arena, "    while ({s} < {s}.len) : ({s} += 1) {{\n", .{ idx, seq, idx });
+                try body.print(arena, "    const {s}: []const u8 = std.fmt.allocPrint(__alloc, \"{{d}}\", .{{{s}}}) catch unreachable;\n", .{ binding, idx });
+                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try body.appendSlice(arena, "    }\n");
+            }
             try body.appendSlice(arena, "    }\n");
         },
         .if_stmt => |branch| {

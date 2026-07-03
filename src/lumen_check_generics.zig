@@ -449,6 +449,7 @@ pub fn cloneStmt(self: *Checker, s: ast.Stmt) CompileError!ast.Stmt {
         .do_while_stmt => |w| .{ .do_while_stmt = .{ .body = try self.cloneBody(w.body), .cond = try self.cloneExpr(w.cond), .line = w.line, .col = w.col } },
         .for_stmt => |f| .{ .for_stmt = .{ .init = try self.cloneVarDecl(f.init), .cond = try self.cloneExpr(f.cond), .update = try self.cloneAssign(f.update), .body = try self.cloneBody(f.body), .line = f.line, .col = f.col } },
         .for_of_stmt => |f| .{ .for_of_stmt = .{ .mutable = f.mutable, .binding = f.binding, .iterable = try self.cloneExpr(f.iterable), .body = try self.cloneBody(f.body), .line = f.line, .col = f.col } },
+        .for_in_stmt => |f| .{ .for_in_stmt = .{ .mutable = f.mutable, .binding = f.binding, .iterable = try self.cloneExpr(f.iterable), .body = try self.cloneBody(f.body), .line = f.line, .col = f.col } },
         .if_stmt => |b| .{ .if_stmt = .{ .cond = try self.cloneExpr(b.cond), .then_body = try self.cloneBody(b.then_body), .else_body = if (b.else_body) |eb| try self.cloneBody(eb) else null, .line = b.line, .col = b.col } },
         .switch_stmt => |sw| blk: {
             const cases = self.arena.alloc(ast.SwitchCase, sw.cases.len) catch return error.OutOfMemory;
