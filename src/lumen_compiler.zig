@@ -2306,6 +2306,39 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_zlib_api) {
+        // std.compress.flate.Container's raw/gzip/zlib variants are handled
+        // internally by Compress/Decompress (header/footer framing, CRC32/
+        // Adler32 checksums) -- verified directly against this Zig
+        // version's lib/std/compress/flate*.zig rather than assumed, since
+        // this API has churned across Zig versions. Compress needs an
+        // output writer with > 8 bytes of starting capacity (an internal
+        // assert), hence initCapacity rather than a bare .init. Both
+        // directions need a caller-owned scratch window of
+        // flate.max_window_len (64 KiB) -- heap-allocated via __alloc
+        // rather than put on the stack, so this doesn't blow up every call
+        // site's frame size.
+        try out.appendSlice(arena,
+            \\fn __zlibCompress(alloc: std.mem.Allocator, container: std.compress.flate.Container, data: []const u8) []const u8 {
+            \\    var allocating = std.Io.Writer.Allocating.initCapacity(alloc, data.len + 64) catch return "";
+            \\    defer allocating.deinit();
+            \\    const window = alloc.alloc(u8, std.compress.flate.max_window_len) catch return "";
+            \\    defer alloc.free(window);
+            \\    var c = std.compress.flate.Compress.init(&allocating.writer, window, container, .default) catch return "";
+            \\    c.writer.writeAll(data) catch return "";
+            \\    c.finish() catch return "";
+            \\    return allocating.toOwnedSlice() catch "";
+            \\}
+            \\fn __zlibDecompress(alloc: std.mem.Allocator, container: std.compress.flate.Container, data: []const u8) []const u8 {
+            \\    var reader = std.Io.Reader.fixed(data);
+            \\    const window = alloc.alloc(u8, std.compress.flate.max_window_len) catch return "";
+            \\    defer alloc.free(window);
+            \\    var d = std.compress.flate.Decompress.init(&reader, container, window);
+            \\    return d.reader.allocRemaining(alloc, .unlimited) catch return "";
+            \\}
+            \\
+        );
+    }
     if (program.needs_httpget) {
         // A real std.http one-shot GET, wrapped to a Lumen-friendly `i64` (status code, or -1 on error).
         try out.appendSlice(arena,

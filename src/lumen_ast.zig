@@ -456,6 +456,7 @@ pub const Program = struct {
     needs_os_api: bool = false,
     needs_crypto_api: bool = false,
     needs_url_api: bool = false,
+    needs_zlib_api: bool = false,
     needs_child_process_api: bool = false,
     needs_assert: bool = false,
     needs_time_api: bool = false,

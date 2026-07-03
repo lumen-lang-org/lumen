@@ -493,6 +493,7 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "time")) return self.timeCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "http")) return self.httpCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "JSON")) return self.jsonCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "zlib")) return self.zlibCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Promise")) return self.promiseCallType(program, call, line, col);
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
@@ -1826,6 +1827,34 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
+}
+
+pub fn zlibCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    const one_string_arg_fns = [_][]const u8{ "gzipSync", "gunzipSync", "deflateSync", "inflateSync" };
+    var matched = false;
+    for (one_string_arg_fns) |fn_name| {
+        if (std.mem.eql(u8, call.name, fn_name)) {
+            matched = true;
+            break;
+        }
+    }
+    if (!matched) {
+        _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+        return null;
+    }
+    if (call.args.len != 1) {
+        _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+        return null;
+    }
+    const data_type = self.exprType(program, call.args[0], line, col) orelse return null;
+    if (!types.same(.string, data_type)) {
+        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+        return null;
+    }
+    program.uses_io = true;
+    program.needs_zlib_api = true;
+    call.checked_type = .string;
+    return .string;
 }
 
 pub fn urlCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {

@@ -68,6 +68,7 @@
     <a href="#time">time</a>
     <a href="#http">http</a>
     <a href="#json">JSON</a>
+    <a href="#zlib">zlib</a>
     <p class="docs-nav-title">Planned</p>
     <a href="#planned">Roadmap</a>
     <p class="docs-nav-title">Packages</p>
@@ -1597,6 +1598,79 @@ const broken: Person = JSON.parse&lt;Person&gt;("not json");
 console.log(broken.name); // "" -- zeroed fallback, not a crash</code></pre>
   </div>
 
+  <h4 id="zlib">zlib</h4>
+  <p class="stability-note stability-experimental">Experimental &mdash; new
+  this milestone, manually verified with a round-trip on both a short and a
+  ~100KB repetitive string, a cross-check against the system
+  <code>gzip</code>/<code>gunzip</code> binaries, and a corrupt-input
+  fallback check; not yet covered by the conformance suite.</p>
+  <p class="sub">A practical subset of
+  <a href="https://nodejs.org/docs/latest/api/zlib.html">Node's
+  <code>zlib</code> module</a>: one-shot gzip and raw-deflate compress/
+  decompress. Static functions, not Node's <code>zlib.createGzip()</code>
+  transform-stream style &mdash; there's no stream/<code>Buffer</code> object
+  in the language yet, and one-shot whole-buffer compression covers the
+  common case (config blobs, already-buffered HTTP bodies, small payloads).
+  <strong>Buffer-less v1 shape</strong>: Lumen's <code>string</code> is
+  <code>[]const u8</code> &mdash; raw bytes, not validated UTF-8 (the same
+  property <code>crypto.randomBytes</code>/<code>sha256</code> already rely
+  on) &mdash; so compressed binary output flows through <code>string</code>
+  directly rather than a dedicated byte-buffer type, which doesn't exist
+  yet.</p>
+
+  <div class="api-list">
+    <a href="#zlib-gzipSync">gzipSync</a>
+    <a href="#zlib-gunzipSync">gunzipSync</a>
+    <a href="#zlib-deflateSync">deflateSync</a>
+    <a href="#zlib-inflateSync">inflateSync</a>
+  </div>
+
+  <div class="api" id="zlib-gzipSync">
+    <h5><code>zlib.gzipSync(data)</code></h5>
+    <p class="sub">string → string &mdash; compresses <code>data</code>'s
+    bytes into a real gzip container (RFC 1952: 10-byte header, deflate
+    body, CRC32 + size footer). The result is genuine gzip framing, not a
+    private format &mdash; verified by writing it to a <code>.gz</code> file
+    and decoding it with the system <code>gunzip</code>.</p>
+<pre><code class="lumen">const input = "hello hello hello hello hello";
+const gz = zlib.gzipSync(input);
+console.log(gz.length < input.length); // true</code></pre>
+  </div>
+
+  <div class="api" id="zlib-gunzipSync">
+    <h5><code>zlib.gunzipSync(data)</code></h5>
+    <p class="sub">string → string &mdash; inverse of <code>gzipSync</code>.
+    <strong>Deviation from Node</strong>: on any decode error (bad header,
+    truncated stream, checksum mismatch, or plain non-gzip garbage) returns
+    <code>""</code> rather than throwing &mdash; the same fallback-don't-crash
+    shape every other fallible builtin here uses. A real gzip stream never
+    decodes to <code>""</code> in-band, so this is unambiguous as an error
+    sentinel.</p>
+<pre><code class="lumen">const input = "round trip me";
+const back = zlib.gunzipSync(zlib.gzipSync(input));
+console.log(back == input); // true
+console.log(zlib.gunzipSync("not gzip data") == ""); // true</code></pre>
+  </div>
+
+  <div class="api" id="zlib-deflateSync">
+    <h5><code>zlib.deflateSync(data)</code></h5>
+    <p class="sub">string → string &mdash; raw deflate body only (RFC 1951),
+    no gzip/zlib header or footer. 18 bytes smaller than
+    <code>gzipSync</code>'s output on the same input (the gzip container's
+    10-byte header + 8-byte footer).</p>
+<pre><code class="lumen">const input = "hello hello hello hello hello";
+console.log(zlib.deflateSync(input).length < zlib.gzipSync(input).length); // true</code></pre>
+  </div>
+
+  <div class="api" id="zlib-inflateSync">
+    <h5><code>zlib.inflateSync(data)</code></h5>
+    <p class="sub">string → string &mdash; inverse of
+    <code>deflateSync</code>; same <code>""</code>-on-error fallback as
+    <code>gunzipSync</code>.</p>
+<pre><code class="lumen">const input = "round trip me";
+console.log(zlib.inflateSync(zlib.deflateSync(input)) == input); // true</code></pre>
+  </div>
+
   <h3 id="planned">Planned</h3>
   <p class="sub">The surface grows in explicit, conformance-backed slices. These
   modules use the same conventional names; some depend on upcoming language
@@ -1697,6 +1771,16 @@ console.log(broken.name); // "" -- zeroed fallback, not a crash</code></pre>
     <tr><td>Streaming request/response bodies</td><td>needs a <em>network</em>-backed <code>ReadableStream</code>/<code>WritableStream</code> (spec 046 shipped file-backed streams only, a deliberately separate backing type -- see spec 046's "why file-backed only")</td></tr>
     <tr><td>HTTPS/TLS-specific configuration</td><td><code>std.http.Client</code> already handles basic TLS internally for <code>https://</code> URLs; exposing it as configurable is a real, separate feature, disproportionately large for a single pass</td></tr>
     <tr><td>WebSocket upgrade</td><td>a full protocol implementation (handshake, frame parsing/masking, ping/pong) -- a separate feature on the scale of <code>http</code> itself, not an extension of it</td></tr>
+  </table>
+
+  <h4>zlib</h4>
+  <table>
+    <tr><th>API</th><th>Notes</th></tr>
+    <tr><td><code>zlib.gzip</code>/<code>unzip</code> (async, callback or Promise-based)</td><td>every other module's <code>*Sync</code> functions have shipped first before their async twins get a dedicated pass (see <code>fs.readFileSync</code> predating <code>fs.readFile</code>'s thread-pool design); compression is comparatively rare on a hot path, sync-first is the right order here too</td></tr>
+    <tr><td><code>zlib.createGzip()</code>/<code>createDeflate()</code> streaming transform</td><td>needs a stateful stream/duplex object the language doesn't have yet; one-shot whole-buffer compression covers the common case</td></tr>
+    <tr><td>Brotli (<code>zlib.brotliCompressSync</code>/etc.)</td><td>not in <code>std.compress</code> at all in this Zig version (only <code>flate</code>, <code>zstd</code>, <code>lzma</code>/<code>lzma2</code>, <code>xz</code> exist) &mdash; would need vendoring a C library or a from-scratch implementation</td></tr>
+    <tr><td>zstd/xz/lzma wrappers</td><td><code>std.compress</code> ships these too, but Node's own <code>zlib</code> module only covers gzip/deflate/brotli &mdash; out of scope for a module matching that name/surface</td></tr>
+    <tr><td>A compression-level parameter</td><td>the stdlib's wrappers so far are plain positional-arg functions (see <code>crypto.randomBytes(n)</code>), not an options-object style; can be added as an optional second argument later</td></tr>
   </table>
 
   <h3 id="community">Community packages</h3>
