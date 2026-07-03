@@ -58,6 +58,7 @@ pub const Parser = struct {
     pub const parsePostfix = parser_expr.parsePostfix;
     pub const parsePostfixFrom = parser_expr.parsePostfixFrom;
     pub const looksLikeArrow = parser_expr.looksLikeArrow;
+    pub const isCompoundAssignOp = parser_expr.isCompoundAssignOp;
     pub const parseArrow = parser_expr.parseArrow;
     pub const parseDeferHelperBodyStmt = parser_expr.parseDeferHelperBodyStmt;
     pub const parsePrimary = parser_expr.parsePrimary;
@@ -238,7 +239,7 @@ pub const Parser = struct {
             var op: []const u8 = "=";
             if (self.isOp('=')) {
                 try self.advance();
-            } else if (self.cur == .op2 and (eq(u8, self.cur.op2, "+=") or eq(u8, self.cur.op2, "-=") or eq(u8, self.cur.op2, "*=") or eq(u8, self.cur.op2, "/=") or eq(u8, self.cur.op2, "%="))) {
+            } else if (self.isCompoundAssignOp()) {
                 op = self.cur.op2;
                 try self.advance();
             } else return error.ParseError;
@@ -673,7 +674,7 @@ pub const Parser = struct {
                 if (self.isOp('=')) {
                     is_assign = true;
                     try self.advance();
-                } else if (self.cur == .op2 and (eq(u8, self.cur.op2, "+=") or eq(u8, self.cur.op2, "-=") or eq(u8, self.cur.op2, "*=") or eq(u8, self.cur.op2, "/=") or eq(u8, self.cur.op2, "%="))) {
+                } else if (self.isCompoundAssignOp()) {
                     is_assign = true;
                     op = self.cur.op2;
                     try self.advance();

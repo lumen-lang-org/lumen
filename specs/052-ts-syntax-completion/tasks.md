@@ -36,7 +36,7 @@ caught by an enclosing `try` (cross-function throw) — both predate spec 052.
   round-trips; a dynamic computed key `{ [k]: v }` (runtime `k`) is a clean
   parse error; shorthand of an unknown name still fails type-check.
 
-- [ ] **T3 — Compound assignment: logical `??= &&= ||=` AND
+- [x] **T3 — Compound assignment: logical `??= &&= ||=` AND
   bitwise/shift/exp `&= |= ^= <<= >>= **=` (Cluster A, M).** IMPLEMENT AS ONE
   SLICE — F3 and F4 edit the same lexer branches, the same 3 parser
   whitelists, and the same 2 emit-assign branches. Files: `src/lumen_lexer.zig`

@@ -25,7 +25,7 @@ pub const Tok = union(enum) {
     template: []const u8, // template literal raw content (between backticks)
     regex: Regex, // regular-expression literal `/pattern/flags`
     op: u8, // + - * / % ! ? ( ) { } ; , . : =
-    op2: []const u8, // ++ -- += -= *= /= %=
+    op2: []const u8, // ++ -- += -= *= /= %= **= &&= ||= ??= &= |= ^= <<= >>= ** << >> ?? ?. =>
     op3: []const u8, // ... (spread/rest)
     cmp: []const u8, // < > <= >= == != && ||
     ident: []const u8,
@@ -167,9 +167,20 @@ pub const Lexer = struct {
 
         if (c == '|') {
             if (self.i + 1 < self.src.len and self.src[self.i + 1] == c) {
+                // `||=` logical-assignment (spec 052) -- longest match first.
+                if (self.i + 2 < self.src.len and self.src[self.i + 2] == '=') {
+                    const s = self.src[self.i .. self.i + 3];
+                    self.i += 3;
+                    return .{ .op2 = s };
+                }
                 const s = self.src[self.i .. self.i + 2];
                 self.i += 2;
                 return .{ .cmp = s };
+            }
+            if (self.i + 1 < self.src.len and self.src[self.i + 1] == '=') {
+                const s = self.src[self.i .. self.i + 2]; // `|=` bitwise-or assign
+                self.i += 2;
+                return .{ .op2 = s };
             }
             const s = self.src[self.i .. self.i + 1];
             self.i += 1;
@@ -177,9 +188,20 @@ pub const Lexer = struct {
         }
         if (c == '&') {
             if (self.i + 1 < self.src.len and self.src[self.i + 1] == '&') {
+                // `&&=` logical-assignment (spec 052) -- longest match first.
+                if (self.i + 2 < self.src.len and self.src[self.i + 2] == '=') {
+                    const s = self.src[self.i .. self.i + 3];
+                    self.i += 3;
+                    return .{ .op2 = s };
+                }
                 const s = self.src[self.i .. self.i + 2];
                 self.i += 2;
                 return .{ .cmp = s };
+            }
+            if (self.i + 1 < self.src.len and self.src[self.i + 1] == '=') {
+                const s = self.src[self.i .. self.i + 2]; // `&=` bitwise-and assign
+                self.i += 2;
+                return .{ .op2 = s };
             }
             self.i += 1;
             return .{ .op = '&' }; // bitwise and
@@ -194,19 +216,43 @@ pub const Lexer = struct {
             self.i += 2;
             return .{ .op2 = s };
         }
-        // `**` exponent and `<<`/`>>` shifts are two-char operator tokens.
+        // `**` exponent and `<<`/`>>` shifts are two-char operator tokens;
+        // `**=`/`<<=`/`>>=` (spec 052) are their three-char assignment forms.
         if (c == '*' and self.i + 1 < self.src.len and self.src[self.i + 1] == '*') {
+            if (self.i + 2 < self.src.len and self.src[self.i + 2] == '=') {
+                const s = self.src[self.i .. self.i + 3];
+                self.i += 3;
+                return .{ .op2 = s };
+            }
             const s = self.src[self.i .. self.i + 2];
             self.i += 2;
             return .{ .op2 = s };
         }
         if ((c == '<' or c == '>') and self.i + 1 < self.src.len and self.src[self.i + 1] == c) {
+            if (self.i + 2 < self.src.len and self.src[self.i + 2] == '=') {
+                const s = self.src[self.i .. self.i + 3];
+                self.i += 3;
+                return .{ .op2 = s };
+            }
             const s = self.src[self.i .. self.i + 2];
             self.i += 2;
             return .{ .op2 = s };
         }
-        // `??` nullish coalescing and `?.` optional chaining.
+        // `^=` bitwise-xor assignment (spec 052); plain `^` falls to the
+        // single-char catch-all below.
+        if (c == '^' and self.i + 1 < self.src.len and self.src[self.i + 1] == '=') {
+            const s = self.src[self.i .. self.i + 2];
+            self.i += 2;
+            return .{ .op2 = s };
+        }
+        // `??` nullish coalescing, `??=` nullish-assignment (spec 052), and
+        // `?.` optional chaining.
         if (c == '?' and self.i + 1 < self.src.len and (self.src[self.i + 1] == '?' or self.src[self.i + 1] == '.')) {
+            if (self.src[self.i + 1] == '?' and self.i + 2 < self.src.len and self.src[self.i + 2] == '=') {
+                const s = self.src[self.i .. self.i + 3];
+                self.i += 3;
+                return .{ .op2 = s };
+            }
             const s = self.src[self.i .. self.i + 2];
             self.i += 2;
             return .{ .op2 = s };

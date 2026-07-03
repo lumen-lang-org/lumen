@@ -213,6 +213,10 @@ pub const Assign = struct {
     // through the pointer as `name.* = ...`.
     deref: bool = false,
     is_accumulator: bool = false, // `v = v + ...` append into a string-builder local
+    // The LHS (target) type, recorded by the checker for compound assignments
+    // whose lowering needs it -- `<<=`/`>>=` (shl/shr) and `**=` (powi/pow)
+    // pick their helper by operand type (spec 052).
+    checked_type: ?types.Type = null,
 };
 
 pub const ConsoleLog = struct {

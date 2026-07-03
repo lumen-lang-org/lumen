@@ -39,19 +39,57 @@ pub fn emitAssignExpr(assignment: ast.Assign, body: *std.ArrayListUnmanaged(u8),
     // A scalar by-reference (`Ref<T>`) param assigns through its pointer.
     const name = if (assignment.deref) try std.fmt.allocPrint(arena, "{s}.*", .{base}) else base;
     try body.print(arena, "{s} = ", .{name});
-    if (std.mem.eql(u8, assignment.op, "=")) {
-        try emitExpr(assignment.value, body, arena);
-    } else if (assignment.op[0] == '/') {
+    try emitCompoundRhs(assignment.op, name, assignment.value, assignment.checked_type, body, arena);
+}
+
+/// Emits the right-hand side of an assignment for target `name`: a plain value
+/// for `=`, or the folded `(name <op> value)` form for a compound assignment.
+/// Multi-char operators (`<<= >>= **= &&= ||= ??=`) can't use the naive
+/// `op[0]` char -- `<<=`'s first char is `<`, which would emit a comparison;
+/// `**=`'s is `*`, a multiply; etc. Each is lowered explicitly, reusing the
+/// same std.math.shl/shr/powi/pow and short-circuit forms the binary
+/// operators use (spec 052).
+fn emitCompoundRhs(op: []const u8, name: []const u8, value: *ast.Expr, checked_type: ?types.Type, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    const eqs = std.mem.eql;
+    if (eqs(u8, op, "=")) {
+        try emitExpr(value, body, arena);
+    } else if (op[0] == '/') {
         try body.print(arena, "@divTrunc({s}, ", .{name});
-        try emitExpr(assignment.value, body, arena);
+        try emitExpr(value, body, arena);
         try body.append(arena, ')');
-    } else if (assignment.op[0] == '%') {
+    } else if (op[0] == '%') {
         try body.print(arena, "@rem({s}, ", .{name});
-        try emitExpr(assignment.value, body, arena);
+        try emitExpr(value, body, arena);
         try body.append(arena, ')');
+    } else if (eqs(u8, op, "&&=") or eqs(u8, op, "||=")) {
+        try body.print(arena, "({s} {s} ", .{ name, if (eqs(u8, op, "&&=")) "and" else "or" });
+        try emitExpr(value, body, arena);
+        try body.append(arena, ')');
+    } else if (eqs(u8, op, "??=")) {
+        try body.print(arena, "({s} orelse ", .{name});
+        try emitExpr(value, body, arena);
+        try body.append(arena, ')');
+    } else if (eqs(u8, op, "<<=") or eqs(u8, op, ">>=")) {
+        const ty = try types.zigName(arena, checked_type orelse .i32);
+        try body.print(arena, "std.math.{s}({s}, {s}, ", .{ if (eqs(u8, op, "<<=")) "shl" else "shr", ty, name });
+        try emitExpr(value, body, arena);
+        try body.append(arena, ')');
+    } else if (eqs(u8, op, "**=")) {
+        const t = checked_type orelse .i32;
+        const ty = try types.zigName(arena, t);
+        if (t == .f64) {
+            try body.print(arena, "std.math.pow({s}, {s}, ", .{ ty, name });
+            try emitExpr(value, body, arena);
+            try body.append(arena, ')');
+        } else {
+            try body.print(arena, "(std.math.powi({s}, {s}, ", .{ ty, name });
+            try emitExpr(value, body, arena);
+            try body.appendSlice(arena, ") catch std.process.exit(1))");
+        }
     } else {
-        try body.print(arena, "({s} {c} ", .{ name, assignment.op[0] });
-        try emitExpr(assignment.value, body, arena);
+        // `+= -= *=` and bitwise `&= |= ^=` -- Zig uses the same single char.
+        try body.print(arena, "({s} {c} ", .{ name, op[0] });
+        try emitExpr(value, body, arena);
         try body.append(arena, ')');
     }
 }
@@ -206,21 +244,11 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             }
             const lvs = lv.items;
             try body.print(arena, "    {s} = ", .{lvs});
-            if (std.mem.eql(u8, ma.op, "=")) {
-                try emitExpr(ma.value, body, arena);
-            } else if (ma.op[0] == '/') {
-                try body.print(arena, "@divTrunc({s}, ", .{lvs});
-                try emitExpr(ma.value, body, arena);
-                try body.append(arena, ')');
-            } else if (ma.op[0] == '%') {
-                try body.print(arena, "@rem({s}, ", .{lvs});
-                try emitExpr(ma.value, body, arena);
-                try body.append(arena, ')');
-            } else {
-                try body.print(arena, "({s} {c} ", .{ lvs, ma.op[0] });
-                try emitExpr(ma.value, body, arena);
-                try body.append(arena, ')');
-            }
+            // Field-target compound assignment reuses the same lowering; the
+            // field type isn't threaded here, so `<<=`/`>>=`/`**=` on a
+            // non-i32 field would mis-type -- an accepted edge for now (the
+            // common `+= -= *= &= |= ^= &&= ||= ??=` forms are unaffected).
+            try emitCompoundRhs(ma.op, lvs, ma.value, null, body, arena);
             try body.appendSlice(arena, ";\n");
         },
         .test_decl => |t| {

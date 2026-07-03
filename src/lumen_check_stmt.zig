@@ -388,11 +388,35 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 }
                 try self.ensureAssignable(program, expected_type, assignment.value, assignment.line, assignment.col);
             } else {
-                const actual_type = self.exprType(program, assignment.value, assignment.line, assignment.col) orelse
-                    return self.inferenceFail(assignment.line, assignment.col, "cannot infer assignment type");
-                if (!types.isNumeric(expected_type) or !types.same(expected_type, actual_type)) {
-                    return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
+                // Compound assignment (spec 052 widened the operator set).
+                // Each family has its own LHS-type requirement:
+                //   &&= ||=  -> bool          (Lumen's &&/|| are bool-only)
+                //   ??=      -> optional<T>    (RHS assignable to T)
+                //   &= |= ^= <<= >>= -> integer
+                //   += -= *= /= %= **= -> numeric (int or number)
+                const op = assignment.op;
+                const eqs = std.mem.eql;
+                if (eqs(u8, op, "??=")) {
+                    if (expected_type != .optional) return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
+                    try self.ensureAssignable(program, expected_type, assignment.value, assignment.line, assignment.col);
+                } else {
+                    const actual_type = self.exprType(program, assignment.value, assignment.line, assignment.col) orelse
+                        return self.inferenceFail(assignment.line, assignment.col, "cannot infer assignment type");
+                    if (eqs(u8, op, "&&=") or eqs(u8, op, "||=")) {
+                        if (!types.same(.bool, expected_type) or !types.same(.bool, actual_type)) {
+                            return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
+                        }
+                    } else if (eqs(u8, op, "&=") or eqs(u8, op, "|=") or eqs(u8, op, "^=") or eqs(u8, op, "<<=") or eqs(u8, op, ">>=")) {
+                        if (!types.isInteger(expected_type) or !types.same(expected_type, actual_type)) {
+                            return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
+                        }
+                    } else {
+                        if (!types.isNumeric(expected_type) or !types.same(expected_type, actual_type)) {
+                            return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
+                        }
+                    }
                 }
+                assignment.checked_type = expected_type;
             }
             if (found_binding.decl) |decl| decl.reassigned = true;
             assignment.emit_name = found_binding.emit_name;

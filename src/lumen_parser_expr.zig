@@ -682,6 +682,20 @@ pub fn parsePrimary(self: *Parser) CompileError!*Expr {
     return error.ParseError;
 }
 
+/// True when the current token is a compound-assignment operator: the
+/// original arithmetic set (`+= -= *= /= %=`) plus the spec-052 additions
+/// (logical `&&= ||= ??=`, bitwise `&= |= ^=`, shift `<<= >>=`, exponent
+/// `**=`). The op string flows verbatim to `Assign.op`; the checker and
+/// emitter interpret it.
+pub fn isCompoundAssignOp(self: *Parser) bool {
+    if (self.cur != .op2) return false;
+    const s = self.cur.op2;
+    const eq = std.mem.eql;
+    return eq(u8, s, "+=") or eq(u8, s, "-=") or eq(u8, s, "*=") or eq(u8, s, "/=") or eq(u8, s, "%=") or
+        eq(u8, s, "**=") or eq(u8, s, "&&=") or eq(u8, s, "||=") or eq(u8, s, "??=") or
+        eq(u8, s, "&=") or eq(u8, s, "|=") or eq(u8, s, "^=") or eq(u8, s, "<<=") or eq(u8, s, ">>=");
+}
+
 pub fn parseAssignmentTail(self: *Parser, name: []const u8, line: u32, col: u32, needs_semicolon: bool) CompileError!ast.Assign {
     if (self.isOp('=')) {
         try self.advance();
@@ -689,7 +703,7 @@ pub fn parseAssignmentTail(self: *Parser, name: []const u8, line: u32, col: u32,
         if (needs_semicolon) try self.expectOp(';');
         return .{ .name = name, .op = "=", .value = value, .line = line, .col = col };
     }
-    if (self.isOp2("+=") or self.isOp2("-=") or self.isOp2("*=") or self.isOp2("/=") or self.isOp2("%=")) {
+    if (self.isCompoundAssignOp()) {
         const op = self.cur.op2;
         try self.advance();
         const value = try self.parseExpr();
