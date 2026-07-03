@@ -230,6 +230,7 @@ pub const ConsoleLog = struct {
 pub const WhileStmt = struct {
     cond: *Expr,
     body: []Stmt,
+    label: ?[]const u8 = null, // `name: while (...)` labeled loop (spec 052)
     line: u32,
     col: u32,
 };
@@ -237,6 +238,7 @@ pub const WhileStmt = struct {
 pub const DoWhileStmt = struct {
     body: []Stmt,
     cond: *Expr,
+    label: ?[]const u8 = null,
     line: u32,
     col: u32,
 };
@@ -246,6 +248,7 @@ pub const ForStmt = struct {
     cond: *Expr,
     update: Assign,
     body: []Stmt,
+    label: ?[]const u8 = null,
     line: u32,
     col: u32,
 };
@@ -258,6 +261,7 @@ pub const ForOfStmt = struct {
     iter_type: ?types.Type = null,
     elem_type: ?types.Type = null,
     body: []Stmt,
+    label: ?[]const u8 = null,
     line: u32,
     col: u32,
 };
@@ -274,6 +278,7 @@ pub const ForInStmt = struct {
     iterable: *Expr,
     key_names: ?[]const []const u8 = null, // record field names, or null for an array
     body: []Stmt,
+    label: ?[]const u8 = null,
     line: u32,
     col: u32,
 };
@@ -334,6 +339,9 @@ pub const TryStmt = struct {
 };
 
 pub const ControlStmt = struct {
+    // `break name;` / `continue name;` target a labeled enclosing loop
+    // (spec 052); null for the plain forms.
+    label: ?[]const u8 = null,
     line: u32,
     col: u32,
 };

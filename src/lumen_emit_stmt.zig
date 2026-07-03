@@ -117,6 +117,49 @@ pub fn bodyHasSwitchBreak(body: []const Stmt) bool {
     return false;
 }
 
+/// Whether `stmts` contain a `break`/`continue` targeting the label `name`
+/// (recursively, through nested control flow). Zig rejects an unused block
+/// label, so a labeled loop only emits its label when the body actually
+/// references it (spec 052).
+fn bodyReferencesLabel(stmts: []const Stmt, name: []const u8) bool {
+    for (stmts) |*s| {
+        switch (s.*) {
+            .break_stmt, .continue_stmt => |c| if (c.label) |l| {
+                if (std.mem.eql(u8, l, name)) return true;
+            },
+            .if_stmt => |b| {
+                if (bodyReferencesLabel(b.then_body, name)) return true;
+                if (b.else_body) |eb| if (bodyReferencesLabel(eb, name)) return true;
+            },
+            .while_stmt => |w| if (bodyReferencesLabel(w.body, name)) return true,
+            .do_while_stmt => |w| if (bodyReferencesLabel(w.body, name)) return true,
+            .for_stmt => |f| if (bodyReferencesLabel(f.body, name)) return true,
+            .for_of_stmt => |f| if (bodyReferencesLabel(f.body, name)) return true,
+            .for_in_stmt => |f| if (bodyReferencesLabel(f.body, name)) return true,
+            .try_stmt => |t| {
+                if (bodyReferencesLabel(t.try_body, name)) return true;
+                if (bodyReferencesLabel(t.catch_body, name)) return true;
+                if (t.finally_body) |fb| if (bodyReferencesLabel(fb, name)) return true;
+            },
+            .switch_stmt => |sw| {
+                for (sw.cases) |cse| if (bodyReferencesLabel(cse.body, name)) return true;
+                if (sw.default_body) |db| if (bodyReferencesLabel(db, name)) return true;
+            },
+            .defer_stmt => |d| if (bodyReferencesLabel(d.body, name)) return true,
+            else => {},
+        }
+    }
+    return false;
+}
+
+/// The Zig label prefix (`__lumen_lbl_<name>: `) for a labeled loop, or "" when
+/// unlabeled or the label is never targeted (Zig errors on an unused label).
+fn labelPrefix(arena: std.mem.Allocator, label: ?[]const u8, loop_body: []const Stmt) CompileError![]const u8 {
+    const l = label orelse return "";
+    if (!bodyReferencesLabel(loop_body, l)) return "";
+    return std.fmt.allocPrint(arena, "__lumen_lbl_{s}: ", .{l});
+}
+
 pub fn emitSwitchCaseMatch(switch_type: types.Type, switch_value: *const Expr, case_value: *const Expr, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
     if (types.isStringLike(switch_type)) {
         try body.appendSlice(arena, "std.mem.eql(u8, ");
@@ -416,14 +459,14 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             }
         },
         .while_stmt => |loop| {
-            try body.appendSlice(arena, "    while (");
+            try body.print(arena, "    {s}while (", .{try labelPrefix(arena, loop.label, loop.body)});
             try emitExpr(loop.cond, body, arena);
             try body.appendSlice(arena, ") {\n");
             for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
         },
         .do_while_stmt => |loop| {
-            try body.appendSlice(arena, "    while (true) : ({ if (!(");
+            try body.print(arena, "    {s}while (true) : ({{ if (!(", .{try labelPrefix(arena, loop.label, loop.body)});
             try emitExpr(loop.cond, body, arena);
             try body.appendSlice(arena, ")) break; }) {\n");
             for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
@@ -433,7 +476,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try body.appendSlice(arena, "    {\n");
             var init_stmt: Stmt = .{ .var_decl = loop.init };
             try emitStmtWithThrow(&init_stmt, decls, body, arena, throw_target, switch_break_target, options);
-            try body.appendSlice(arena, "    while (");
+            try body.print(arena, "    {s}while (", .{try labelPrefix(arena, loop.label, loop.body)});
             try emitExpr(loop.cond, body, arena);
             try body.appendSlice(arena, ") : (");
             try emitAssignExpr(loop.update, body, arena);
@@ -454,7 +497,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try emitExpr(loop.iterable, body, arena);
             try body.appendSlice(arena, ";\n");
             try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
-            try body.print(arena, "    while ({s} < {s}.len) : ({s} += 1) {{\n", .{ idx, seq, idx });
+            try body.print(arena, "    {s}while ({s} < {s}.len) : ({s} += 1) {{\n", .{ try labelPrefix(arena, loop.label, loop.body), idx, seq, idx });
             // String iteration yields single-character substrings ([]const u8);
             // array iteration yields the element directly.
             if (types.isStringLike(iter_ty)) {
@@ -482,7 +525,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                     try emit_mod.emitStrLit(body, arena, n);
                 }
                 try body.appendSlice(arena, "};\n");
-                try body.print(arena, "    for (__forin_keys) |__forin_k| {{\n    const {s}: []const u8 = __forin_k;\n", .{binding});
+                try body.print(arena, "    {s}for (__forin_keys) |__forin_k| {{\n    const {s}: []const u8 = __forin_k;\n", .{ try labelPrefix(arena, loop.label, loop.body), binding });
                 for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n");
             } else {
@@ -493,7 +536,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try emitExpr(loop.iterable, body, arena);
                 try body.appendSlice(arena, ";\n");
                 try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
-                try body.print(arena, "    while ({s} < {s}.len) : ({s} += 1) {{\n", .{ idx, seq, idx });
+                try body.print(arena, "    {s}while ({s} < {s}.len) : ({s} += 1) {{\n", .{ try labelPrefix(arena, loop.label, loop.body), idx, seq, idx });
                 try body.print(arena, "    const {s}: []const u8 = std.fmt.allocPrint(__alloc, \"{{d}}\", .{{{s}}}) catch unreachable;\n", .{ binding, idx });
                 for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n");
@@ -646,15 +689,21 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             for (d.body) |*defer_stmt| try emitStmtWithThrow(defer_stmt, decls, body, arena, throw_target, switch_break_target, options);
             try body.appendSlice(arena, "    }\n");
         },
-        .break_stmt => {
-            if (switch_break_target) |target| {
+        .break_stmt => |control| {
+            if (control.label) |l| {
+                try body.print(arena, "    break :__lumen_lbl_{s};\n", .{l});
+            } else if (switch_break_target) |target| {
                 try body.print(arena, "    break :{s};\n", .{target});
             } else {
                 try body.appendSlice(arena, "    break;\n");
             }
         },
-        .continue_stmt => {
-            try body.appendSlice(arena, "    continue;\n");
+        .continue_stmt => |control| {
+            if (control.label) |l| {
+                try body.print(arena, "    continue :__lumen_lbl_{s};\n", .{l});
+            } else {
+                try body.appendSlice(arena, "    continue;\n");
+            }
         },
         .expr_stmt => |expr_stmt| {
             const is_serve = expr_stmt.value.* == .call and std.mem.eql(u8, expr_stmt.value.call.name, "serve");

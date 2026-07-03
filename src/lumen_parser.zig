@@ -128,6 +128,21 @@ pub const Parser = struct {
         self.cur_col = save_col;
         return result;
     }
+    /// True when the token after `cur` is `:`. Restores parser state afterwards.
+    /// Used to recognize a labeled statement `name:` at statement start.
+    fn peekIsColon(self: *Parser) bool {
+        const save_lex = self.lex;
+        const save_cur = self.cur;
+        const save_line = self.cur_line;
+        const save_col = self.cur_col;
+        self.advance() catch {};
+        const result = self.isOp(':');
+        self.lex = save_lex;
+        self.cur = save_cur;
+        self.cur_line = save_line;
+        self.cur_col = save_col;
+        return result;
+    }
     pub fn node(self: *Parser, e: Expr) CompileError!*Expr {
         const p = try self.arena.create(Expr);
         p.* = e;
@@ -191,6 +206,25 @@ pub const Parser = struct {
         }
         if (self.cur != .ident) return error.ParseError;
         const kw = self.cur.ident;
+
+        // Labeled statement `name: <loop>` (spec 052). A bare `ident :` at
+        // statement start is unambiguously a label (no other statement form
+        // begins that way); it must be followed by a loop, else a parse error.
+        if (self.peekIsColon()) {
+            const label_name = kw;
+            try self.advance(); // ident
+            try self.advance(); // ':'
+            var loop = try self.parseStmt();
+            switch (loop) {
+                .while_stmt => |*w| w.label = label_name,
+                .do_while_stmt => |*d| d.label = label_name,
+                .for_stmt => |*f| f.label = label_name,
+                .for_of_stmt => |*f| f.label = label_name,
+                .for_in_stmt => |*f| f.label = label_name,
+                else => return error.ParseError, // a label must front a loop
+            }
+            return loop;
+        }
 
         // `await <expr>;` as a statement (the resolved value is discarded).
         if (eq(u8, kw, "await")) {
@@ -499,14 +533,24 @@ pub const Parser = struct {
 
         if (eq(u8, kw, "break")) {
             try self.advance();
+            const lbl = if (self.cur == .ident) blk: {
+                const n = self.cur.ident;
+                try self.advance();
+                break :blk n;
+            } else null;
             try self.expectOp(';');
-            return .{ .break_stmt = .{ .line = line, .col = col } };
+            return .{ .break_stmt = .{ .label = lbl, .line = line, .col = col } };
         }
 
         if (eq(u8, kw, "continue")) {
             try self.advance();
+            const lbl = if (self.cur == .ident) blk: {
+                const n = self.cur.ident;
+                try self.advance();
+                break :blk n;
+            } else null;
             try self.expectOp(';');
-            return .{ .continue_stmt = .{ .line = line, .col = col } };
+            return .{ .continue_stmt = .{ .label = lbl, .line = line, .col = col } };
         }
 
         if (eq(u8, kw, "throw")) {
