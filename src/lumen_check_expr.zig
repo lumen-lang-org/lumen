@@ -528,6 +528,16 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return .{ .class_type = ne.class_name };
         },
         .method_call => |*mc| {
+            // Optional method call `a?.b()` (spec 052) is deferred: unlike
+            // optional field/index, the method-call resolver recomputes the
+            // receiver type internally across many dispatch/return paths, so
+            // unwrapping the optional receiver and re-wrapping every result
+            // would need a disproportionate refactor. Rejected cleanly for
+            // now (optional field `a?.b` and optional index `a?.[i]` work).
+            if (mc.optional_chain) {
+                _ = self.fail(line, col, "E_UNSUPPORTED_OPTIONAL_CALL") catch {};
+                return null;
+            }
             // `ClassName.staticMethod(args)` — static method call.
             if (mc.obj.* == .var_ref and self.bindingPtr(mc.obj.var_ref.name) == null and self.classes.get(mc.obj.var_ref.name) != null) {
                 const cname = mc.obj.var_ref.name;
@@ -641,30 +651,49 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return rm.method.checked_return_type orelse return null;
         },
         .index => |*index| {
-            const obj_type = self.exprType(program, index.obj, line, col) orelse return null;
-            // Tuple indexed access: requires an integer-literal index in range.
-            if (obj_type == .tuple_type) {
-                const elems = obj_type.tuple_type;
-                if (index.value.* != .num or index.value.num < 0 or index.value.num >= @as(i64, @intCast(elems.len))) {
+            var obj_type = self.exprType(program, index.obj, line, col) orelse return null;
+            // Optional index `a?.[i]` (spec 052): the object must be
+            // optional; unwrap it and wrap the element type back into an
+            // optional (so a null object yields null, not an error).
+            if (index.optional_chain) {
+                if (obj_type != .optional) {
                     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 }
-                const pos: usize = @intCast(index.value.num);
-                index.tuple_index = pos;
-                index.checked_element_type = elems[pos];
-                return elems[pos];
+                obj_type = obj_type.optional.*;
             }
-            const index_type = self.exprType(program, index.value, line, col) orelse return null;
-            if (!types.same(.i32, index_type) and !types.same(.i64, index_type)) {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                return null;
-            }
-            const elem_type = types.arrayElem(obj_type) orelse {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                return null;
+            const elem_result: types.Type = blk: {
+                // Tuple indexed access: requires an integer-literal index in range.
+                if (obj_type == .tuple_type) {
+                    const elems = obj_type.tuple_type;
+                    if (index.value.* != .num or index.value.num < 0 or index.value.num >= @as(i64, @intCast(elems.len))) {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
+                    const pos: usize = @intCast(index.value.num);
+                    index.tuple_index = pos;
+                    index.checked_element_type = elems[pos];
+                    break :blk elems[pos];
+                }
+                const index_type = self.exprType(program, index.value, line, col) orelse return null;
+                if (!types.same(.i32, index_type) and !types.same(.i64, index_type)) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                const elem_type = types.arrayElem(obj_type) orelse {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                };
+                index.checked_element_type = elem_type;
+                break :blk elem_type;
             };
-            index.checked_element_type = elem_type;
-            return elem_type;
+            if (index.optional_chain) {
+                index.chain_result_type = elem_result;
+                const p = self.arena.create(types.Type) catch return null;
+                p.* = elem_result;
+                return .{ .optional = p };
+            }
+            return elem_result;
         },
         .obj => null,
         .call => |*call| {

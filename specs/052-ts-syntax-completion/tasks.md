@@ -93,17 +93,20 @@ caught by an enclosing `try` (cross-function throw) — both predate spec 052.
   type (a later access to a field not in `Record` still checks); a value NOT
   assignable to the target is rejected; `x as A satisfies B` chains.
 
-- [ ] **T7 — Optional chaining on calls + index `a?.b()`, `a?.[i]` (Cluster C,
-  M).** Files: `src/lumen_ast.zig` (`optional_chain` + cached type on
-  `method_call` and `index`), `src/lumen_parser_expr.zig` (dispatch the `?.`
-  branch on `[`/ident+`(`/ident), `src/lumen_check_expr.zig` (require optional
-  object, unwrap, wrap result as `?T`; reject `?void`), `src/lumen_emit.zig`
-  (`(if (obj) |__oc| @as(?T, ...) else null)`), `src/lumen_check_generics.zig`
-  (propagate the flag). SCOPE CUT: `a?.()` deferred (see spec). Verify: a `.ts`
-  where `a?.b()` and `a?.[i]` on a non-null value return the wrapped `?T` and
-  on a null value yield null; `JSON?.parse(...)` stays a normal call; a
-  void-returning `a?.m()` is rejected. Document the local-short-circuit
-  divergence in the example.
+- [~] **T7 — Optional chaining: index `a?.[i]` DONE, method call `a?.b()`
+  DEFERRED (Cluster C, M).** Optional index `a?.[i]` and optional field
+  `a?.b` (the latter pre-existing) both ship: the object must be optional,
+  it's unwrapped, and the element/field type is wrapped back into `?T` (a
+  null object yields null). Emit re-emits the inner access against the `|__oc|`
+  capture, so the receiver-substitution stays inside the existing lowering.
+  Verified over records (field) and arrays (index), non-null and null.
+  **`a?.b()` (optional method call) is deferred** with a clean
+  `E_UNSUPPORTED_OPTIONAL_CALL` diagnostic: the method-call resolver
+  recomputes the receiver type internally across many dispatch/return paths
+  (and `exprType` overwrites the var_ref unwrap flag), so unwrapping the
+  optional receiver and re-wrapping every result would need a
+  disproportionate checker refactor -- the same class of obstacle that led
+  the plan to defer `a?.()`. Tracked in the Not-planned table.
 
 - [x] **T8 — `#private` fields (Cluster F, S).** DO after T3 (shares the lexer
   file). Files: `src/lumen_lexer.zig` (`#`-prefixed ident token, slice

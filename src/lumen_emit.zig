@@ -1199,6 +1199,23 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             }
         },
         .index => |idx| {
+            if (idx.optional_chain) {
+                // a?.[i] -> (if (a) |__oc| @as(?E, __oc[i]) else null). The
+                // index runs against the unwrapped capture, so re-emit this
+                // node with obj swapped to `__oc` and the flag cleared.
+                const et = try types.zigName(arena, idx.chain_result_type orelse .none);
+                var oc_ref: Expr = .{ .var_ref = .{ .name = "__oc", .emit_name = "__oc" } };
+                var inner = idx;
+                inner.optional_chain = false;
+                inner.obj = &oc_ref;
+                var inner_expr: Expr = .{ .index = inner };
+                try w.appendSlice(arena, "(if (");
+                try emitExpr(idx.obj, w, arena);
+                try w.print(arena, ") |__oc| @as(?{s}, ", .{et});
+                try emitExpr(&inner_expr, w, arena);
+                try w.appendSlice(arena, ") else null)");
+                return;
+            }
             if (idx.tuple_index) |pos| {
                 // Tuple positional access -> struct field `t.@"N"`.
                 try emitExpr(idx.obj, w, arena);

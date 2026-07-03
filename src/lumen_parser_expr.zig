@@ -396,9 +396,30 @@ pub fn parsePostfixFrom(self: *Parser, base: *Expr) CompileError!*Expr {
     while (self.isOp('.') or self.isOp('[') or self.isOp2("?.")) {
         if (self.isOp2("?.")) {
             try self.advance();
+            // Optional index `a?.[i]` (spec 052).
+            if (self.isOp('[')) {
+                try self.advance();
+                const index_value = try self.parseExpr();
+                try self.expectOp(']');
+                e = try self.node(.{ .index = .{ .obj = e, .value = index_value, .optional_chain = true } });
+                continue;
+            }
             if (self.cur != .ident) return error.ParseError;
             const name = self.cur.ident;
             try self.advance();
+            // Optional method call `a?.b(args)` (spec 052). `a?.()` (an
+            // optional call on the value itself) is deferred.
+            if (self.isOp('(')) {
+                try self.expectOp('(');
+                var args: std.ArrayListUnmanaged(*Expr) = .empty;
+                while (!self.isOp(')')) {
+                    try args.append(self.arena, try self.parseSpreadOrExpr());
+                    if (self.isOp(',')) try self.advance() else break;
+                }
+                try self.expectOp(')');
+                e = try self.node(.{ .method_call = .{ .obj = e, .name = name, .args = try args.toOwnedSlice(self.arena), .optional_chain = true } });
+                continue;
+            }
             e = try self.node(.{ .field = .{ .obj = e, .name = name, .optional_chain = true } });
         } else if (self.isOp('.')) {
             try self.advance();

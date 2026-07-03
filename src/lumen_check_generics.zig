@@ -388,7 +388,7 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
         .method_call => |mc| blk: {
             const c = self.arena.alloc(*ast.Expr, mc.args.len) catch return error.OutOfMemory;
             for (mc.args, 0..) |it, i| c[i] = try self.cloneExpr(it);
-            break :blk .{ .method_call = .{ .obj = try self.cloneExpr(mc.obj), .name = mc.name, .args = c } };
+            break :blk .{ .method_call = .{ .obj = try self.cloneExpr(mc.obj), .name = mc.name, .args = c, .optional_chain = mc.optional_chain } };
         },
         .super_call => |sc| blk: {
             const c = self.arena.alloc(*ast.Expr, sc.args.len) catch return error.OutOfMemory;
@@ -406,7 +406,7 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
             break :blk .{ .obj = c };
         },
         .field => |f| .{ .field = .{ .obj = try self.cloneExpr(f.obj), .name = f.name, .optional_chain = f.optional_chain } },
-        .index => |idx| .{ .index = .{ .obj = try self.cloneExpr(idx.obj), .value = try self.cloneExpr(idx.value) } },
+        .index => |idx| .{ .index = .{ .obj = try self.cloneExpr(idx.obj), .value = try self.cloneExpr(idx.value), .optional_chain = idx.optional_chain } },
         .call => |cl| blk: {
             const c = self.arena.alloc(*ast.Expr, cl.args.len) catch return error.OutOfMemory;
             for (cl.args, 0..) |it, i| c[i] = try self.cloneExpr(it);
