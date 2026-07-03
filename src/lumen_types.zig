@@ -46,6 +46,7 @@ pub const Type = union(enum) {
     event_emitter_type: *const Type, // EventEmitter<T>  ->  *LumenEventEmitter_<t> (heap pointer)
     readable_stream_type, // ReadableStream (fs.createReadStream)  ->  *LumenReadableStream (heap pointer)
     writable_stream_type, // WritableStream (fs.createWriteStream)  ->  *LumenWritableStream (heap pointer)
+    socket_type, // Socket (net.connect/net.createServer's handler arg)  ->  *LumenSocket (heap pointer)
     tuple_type: []const Type, // [A, B, ...]  ->  struct { @"0": A, @"1": B, ... }
     promise_type: *const Type, // Promise<T>  ->  *LumenPromise(T) (heap pointer)
 };
@@ -125,6 +126,7 @@ fn mangle(arena: std.mem.Allocator, t: Type) error{OutOfMemory}![]const u8 {
         .event_emitter_type => |elem| try std.fmt.allocPrint(arena, "eventemitter_{s}", .{try mangle(arena, elem.*)}),
         .readable_stream_type => "readablestream",
         .writable_stream_type => "writablestream",
+        .socket_type => "socket",
         .promise_type => |inner| try std.fmt.allocPrint(arena, "prom_{s}", .{try mangle(arena, inner.*)}),
         .tuple_type => |elems| blk2: {
             var buf2: std.ArrayListUnmanaged(u8) = .empty;
@@ -277,6 +279,7 @@ pub fn same(a: Type, b: Type) bool {
         },
         .readable_stream_type => b == .readable_stream_type,
         .writable_stream_type => b == .writable_stream_type,
+        .socket_type => b == .socket_type,
         .promise_type => |a_e| switch (b) {
             .promise_type => |b_e| same(a_e.*, b_e.*),
             else => false,
@@ -345,6 +348,10 @@ pub fn isReadableStream(t: Type) bool {
 
 pub fn isWritableStream(t: Type) bool {
     return t == .writable_stream_type;
+}
+
+pub fn isSocket(t: Type) bool {
+    return t == .socket_type;
 }
 
 pub fn isArray(t: Type) bool {
@@ -422,6 +429,7 @@ pub fn toAnnotation(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?[]con
         },
         .readable_stream_type => "ReadableStream",
         .writable_stream_type => "WritableStream",
+        .socket_type => "Socket",
         .promise_type => |inner| blk: {
             const e = (try toAnnotation(arena, inner.*)) orelse break :blk null;
             break :blk try std.fmt.allocPrint(arena, "Promise<{s}>", .{e});
@@ -449,6 +457,14 @@ pub fn fromAnnotation(name: []const u8) Type {
         const elem = fromAnnotation(base);
         return arrayOf(elem) orelse .{ .named = name };
     }
+    // `Socket` (spec 054): unlike ReadableStream/WritableStream (which
+    // only ever arrive as an *inferred* return type from
+    // fs.createReadStream/createWriteStream, never written by a user as an
+    // explicit annotation anywhere in this codebase today), net.createServer's
+    // handler parameter needs `(sock: Socket) => void` to check as a real
+    // parameter annotation -- so `Socket` needs a real spelling->Type mapping
+    // here, the reverse of `toAnnotation`'s `.socket_type => "Socket"` arm.
+    if (eq(u8, name, "Socket")) return .socket_type;
     if (eq(u8, name, "int") or eq(u8, name, "i32")) return .i32;
     if (eq(u8, name, "i64")) return .i64;
     if (eq(u8, name, "number") or eq(u8, name, "float") or eq(u8, name, "f64")) return .f64;
@@ -514,6 +530,7 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .event_emitter_type => |elem| try std.fmt.allocPrint(arena, "*LumenEventEmitter({s})", .{try zigName(arena, elem.*)}),
         .readable_stream_type => "*LumenReadableStream",
         .writable_stream_type => "*LumenWritableStream",
+        .socket_type => "*LumenSocket",
         .promise_type => |inner| try std.fmt.allocPrint(arena, "*LumenPromise({s})", .{try zigName(arena, inner.*)}),
         .tuple_type => |elems| try tupleStructName(arena, elems),
     };

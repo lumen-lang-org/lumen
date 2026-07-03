@@ -424,6 +424,45 @@ pub fn writableStreamMethod(self: *Checker, program: *ast.Program, mc: anytype, 
     return null;
 }
 
+/// Validate a method call on a `Socket` receiver (spec 054, `net.connect`'s
+/// return type and `net.createServer`'s handler argument type). Mirrors
+/// `writableStreamMethod` almost exactly (a socket is also a byte-chunk
+/// reader/writer), plus `close()`.
+pub fn socketMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    if (eq(u8, name, "read")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .string;
+    }
+    if (eq(u8, name, "write")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const chunk_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.string, chunk_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .void;
+    }
+    if (eq(u8, name, "close")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .void;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
 /// Validate an instance method call on a `string` receiver and return its
 /// statically-known result type. Mirrors `arrayMethod`.
 pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u32, col: u32) ?types.Type {
@@ -492,6 +531,7 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "assert")) return self.assertCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "time")) return self.timeCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "http")) return self.httpCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "net")) return self.netCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "JSON")) return self.jsonCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Promise")) return self.promiseCallType(program, call, line, col);
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
@@ -2097,6 +2137,53 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         program.needs_map = true;
         call.checked_type = .{ .map_type = map_ty };
         return .{ .map_type = map_ty };
+    }
+    _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+/// `net.*` (spec 054): raw TCP sockets, the layer `http`'s client/server are
+/// already built on but didn't expose directly. `net.connect` yields a
+/// `Socket` (see `socketMethod`); `net.createServer`'s handler receives one
+/// per accepted connection.
+pub fn netCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    if (std.mem.eql(u8, call.name, "connect")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const host_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        const port_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        if (!types.same(.string, host_type) or !types.same(.i32, port_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_net = true;
+        program.needs_net_client = true;
+        call.checked_type = .socket_type;
+        return .socket_type;
+    }
+    if (std.mem.eql(u8, call.name, "createServer")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const port_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.i32, port_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const want = self.makeFuncType(&.{.socket_type}, .void) orelse return null;
+        self.ensureAssignable(program, want, call.args[1], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        program.uses_io = true;
+        program.needs_net = true;
+        program.needs_net_server = true;
+        call.checked_type = .void;
+        return .void;
     }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;

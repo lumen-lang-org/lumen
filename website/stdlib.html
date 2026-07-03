@@ -67,6 +67,7 @@
     <a href="#assert">assert</a>
     <a href="#time">time</a>
     <a href="#http">http</a>
+    <a href="#net">net</a>
     <a href="#json">JSON</a>
     <p class="docs-nav-title">Planned</p>
     <a href="#planned">Roadmap</a>
@@ -1548,6 +1549,103 @@ console.log(methods.length); // 35</code></pre>
     phrase, verbatim from Node's own <code>STATUS_CODES</code> table.</p>
 <pre><code class="lumen">const codes = http.STATUS_CODES();
 console.log(codes.get(404) ?? "?"); // "Not Found"</code></pre>
+  </div>
+
+  <h4 id="net">net</h4>
+  <p class="stability-note stability-experimental">Experimental &mdash; new
+  this milestone, not yet covered by the conformance suite; manually
+  smoke-tested with a real loopback round trip (a raw <code>nc</code>
+  client against a Lumen <code>net.createServer</code>, and a Lumen
+  <code>net.connect</code> client against a real, independent local HTTP
+  server), plus the connection-refused path.</p>
+  <p class="sub">Raw TCP sockets &mdash; the layer <code>http</code>'s own
+  client/server are already built on, exposed directly for protocols that
+  aren't HTTP. No TLS (matching Node's own split between <code>net</code>
+  and <code>tls</code>).</p>
+
+  <div class="api-list">
+    <a href="#net-connect">connect</a>
+    <a href="#net-createServer">createServer</a>
+    <a href="#net-Socket-read">Socket.read</a>
+    <a href="#net-Socket-write">Socket.write</a>
+    <a href="#net-Socket-close">Socket.close</a>
+  </div>
+
+  <div class="api" id="net-connect">
+    <h5><code>net.connect(host, port)</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm and runs without crashing, but the connect step always fails there: WASI has no network access, matching http.request's own precedent for the same reason.">Wasm: limited</span></h5>
+    <p class="sub">(string, int) → <code>Socket</code> &mdash; blocking
+    connect, real DNS resolution for hostnames (via the same
+    <code>std.Io.net.HostName.connect</code> path Lumen's own
+    <code>http.request</code> client already uses internally to reach a
+    hostname, not a new, unverified code path) as well as literal IPs. A
+    failed connect (refused, unknown host, timeout) doesn't throw &mdash;
+    it degrades to a <code>Socket</code> whose <code>.read()</code>
+    always returns <code>""</code> and <code>.write()</code> is a no-op,
+    the same "fallback, don't crash" convention
+    <code>fs.createReadStream</code> already established for a
+    missing file.</p>
+<pre><code class="lumen">const sock: Socket = net.connect("127.0.0.1", 9301);
+sock.write("hello\n");
+console.log(sock.read());
+sock.close();</code></pre>
+  </div>
+
+  <div class="api" id="net-createServer">
+    <h5><code>net.createServer(port, handler)</code> <span class="target-pill target-wasm-limited" title="Same reason as net.connect and http.createServer under --wasm: no WASI network access.">Wasm: limited</span></h5>
+    <p class="sub">(int, (Socket) → void) → void &mdash; accepts
+    connections forever, never returns. Unlike
+    <code>http.createServer</code>'s <code>(HttpRequest) → HttpResponse</code>
+    handler (a call-and-return shape that fits HTTP's own framing), a raw
+    TCP handler gets the <code>Socket</code> itself and drives it in
+    whatever order its own protocol needs. The socket is closed
+    automatically once <code>handler</code> returns, whether or not the
+    handler already called <code>.close()</code> itself (idempotent,
+    no double-close error) &mdash; a handler that forgets to close won't
+    leak the connection for the life of the server.</p>
+<pre><code class="lumen">function handleConn(sock: Socket): void {
+  const line = sock.read();
+  sock.write("echo:" + line);
+}
+
+net.createServer(9301, handleConn);</code></pre>
+    <p class="sub"><strong>Single connection at a time</strong>, unlike
+    <code>http.createServer</code>'s thread-pool-backed concurrency:
+    nothing analogous has been benchmarked yet for a raw-bytes protocol
+    with no request/response cadence to measure against, so a slow or
+    long-lived handler blocks new connections from being accepted until
+    it returns. The same worker-thread-pool mechanism
+    <code>http.createServer</code> already uses is a direct, mechanical
+    extension here later; not attempted this pass so the <code>Socket</code>
+    type itself stayed the focus of this slice.</p>
+  </div>
+
+  <div class="api" id="net-Socket-read">
+    <h5><code>Socket.read()</code></h5>
+    <p class="sub">() → <code>string</code> &mdash; the next chunk
+    (bounded by a fixed 64KB internal buffer, matching
+    <code>ReadableStream.read()</code>'s exact convention).
+    <code>""</code> at EOF, on a closed socket, or on a socket that never
+    connected &mdash; a real empty chunk and end-of-stream are
+    indistinguishable here, the same simplification Streams (spec 046)
+    already documented and accepted.</p>
+  </div>
+
+  <div class="api" id="net-Socket-write">
+    <h5><code>Socket.write(chunk)</code></h5>
+    <p class="sub">string → <code>void</code> &mdash; writes and flushes
+    immediately on every call, unlike <code>WritableStream.write()</code>
+    (which defers flushing to <code>.close()</code>): a long-lived socket
+    conversation has no single "I'm done" moment the way a one-shot file
+    write does, so buffering until some later <code>.close()</code> could
+    mean the peer never sees the bytes in time. No-op on a closed or
+    never-connected socket.</p>
+  </div>
+
+  <div class="api" id="net-Socket-close">
+    <h5><code>Socket.close()</code></h5>
+    <p class="sub">() → <code>void</code> &mdash; closes the underlying
+    connection. Safe to call more than once, or on a socket that never
+    connected.</p>
   </div>
 
   <h4 id="json">JSON</h4>

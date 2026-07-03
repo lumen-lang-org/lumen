@@ -1952,6 +1952,99 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             );
         }
     }
+    if (program.needs_net) {
+        // net.connect/net.createServer (spec 054): raw TCP, the layer
+        // http's own client/server are already built on but didn't expose
+        // directly to Lumen source. LumenSocket wraps a std.Io.net.Stream
+        // exactly the way LumenReadableStream/LumenWritableStream (spec
+        // 046) wrap a std.Io.File -- an optional stream (null for a
+        // failed/refused connect) plus heap-allocated reader/writer
+        // buffers via __sa(), degrading to "always read empty, write is a
+        // no-op" rather than crashing on a dead connection, the same
+        // fallback convention every fs-stream/http path already uses.
+        // close() is idempotent (`closed` flag) because
+        // net.createServer's accept loop always closes the socket after
+        // the handler returns, whether or not the handler already closed
+        // it itself.
+        try out.appendSlice(arena,
+            \\pub const LumenSocket = struct {
+            \\    stream: ?std.Io.net.Stream,
+            \\    io: std.Io,
+            \\    reader: std.Io.net.Stream.Reader = undefined,
+            \\    writer: std.Io.net.Stream.Writer = undefined,
+            \\    closed: bool = false,
+            \\    fn __init(io: std.Io, stream: ?std.Io.net.Stream) *LumenSocket {
+            \\        const p = __sa().create(LumenSocket) catch unreachable;
+            \\        p.* = .{ .stream = stream, .io = io };
+            \\        if (stream) |s| {
+            \\            const rbuf = __sa().alloc(u8, 65536) catch unreachable;
+            \\            p.reader = s.reader(io, rbuf);
+            \\            const wbuf = __sa().alloc(u8, 65536) catch unreachable;
+            \\            p.writer = s.writer(io, wbuf);
+            \\        }
+            \\        return p;
+            \\    }
+            \\    fn read(self: *LumenSocket) []const u8 {
+            \\        if (self.stream == null or self.closed) return "";
+            \\        var scratch: [65536]u8 = undefined;
+            \\        const n = self.reader.interface.readSliceShort(&scratch) catch return "";
+            \\        if (n == 0) return "";
+            \\        return __sa().dupe(u8, scratch[0..n]) catch "";
+            \\    }
+            \\    fn write(self: *LumenSocket, chunk: []const u8) void {
+            \\        if (self.stream == null or self.closed) return;
+            \\        self.writer.interface.writeAll(chunk) catch return;
+            \\        // Flushes on every call, unlike WritableStream (which defers
+            \\        // to .close()): a long-lived socket conversation has no
+            \\        // single "I'm done" moment the way a one-shot file write
+            \\        // does, so buffering until some later .close() would mean
+            \\        // the peer never sees the bytes in time. Matches
+            \\        // http.createServer's own per-response w.flush() call.
+            \\        self.writer.interface.flush() catch {};
+            \\    }
+            \\    fn close(self: *LumenSocket) void {
+            \\        if (self.closed) return;
+            \\        self.closed = true;
+            \\        if (self.stream) |s| {
+            \\            self.writer.interface.flush() catch {};
+            \\            s.close(self.io);
+            \\        }
+            \\    }
+            \\};
+            \\
+        );
+        if (program.needs_net_client) {
+            try out.appendSlice(arena,
+                \\fn __netConnect(io: std.Io, host: []const u8, port: i32) *LumenSocket {
+                \\    const hn = std.Io.net.HostName.init(host) catch return LumenSocket.__init(io, null);
+                \\    const stream = hn.connect(io, @intCast(port), .{ .mode = .stream }) catch return LumenSocket.__init(io, null);
+                \\    return LumenSocket.__init(io, stream);
+                \\}
+                \\
+            );
+        }
+        if (program.needs_net_server) {
+            // Single connection at a time for v1 (spec 054's documented
+            // scope, not yet given the spec 049 xev.ThreadPool treatment
+            // http.createServer got -- no benchmark or prior request/
+            // response cadence exists yet to justify it for raw bytes).
+            // Mirrors __httpCreateServer's non-threadpool branch exactly.
+            try out.appendSlice(arena,
+                \\fn __netCreateServer(io: std.Io, alloc: std.mem.Allocator, port: i32, handler: anytype) noreturn {
+                \\    _ = alloc;
+                \\    const addr = std.Io.net.IpAddress.parse("0.0.0.0", @intCast(port)) catch std.process.exit(1);
+                \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
+                \\    while (true) {
+                \\        const stream = server.accept(io) catch continue;
+                \\        const sock = LumenSocket.__init(io, stream);
+                \\        handler.call(handler.ctx, sock);
+                \\        sock.close();
+                \\    }
+                \\}
+                \\
+            );
+        }
+    }
     if (program.needs_http_constants) {
         // http.METHODS/STATUS_CODES (spec 049): plain constant data, the
         // real lists Node itself uses -- METHODS from llhttp's own
