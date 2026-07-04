@@ -383,6 +383,17 @@ pub fn readableStreamMethod(self: *Checker, program: *ast.Program, mc: anytype, 
         }
         return .string;
     }
+    // readLine() (spec 053): line-oriented convenience over the same
+    // reader every ReadableStream already owns -- see spec 053's "Line
+    // reading" section for why this shape (not an event-based
+    // readline.createInterface) was chosen.
+    if (eq(u8, name, "readLine")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .string;
+    }
     if (eq(u8, name, "close")) {
         if (mc.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
@@ -1703,6 +1714,35 @@ pub fn processCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
         program.needs_process_api = true;
         call.checked_type = .string;
         return .string;
+    }
+    // stdio streams (spec 053): process.stdin()/stdout()/stderr() reuse
+    // spec 046's exact ReadableStream/WritableStream types, just wired to
+    // the real stdio fds instead of an opened file -- see spec.md's "Why
+    // reuse spec 046's types verbatim" section. needs_fs_streams is set
+    // alongside needs_process_stdio so the shared struct definitions are
+    // emitted even in a program that never calls
+    // fs.createReadStream/createWriteStream directly.
+    if (std.mem.eql(u8, call.name, "stdin")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_fs_streams = true;
+        program.needs_process_stdio = true;
+        call.checked_type = .readable_stream_type;
+        return .readable_stream_type;
+    }
+    if (std.mem.eql(u8, call.name, "stdout") or std.mem.eql(u8, call.name, "stderr")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_fs_streams = true;
+        program.needs_process_stdio = true;
+        call.checked_type = .writable_stream_type;
+        return .writable_stream_type;
     }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;

@@ -450,6 +450,7 @@ pub const Program = struct {
     needs_readdir_sync: bool = false,
     needs_fs_watch: bool = false,
     needs_fs_streams: bool = false,
+    needs_process_stdio: bool = false,
     needs_path_api: bool = false,
     needs_process_api: bool = false,
     needs_process_uptime: bool = false,
