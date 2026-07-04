@@ -222,10 +222,8 @@ console.log(emitter.listenerCount("greet")); // 1</code></pre>
   (register listeners up front, emit later) is unaffected.</p>
 
   <h4 id="async">async · await <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h4>
-  <p class="stability-note stability-experimental">Experimental
-  &mdash; the event loop runs on <a href="https://github.com/mitchellh/libxev">libxev</a>,
-  which has no tagged releases yet (pinned by commit) and sits on async I/O
-  primitives that are still gaining backend coverage.</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  the native event loop is still gaining backend coverage.</p>
   <p class="sub">Asynchronous code runs on a native event loop. The program
   drains pending callbacks and promises before it exits.</p>
   <table>
@@ -240,11 +238,9 @@ console.log(emitter.listenerCount("greet")); // 1</code></pre>
   </table>
 
   <h4 id="ffi">C FFI</h4>
-  <p class="stability-note stability-experimental">Experimental
-  &mdash; the marshaling layer covers strings and scalars only (no structs,
-  callbacks, or arrays across the boundary yet); built on mature C-interop
-  primitives, but Lumen's own wrapper around them is the newest,
-  least-exercised part of the stdlib.</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  strings and scalars only cross the boundary (no structs, callbacks, or
+  arrays yet).</p>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
     <tr><td><code>declare function name(args): T;</code></td><td>calls a C function directly (<code>extern function</code> also works)</td></tr>
@@ -375,16 +371,9 @@ console.log(data);</code></pre>
     <p class="sub">string → <code>Promise&lt;void&gt;</code> &mdash;
     <strong>runs on a real thread pool</strong>, unlike
     <code>readFile</code>/<code>writeFile</code>/<code>appendFile</code>
-    above. <code>libxev</code>'s async operation set (checked directly
-    across its io_uring/kqueue/IOCP backends) has no unlink/mkdir/rmdir/stat
-    primitive on any of them, so this dispatches the blocking syscall to a
-    worker thread and bridges the result back to the main thread via
-    <code>xev.Async</code> &mdash; the same mechanism Node's own libuv uses
-    for most of its async <code>fs</code>, and the same one
-    <code>libxev</code>'s own kqueue backend already relies on internally
-    for its file I/O. Genuinely cross-platform, not a Linux-only shortcut
-    (a faster Linux-only path exists via raw io_uring ops but was
-    deliberately not taken).</p>
+    above, so it never blocks the main thread &mdash; the same approach
+    Node's own async <code>fs</code> uses. Genuinely cross-platform, not a
+    Linux-only shortcut.</p>
 <pre><code class="lumen">async function main(): Promise&lt;void&gt; {
   await fs.unlink("stale.txt");
   console.log("gone");
@@ -1084,10 +1073,7 @@ console.log("never runs");</code></pre>
 
   <h4 id="stdio-streams">stdio streams</h4>
   <p class="stability-note stability-experimental">Experimental &mdash;
-  new this milestone, not yet covered by the conformance suite &mdash;
-  manually smoke-tested with real piped/redirected stdin (single-line,
-  multi-line, a blank line mid-input, and a final line with no trailing
-  newline) and with real fd separation between stdout/stderr.</p>
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub"><code>process.stdin()</code>/<code>stdout()</code>/
   <code>stderr()</code> reuse the exact <code>ReadableStream</code>/
   <code>WritableStream</code> types <a href="#fs-createReadStream">
@@ -1162,11 +1148,8 @@ while (true) {
   </div>
 
   <h4 id="readline">readline</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, not yet covered by the conformance suite &mdash; manually
-  smoke-tested with real piped/heredoc input across single-line, multi-line,
-  and exhausted-input scenarios, byte-verified (not just eyeballed) that no
-  stray newline survives in the returned value.</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub">A practical subset of
   <a href="https://nodejs.org/docs/latest/api/readline.html">Node's
   <code>readline</code> module</a>: one blocking function, not Node's
@@ -1507,10 +1490,8 @@ console.log(url.format(u)); // https://example.com/foo?a=1</code></pre>
   </div>
 
   <h4 id="child_process">child_process</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, not yet covered by the conformance suite; manually
-  smoke-tested only (real stdout, a non-zero exit, stderr output, and a
-  nonexistent command).</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub">A first, sync-only slice of
   <a href="https://nodejs.org/docs/latest/api/child_process.html">Node's
   <code>child_process</code> module</a>: the biggest capability gap in the
@@ -1603,9 +1584,8 @@ console.log(elapsed);</code></pre>
   </div>
 
   <h4 id="http">http</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, not yet covered by the conformance suite; manually
-  smoke-tested against real endpoints.</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub">A one-shot HTTP client, the practical core of
   <a href="https://nodejs.org/api/http.html">Node's <code>http</code>
   module</a>. Not a 1:1 port: Node's classes
@@ -1739,12 +1719,8 @@ console.log(codes.get(404) ?? "?"); // "Not Found"</code></pre>
   </div>
 
   <h4 id="net">net</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, not yet covered by the conformance suite; manually
-  smoke-tested with a real loopback round trip (a raw <code>nc</code>
-  client against a Lumen <code>net.createServer</code>, and a Lumen
-  <code>net.connect</code> client against a real, independent local HTTP
-  server), plus the connection-refused path.</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub">Raw TCP sockets &mdash; the layer <code>http</code>'s own
   client/server are already built on, exposed directly for protocols that
   aren't HTTP. No TLS (matching Node's own split between <code>net</code>
@@ -1836,13 +1812,9 @@ net.createServer(9301, handleConn);</code></pre>
   </div>
 
   <h4 id="json">JSON</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, not yet covered by the conformance suite; manually
-  smoke-tested including a round-trip, primitives, and malformed/
-  wrong-shape input.</p>
-  <p class="sub">Thin wrappers around Zig's own <code>std.json</code>, which
-  already reflects automatically over any struct &mdash; and Lumen's record
-  types already lower to real Zig structs with matching field names, so no
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
+  <p class="sub">Automatic (de)serialization for Lumen's record types, so no
   custom per-field (de)serialization code was needed. <strong>Deviation from
   Node</strong>: <code>JSON.parse&lt;T&gt;</code> takes an explicit type
   argument (there's no dynamic/<code>any</code> value to hand back) and
@@ -1883,11 +1855,8 @@ console.log(broken.name); // "" -- zeroed fallback, not a crash</code></pre>
   </div>
 
   <h4 id="zlib">zlib</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, manually verified with a round-trip on both a short and a
-  ~100KB repetitive string, a cross-check against the system
-  <code>gzip</code>/<code>gunzip</code> binaries, and a corrupt-input
-  fallback check; not yet covered by the conformance suite.</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub">A practical subset of
   <a href="https://nodejs.org/docs/latest/api/zlib.html">Node's
   <code>zlib</code> module</a>: one-shot gzip and raw-deflate compress/
@@ -1956,10 +1925,8 @@ console.log(zlib.inflateSync(zlib.deflateSync(input)) == input); // true</code><
   </div>
 
   <h4 id="buffer">Buffer</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, not yet covered by the conformance suite; manually
-  smoke-tested including both hex/base64 round-trip directions against
-  known vectors, alloc/bounds behavior, slice, and equality.</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub">A real, distinct byte-array type &mdash; not <code>string</code>
   under another name. Lumen's <code>string</code> is already raw
   <code>[]const u8</code> (not validated UTF-8), so <code>Buffer</code> could
@@ -2062,14 +2029,8 @@ console.log(Buffer.from("abc").equals(Buffer.from("abd"))); // false</code></pre
   </div>
 
   <h4 id="worker">worker_threads</h4>
-  <p class="stability-note stability-experimental">Experimental &mdash; new
-  this milestone, not yet covered by the conformance suite; manually
-  smoke-tested including 3 concurrent calls with overlapping start/end
-  timestamps confirmed on distinct OS thread ids, a slow-worker-doesn't-
-  block-the-caller wall-clock check, and scalar-capture correctness
-  (including a capture mutated on the main thread <em>after</em> the
-  worker started, to confirm captures are snapshotted by value, not by
-  live reference).</p>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
   <p class="sub">Real CPU parallelism: a Lumen function runs on its own
   native OS thread. Node's <code>worker_threads</code> loads a
   <strong>separate script file</strong> into an isolated realm &mdash;
@@ -2089,18 +2050,12 @@ console.log(Buffer.from("abc").equals(Buffer.from("abd"))); // false</code></pre
     <h5><code>Worker.run(fn)</code></h5>
     <p class="sub"><code>(() =&gt; T) → Promise&lt;T&gt;</code>, <code>T</code> one
     of <code>i32</code> | <code>i64</code> | <code>f64</code> | <code>bool</code>
-    &mdash; spawns one real, detached <code>std.Thread</code> (not a shared,
-    CPU-count-bounded thread pool: a Worker models Node's own "one Worker
-    == one OS thread" primitive, so a CPU-bound call never queues behind
-    unrelated pool work), runs <code>fn</code> on it, and resolves the
-    returned <code>Promise</code> on the main thread once it finishes,
-    reusing the exact worker-notifies-main-thread bridge
-    <code>fs.unlink</code>/<code>mkdir</code>/<code>rmdir</code>/<code>stat</code>
-    already proved safe (the worker thread never calls
-    <code>Promise.resolve</code> itself; it hands a completion record to
-    the main thread via its own mutex-protected queue + <code>xev.Async</code>
-    wake-up). <code>fn</code> may be a plain named function (no captures at
-    all) or an arrow capturing only scalar outer bindings &mdash; Lumen's
+    &mdash; spawns a real, detached OS thread (one Worker = one thread, so
+    a CPU-bound call never queues behind unrelated work), runs
+    <code>fn</code> on it, and resolves the returned <code>Promise</code>
+    once it finishes. <code>fn</code> may be a plain named function (no
+    captures at all) or an arrow capturing only scalar outer bindings
+    &mdash; Lumen's
     existing closure lowering copies each capture <em>by value</em> into a
     heap-allocated environment at the closure's creation point, so a
     captured scalar is a true snapshot with no live aliasing back to the
