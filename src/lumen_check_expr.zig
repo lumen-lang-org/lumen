@@ -609,6 +609,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (types.isBuffer(obj_type)) {
                 return self.bufferMethod(program, mc, obj_type, line, col);
             }
+            if (types.isHash(obj_type)) {
+                return self.hashMethod(program, mc, obj_type, line, col);
+            }
+            if (types.isHmac(obj_type)) {
+                return self.hmacMethod(program, mc, obj_type, line, col);
+            }
             if (obj_type != .class_type) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;

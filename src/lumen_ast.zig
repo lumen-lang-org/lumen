@@ -483,6 +483,10 @@ pub const Program = struct {
     needs_set: bool = false,
     needs_event_emitter: bool = false,
     needs_buffer: bool = false,
+    // crypto.createHash/createHmac streaming builder objects (spec 060):
+    // gates the LumenHash/LumenHmac runtime block, emitted after (and
+    // requiring) needs_buffer, since .digest() returns Buffer.
+    needs_streaming_crypto: bool = false,
     // console.log/info/debug (spec 048): a real stdout writer is needed --
     // console.error/warn/trace keep using std.debug.print (real stderr)
     // directly and don't need this.

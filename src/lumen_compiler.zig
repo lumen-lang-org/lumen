@@ -2689,6 +2689,103 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_streaming_crypto) {
+        // crypto.createHash/createHmac (spec 060): a stateful builder over
+        // one of four algorithms, chosen at runtime by string (matching
+        // Node's own real `createHash('sha256')` runtime-call API -- not
+        // compile-time resolved). Each algorithm is a genuinely different
+        // Zig type (`std.crypto.hash.Md5`/`Sha1`/`sha2.Sha256`/`sha2.
+        // Sha512`, confirmed directly against this Zig 0.16.0 toolchain's
+        // lib/std/crypto/{md5,Sha1,sha2}.zig), so `LumenHash` stores them
+        // in a tagged union and dispatches with `inline else` so `update`/
+        // `digest` are each one method body, not four. `HmacImpl` mirrors
+        // this over `std.crypto.auth.hmac.{HmacMd5,HmacSha1}`/`.sha2.
+        // {HmacSha256,HmacSha512}` (confirmed against lib/std/crypto/
+        // hmac.zig). An unrecognized algorithm name falls back to sha256,
+        // matching Buffer.from(s, encoding)'s unrecognized-encoding
+        // fallback (spec 056) rather than throwing.
+        try out.appendSlice(arena,
+            \\const HashImpl = union(enum) {
+            \\    md5: std.crypto.hash.Md5,
+            \\    sha1: std.crypto.hash.Sha1,
+            \\    sha256: std.crypto.hash.sha2.Sha256,
+            \\    sha512: std.crypto.hash.sha2.Sha512,
+            \\};
+            \\pub const LumenHash = struct {
+            \\    impl: HashImpl,
+            \\    fn update(self: *LumenHash, data: *LumenBuffer) *LumenHash {
+            \\        switch (self.impl) {
+            \\            inline else => |*h| h.update(data.data),
+            \\        }
+            \\        return self;
+            \\    }
+            \\    fn digest(self: *LumenHash) *LumenBuffer {
+            \\        switch (self.impl) {
+            \\            inline else => |*h| {
+            \\                var out: [@TypeOf(h.*).digest_length]u8 = undefined;
+            \\                h.final(&out);
+            \\                const buf = __sa().alloc(u8, out.len) catch return LumenBuffer.__wrap("");
+            \\                @memcpy(buf, &out);
+            \\                return LumenBuffer.__wrap(buf);
+            \\            },
+            \\        }
+            \\    }
+            \\};
+            \\fn __cryptoCreateHash(algorithm: []const u8) *LumenHash {
+            \\    const p = __sa().create(LumenHash) catch unreachable;
+            \\    if (std.mem.eql(u8, algorithm, "md5")) {
+            \\        p.* = .{ .impl = .{ .md5 = std.crypto.hash.Md5.init(.{}) } };
+            \\    } else if (std.mem.eql(u8, algorithm, "sha1")) {
+            \\        p.* = .{ .impl = .{ .sha1 = std.crypto.hash.Sha1.init(.{}) } };
+            \\    } else if (std.mem.eql(u8, algorithm, "sha512")) {
+            \\        p.* = .{ .impl = .{ .sha512 = std.crypto.hash.sha2.Sha512.init(.{}) } };
+            \\    } else {
+            \\        p.* = .{ .impl = .{ .sha256 = std.crypto.hash.sha2.Sha256.init(.{}) } };
+            \\    }
+            \\    return p;
+            \\}
+            \\const HmacImpl = union(enum) {
+            \\    md5: std.crypto.auth.hmac.HmacMd5,
+            \\    sha1: std.crypto.auth.hmac.HmacSha1,
+            \\    sha256: std.crypto.auth.hmac.sha2.HmacSha256,
+            \\    sha512: std.crypto.auth.hmac.sha2.HmacSha512,
+            \\};
+            \\pub const LumenHmac = struct {
+            \\    impl: HmacImpl,
+            \\    fn update(self: *LumenHmac, data: *LumenBuffer) *LumenHmac {
+            \\        switch (self.impl) {
+            \\            inline else => |*h| h.update(data.data),
+            \\        }
+            \\        return self;
+            \\    }
+            \\    fn digest(self: *LumenHmac) *LumenBuffer {
+            \\        switch (self.impl) {
+            \\            inline else => |*h| {
+            \\                var out: [@TypeOf(h.*).mac_length]u8 = undefined;
+            \\                h.final(&out);
+            \\                const buf = __sa().alloc(u8, out.len) catch return LumenBuffer.__wrap("");
+            \\                @memcpy(buf, &out);
+            \\                return LumenBuffer.__wrap(buf);
+            \\            },
+            \\        }
+            \\    }
+            \\};
+            \\fn __cryptoCreateHmac(algorithm: []const u8, key: *LumenBuffer) *LumenHmac {
+            \\    const p = __sa().create(LumenHmac) catch unreachable;
+            \\    if (std.mem.eql(u8, algorithm, "md5")) {
+            \\        p.* = .{ .impl = .{ .md5 = std.crypto.auth.hmac.HmacMd5.init(key.data) } };
+            \\    } else if (std.mem.eql(u8, algorithm, "sha1")) {
+            \\        p.* = .{ .impl = .{ .sha1 = std.crypto.auth.hmac.HmacSha1.init(key.data) } };
+            \\    } else if (std.mem.eql(u8, algorithm, "sha512")) {
+            \\        p.* = .{ .impl = .{ .sha512 = std.crypto.auth.hmac.sha2.HmacSha512.init(key.data) } };
+            \\    } else {
+            \\        p.* = .{ .impl = .{ .sha256 = std.crypto.auth.hmac.sha2.HmacSha256.init(key.data) } };
+            \\    }
+            \\    return p;
+            \\}
+            \\
+        );
+    }
     if (program.needs_zlib_api) {
         // std.compress.flate.Container's raw/gzip/zlib variants are handled
         // internally by Compress/Decompress (header/footer framing, CRC32/

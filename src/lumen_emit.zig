@@ -921,6 +921,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[2], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "createHash")) {
+                try w.appendSlice(arena, "__cryptoCreateHash(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "createHmac")) {
+                try w.appendSlice(arena, "__cryptoCreateHmac(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "readline") and std.mem.eql(u8, cl.name, "question")) {
                 try w.appendSlice(arena, "__readlineQuestion(__io, ");
                 try emitExpr(cl.args[0], w, arena);
