@@ -90,6 +90,8 @@ pub const Checker = struct {
     pub const readableStreamMethod = check_stdlib.readableStreamMethod;
     pub const writableStreamMethod = check_stdlib.writableStreamMethod;
     pub const socketMethod = check_stdlib.socketMethod;
+    pub const bufferMethod = check_stdlib.bufferMethod;
+    pub const bufferCallType = check_stdlib.bufferCallType;
     pub const stringMethod = check_stdlib.stringMethod;
     pub const staticCallType = check_stdlib.staticCallType;
     pub const fsCallType = check_stdlib.fsCallType;
@@ -488,6 +490,12 @@ pub const Checker = struct {
         }
         // A discriminated union name resolves to its union type.
         if (self.unions.get(annotation) != null) return .{ .union_type = annotation };
+        // `Buffer` (spec 056): a bare built-in type, resolved directly (unlike
+        // `ReadableStream`/`WritableStream`, which have no case here today and
+        // fall through to a plain `.named` that never matches the real
+        // `.readable_stream_type`/`.writable_stream_type` a construction call
+        // produces -- verified concretely, not assumed, before adding this).
+        if (std.mem.eql(u8, annotation, "Buffer")) return .buffer_type;
         // Function type: `(T,...)=>R`
         if (annotation.len > 0 and annotation[0] == '(') {
             var depth: u32 = 0;

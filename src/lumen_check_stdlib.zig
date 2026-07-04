@@ -474,6 +474,65 @@ pub fn socketMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
     return null;
 }
 
+/// Validate a method call on a `Buffer` receiver (spec 056). Mirrors
+/// `readableStreamMethod`/`writableStreamMethod`.
+pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    if (eq(u8, name, "toString")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .string, mc.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        return .string;
+    }
+    if (eq(u8, name, "at")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const at = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.isInteger(at)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .i32;
+    }
+    if (eq(u8, name, "slice")) {
+        if (mc.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        for (mc.args) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.isInteger(at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        return .buffer_type;
+    }
+    if (eq(u8, name, "equals")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .buffer_type, mc.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        return .bool;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
 /// Validate an instance method call on a `string` receiver and return its
 /// statically-known result type. Mirrors `arrayMethod`.
 pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u32, col: u32) ?types.Type {
@@ -546,7 +605,50 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "JSON")) return self.jsonCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "zlib")) return self.zlibCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Promise")) return self.promiseCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "Buffer")) return self.bufferCallType(program, call, line, col);
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+/// `Buffer.from`/`Buffer.alloc` static constructors (spec 056). Mirrors
+/// `fsCallType`'s shape for a namespace with a small, fixed function set.
+pub fn bufferCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    if (std.mem.eql(u8, call.name, "from")) {
+        if (call.args.len != 1 and call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const s_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, s_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        if (call.args.len == 2) {
+            const enc_type = self.exprType(program, call.args[1], line, col) orelse return null;
+            if (!types.same(.string, enc_type)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        program.needs_buffer = true;
+        call.checked_type = .buffer_type;
+        return .buffer_type;
+    }
+    if (std.mem.eql(u8, call.name, "alloc")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const n_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isInteger(n_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.needs_buffer = true;
+        call.checked_type = .buffer_type;
+        return .buffer_type;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
     return null;
 }
 

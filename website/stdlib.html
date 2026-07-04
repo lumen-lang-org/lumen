@@ -71,6 +71,7 @@
     <a href="#net">net</a>
     <a href="#json">JSON</a>
     <a href="#zlib">zlib</a>
+    <a href="#buffer">Buffer</a>
     <p class="docs-nav-title">Planned</p>
     <a href="#planned">Roadmap</a>
     <p class="docs-nav-title">Packages</p>
@@ -1849,6 +1850,112 @@ console.log(zlib.deflateSync(input).length < zlib.gzipSync(input).length); // tr
 console.log(zlib.inflateSync(zlib.deflateSync(input)) == input); // true</code></pre>
   </div>
 
+  <h4 id="buffer">Buffer</h4>
+  <p class="stability-note stability-experimental">Experimental &mdash; new
+  this milestone, not yet covered by the conformance suite; manually
+  smoke-tested including both hex/base64 round-trip directions against
+  known vectors, alloc/bounds behavior, slice, and equality.</p>
+  <p class="sub">A real, distinct byte-array type &mdash; not <code>string</code>
+  under another name. Lumen's <code>string</code> is already raw
+  <code>[]const u8</code> (not validated UTF-8), so <code>Buffer</code> could
+  have been just method-name sugar over it; it is a separate type instead so
+  passing raw binary data where text is expected (or vice versa) is a
+  compile-time <code>Buffer</code>/<code>string</code> type mismatch, not a
+  silent runtime bug &mdash; the same call <code>Map</code>/<code>Set</code>/
+  <code>ReadableStream</code> made. Built the same way: a dedicated heap-pointer
+  type, constructed via a <code>Buffer</code> static namespace rather than
+  <code>new</code>. Not yet wired into <code>crypto</code> (which still returns
+  hex/base64 <code>string</code>s), streams (still <code>string</code>-chunked),
+  or <code>JSON</code> &mdash; each a real, separate follow-up migration of an
+  already-shipped contract, not bundled into the pass that introduces the type
+  itself (see the roadmap below).</p>
+
+  <div class="api-list">
+    <a href="#buffer-from">Buffer.from</a>
+    <a href="#buffer-alloc">Buffer.alloc</a>
+    <a href="#buffer-length">.length</a>
+    <a href="#buffer-toString">.toString</a>
+    <a href="#buffer-at">.at</a>
+    <a href="#buffer-slice">.slice</a>
+    <a href="#buffer-equals">.equals</a>
+  </div>
+
+  <div class="api" id="buffer-from">
+    <h5><code>Buffer.from(s)</code> · <code>Buffer.from(s, encoding)</code></h5>
+    <p class="sub">string → <code>Buffer</code> &mdash; the one-argument form
+    takes <code>s</code>'s raw bytes verbatim, no decoding. The two-argument
+    form decodes <code>s</code> under <code>"utf8"</code> (same as one-argument,
+    the default) | <code>"hex"</code> | <code>"base64"</code>.
+    <strong>Deviation from Node</strong>: an unrecognized encoding string falls
+    back to raw <code>"utf8"</code> bytes rather than throwing
+    <code>ERR_UNKNOWN_ENCODING</code> &mdash; the same "fallback, don't crash"
+    convention every other fallible builtin here uses; malformed hex (odd
+    length, non-hex characters) or malformed base64 similarly fall back to an
+    empty <code>Buffer</code> instead of throwing.</p>
+<pre><code class="lumen">const b1 = Buffer.from("hi");
+console.log(b1.toString("hex")); // 6869
+
+const b2 = Buffer.from("6869", "hex");
+console.log(b2.toString("utf8")); // hi</code></pre>
+  </div>
+
+  <div class="api" id="buffer-alloc">
+    <h5><code>Buffer.alloc(n)</code></h5>
+    <p class="sub">int → <code>Buffer</code> &mdash; <code>n</code> zeroed
+    bytes. A negative <code>n</code> clamps to <code>0</code> rather than
+    erroring.</p>
+<pre><code class="lumen">const b = Buffer.alloc(4);
+console.log(b.length);  // 4
+console.log(b.at(0));   // 0</code></pre>
+  </div>
+
+  <div class="api" id="buffer-length">
+    <h5><code>Buffer.length</code></h5>
+    <p class="sub">() → int (field syntax, no parens) &mdash; the byte count.
+    Follows <code>Map</code>/<code>Set</code>'s <code>.size</code> precedent
+    (a method call under a property-syntax surface, since <code>Buffer</code>
+    is heap-pointer-wrapped, not a raw slice at the Lumen type level), not
+    <code>string</code>/array's raw-slice <code>.length</code>.</p>
+<pre><code class="lumen">console.log(Buffer.from("hello").length); // 5</code></pre>
+  </div>
+
+  <div class="api" id="buffer-toString">
+    <h5><code>Buffer.toString(encoding)</code></h5>
+    <p class="sub">string → string &mdash; <code>"utf8"</code> (raw
+    passthrough) | <code>"hex"</code> | <code>"base64"</code>; an unrecognized
+    encoding falls back to <code>"utf8"</code>.</p>
+<pre><code class="lumen">console.log(Buffer.from("hi").toString("base64")); // aGk=</code></pre>
+  </div>
+
+  <div class="api" id="buffer-at">
+    <h5><code>Buffer.at(i)</code></h5>
+    <p class="sub">int → int &mdash; the byte value (0-255) at index
+    <code>i</code>; out of range (including negative <code>i</code>) returns
+    <code>0</code> rather than crashing. <strong>Deviation from Node</strong>:
+    there is no <code>buf[i]</code> index syntax &mdash; Lumen's <code>[i]</code>
+    index checker is array-type-specific today, so <code>.at(i)</code> is the
+    only way to read a byte.</p>
+<pre><code class="lumen">const b = Buffer.from("A");
+console.log(b.at(0));  // 65
+console.log(b.at(99)); // 0 -- out of range, not a crash</code></pre>
+  </div>
+
+  <div class="api" id="buffer-slice">
+    <h5><code>Buffer.slice(start, end)</code></h5>
+    <p class="sub">(int, int) → <code>Buffer</code> &mdash; a new
+    <code>Buffer</code> over <code>[start, end)</code>, clamped into range the
+    same way <code>string.slice</code> behaves.</p>
+<pre><code class="lumen">console.log(Buffer.from("hello").slice(1, 3).toString("utf8")); // el</code></pre>
+  </div>
+
+  <div class="api" id="buffer-equals">
+    <h5><code>Buffer.equals(other)</code></h5>
+    <p class="sub"><code>Buffer</code> → bool &mdash; byte-for-byte
+    comparison.</p>
+<pre><code class="lumen">console.log(Buffer.from("abc").equals(Buffer.from("abc"))); // true
+console.log(Buffer.from("abc").equals(Buffer.from("abd"))); // false</code></pre>
+  </div>
+
   <h3 id="planned">Planned</h3>
   <p class="sub">The surface grows in explicit, conformance-backed slices. These
   modules use the same conventional names; some depend on upcoming language
@@ -1959,6 +2066,16 @@ console.log(zlib.inflateSync(zlib.deflateSync(input)) == input); // true</code><
     <tr><td>Brotli (<code>zlib.brotliCompressSync</code>/etc.)</td><td>not in <code>std.compress</code> at all in this Zig version (only <code>flate</code>, <code>zstd</code>, <code>lzma</code>/<code>lzma2</code>, <code>xz</code> exist) &mdash; would need vendoring a C library or a from-scratch implementation</td></tr>
     <tr><td>zstd/xz/lzma wrappers</td><td><code>std.compress</code> ships these too, but Node's own <code>zlib</code> module only covers gzip/deflate/brotli &mdash; out of scope for a module matching that name/surface</td></tr>
     <tr><td>A compression-level parameter</td><td>the stdlib's wrappers so far are plain positional-arg functions (see <code>crypto.randomBytes(n)</code>), not an options-object style; can be added as an optional second argument later</td></tr>
+  </table>
+
+  <h4>Buffer</h4>
+  <table>
+    <tr><th>API</th><th>Notes</th></tr>
+    <tr><td><code>crypto.*</code> returning <code>Buffer</code> instead of hex/base64 strings</td><td>a real audit of every existing <code>crypto</code> call site and its current string-returning contract -- a breaking change to an already-shipped API, deliberately not bundled into the pass that first introduces the type it would return</td></tr>
+    <tr><td><code>ReadableStream</code>/<code>WritableStream</code> chunks as <code>Buffer</code> instead of <code>string</code></td><td>spec 046 already shipped and is exercised as <code>string</code>-chunked; switching its chunk type is a separate, real migration</td></tr>
+    <tr><td><code>JSON</code> (de)serialization of <code>Buffer</code></td><td>no existing convention in this codebase for how a byte array should round-trip through JSON (Node uses <code>{"type":"Buffer","data":[...]}</code>); not decided here</td></tr>
+    <tr><td><code>Buffer.concat([...])</code></td><td>needs a decision on how a Lumen array of <code>Buffer</code> values is spelled (<code>Buffer[]</code> -- an untested combination of a new bare type with array-of syntax) before it's worth building</td></tr>
+    <tr><td><code>buf[i]</code> index syntax</td><td>the indexing checker is array-type-specific; <code>.at(i)</code> covers the same need today</td></tr>
   </table>
 
   <h3 id="community">Community packages</h3>

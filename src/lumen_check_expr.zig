@@ -373,6 +373,10 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 field.builtin = .container_size;
                 return .i32;
             }
+            if (types.isBuffer(obj_type) and std.mem.eql(u8, field.name, "length")) {
+                field.builtin = .buffer_length;
+                return .i32;
+            }
             if (obj_type == .error_obj and std.mem.eql(u8, field.name, "message")) {
                 field.builtin = .error_message;
                 return .string;
@@ -601,6 +605,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             if (types.isSocket(obj_type)) {
                 return self.socketMethod(program, mc, obj_type, line, col);
+            }
+            if (types.isBuffer(obj_type)) {
+                return self.bufferMethod(program, mc, obj_type, line, col);
             }
             if (obj_type != .class_type) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};

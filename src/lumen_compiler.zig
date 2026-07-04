@@ -1539,6 +1539,86 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_buffer) {
+        // Buffer (spec 056): a dedicated heap-pointer type over `[]const u8`,
+        // built the same way Map/Set/ReadableStream are -- allocated via
+        // __sa(), the stable arena every other container already uses.
+        // `.length` is a real Zig method (`length()`), not a raw `.data.len`
+        // field read, matching Map/Set's `.size` -> `.size()` shape (Buffer
+        // is heap-pointer-wrapped, not a raw slice, at the Lumen type
+        // level) -- see spec.md's design notes for why this precedent was
+        // picked over string/array's raw-slice `.length`.
+        try out.appendSlice(arena,
+            \\pub const LumenBuffer = struct {
+            \\    data: []const u8,
+            \\    fn __wrap(bytes: []const u8) *LumenBuffer {
+            \\        const p = __sa().create(LumenBuffer) catch unreachable;
+            \\        p.* = .{ .data = bytes };
+            \\        return p;
+            \\    }
+            \\    fn length(self: *LumenBuffer) i32 {
+            \\        return @as(i32, @intCast(self.data.len));
+            \\    }
+            \\    fn at(self: *LumenBuffer, i: i32) i32 {
+            \\        if (i < 0 or i >= @as(i32, @intCast(self.data.len))) return 0;
+            \\        return @as(i32, self.data[@intCast(i)]);
+            \\    }
+            \\    fn slice(self: *LumenBuffer, start: i32, end: i32) *LumenBuffer {
+            \\        const len = @as(i32, @intCast(self.data.len));
+            \\        var s = start;
+            \\        var e = end;
+            \\        if (s < 0) s = 0;
+            \\        if (s > len) s = len;
+            \\        if (e < 0) e = 0;
+            \\        if (e > len) e = len;
+            \\        if (e < s) e = s;
+            \\        return LumenBuffer.__wrap(self.data[@intCast(s)..@intCast(e)]);
+            \\    }
+            \\    fn equals(self: *LumenBuffer, other: *LumenBuffer) bool {
+            \\        return std.mem.eql(u8, self.data, other.data);
+            \\    }
+            \\    fn toString(self: *LumenBuffer, encoding: []const u8) []const u8 {
+            \\        if (std.mem.eql(u8, encoding, "hex")) {
+            \\            return std.fmt.allocPrint(__sa(), "{x}", .{self.data}) catch "";
+            \\        }
+            \\        if (std.mem.eql(u8, encoding, "base64")) {
+            \\            const enc = std.base64.standard.Encoder;
+            \\            const n = enc.calcSize(self.data.len);
+            \\            const buf = __sa().alloc(u8, n) catch return "";
+            \\            return enc.encode(buf, self.data);
+            \\        }
+            \\        return self.data;
+            \\    }
+            \\};
+            \\fn __bufferFromUtf8(s: []const u8) *LumenBuffer {
+            \\    return LumenBuffer.__wrap(s);
+            \\}
+            \\fn __bufferFromEncoded(s: []const u8, encoding: []const u8) *LumenBuffer {
+            \\    if (std.mem.eql(u8, encoding, "hex")) {
+            \\        if (s.len % 2 != 0) return LumenBuffer.__wrap("");
+            \\        const n = s.len / 2;
+            \\        const buf = __sa().alloc(u8, n) catch return LumenBuffer.__wrap("");
+            \\        _ = std.fmt.hexToBytes(buf, s) catch return LumenBuffer.__wrap("");
+            \\        return LumenBuffer.__wrap(buf);
+            \\    }
+            \\    if (std.mem.eql(u8, encoding, "base64")) {
+            \\        const dec = std.base64.standard.Decoder;
+            \\        const dlen = dec.calcSizeForSlice(s) catch return LumenBuffer.__wrap("");
+            \\        const buf = __sa().alloc(u8, dlen) catch return LumenBuffer.__wrap("");
+            \\        dec.decode(buf, s) catch return LumenBuffer.__wrap("");
+            \\        return LumenBuffer.__wrap(buf);
+            \\    }
+            \\    return LumenBuffer.__wrap(s);
+            \\}
+            \\fn __bufferAlloc(n: i32) *LumenBuffer {
+            \\    const size: usize = if (n < 0) 0 else @intCast(n);
+            \\    const buf = __sa().alloc(u8, size) catch unreachable;
+            \\    @memset(buf, 0);
+            \\    return LumenBuffer.__wrap(buf);
+            \\}
+            \\
+        );
+    }
     if (program.needs_path_api) {
         // path.* (spec 032): pure string manipulation, no Io parameter at all
         // -- the one stdlib namespace that doesn't thread `io` through.
