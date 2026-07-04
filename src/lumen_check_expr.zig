@@ -599,6 +599,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (types.isWritableStream(obj_type)) {
                 return self.writableStreamMethod(program, mc, obj_type, line, col);
             }
+            if (types.isSocket(obj_type)) {
+                return self.socketMethod(program, mc, obj_type, line, col);
+            }
             if (obj_type != .class_type) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;

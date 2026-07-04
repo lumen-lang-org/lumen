@@ -749,6 +749,18 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "net") and std.mem.eql(u8, cl.name, "connect")) {
+                try w.appendSlice(arena, "__netConnect(__io, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "net") and std.mem.eql(u8, cl.name, "createServer")) {
+                try w.appendSlice(arena, "__netCreateServer(__io, __alloc, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "METHODS")) {
                 try w.appendSlice(arena, "__httpMethods()");
             } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "STATUS_CODES")) {
