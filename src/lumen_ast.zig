@@ -490,6 +490,10 @@ pub const Program = struct {
     // Async/await: emit the event-loop + Promise runtime and drain the loop in main.
     needs_async: bool = false,
     needs_thread_pool_fs: bool = false,
+    // Worker.run(fn) -> Promise<T> (spec 059): a real detached std.Thread per
+    // call, bridged back to the main thread via its own xev.Async + queue
+    // (independent of needs_thread_pool_fs, which is fs's own ThreadPool).
+    needs_worker: bool = false,
 };
 
 pub const Expr = union(enum) {
