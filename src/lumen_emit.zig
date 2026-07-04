@@ -651,6 +651,20 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "__fsCreateWriteStream(__io, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Buffer") and std.mem.eql(u8, cl.name, "from") and cl.args.len == 1) {
+                try w.appendSlice(arena, "__bufferFromUtf8(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Buffer") and std.mem.eql(u8, cl.name, "from") and cl.args.len == 2) {
+                try w.appendSlice(arena, "__bufferFromEncoded(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Buffer") and std.mem.eql(u8, cl.name, "alloc")) {
+                try w.appendSlice(arena, "__bufferAlloc(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "basename")) {
                 try w.appendSlice(arena, "__pathBasename(");
                 try emitExpr(cl.args[0], w, arena);
@@ -1182,6 +1196,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             } else if (fa.builtin == .container_size) {
                 try emitExpr(fa.obj, w, arena);
                 try w.appendSlice(arena, ".size()");
+            } else if (fa.builtin == .buffer_length) {
+                try emitExpr(fa.obj, w, arena);
+                try w.appendSlice(arena, ".length()");
             } else if (fa.builtin == .error_message) {
                 try emitExpr(fa.obj, w, arena);
             } else if (fa.is_static) {

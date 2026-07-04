@@ -476,6 +476,7 @@ pub const Program = struct {
     needs_map: bool = false,
     needs_set: bool = false,
     needs_event_emitter: bool = false,
+    needs_buffer: bool = false,
     // console.log/info/debug (spec 048): a real stdout writer is needed --
     // console.error/warn/trace keep using std.debug.print (real stderr)
     // directly and don't need this.
@@ -523,6 +524,7 @@ pub const FieldBuiltin = enum {
     length,
     error_message,
     container_size,
+    buffer_length,
 };
 
 /// A variable captured by a closure: stored by its outer emit-name in a heap
