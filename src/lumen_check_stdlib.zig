@@ -606,6 +606,7 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "zlib")) return self.zlibCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Promise")) return self.promiseCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Buffer")) return self.bufferCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "readline")) return self.readlineCallType(program, call, line, col);
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
 }
@@ -2004,6 +2005,82 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         // hex-encoded output, and __alloc's declaration is gated on uses_io.
         program.uses_io = true;
         program.needs_crypto_api = true;
+        call.checked_type = .string;
+        return .string;
+    }
+    if (std.mem.eql(u8, call.name, "randomBytesBuffer")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const n_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.i32, n_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_crypto_api = true;
+        program.needs_buffer = true;
+        call.checked_type = .buffer_type;
+        return .buffer_type;
+    }
+    if (std.mem.eql(u8, call.name, "hmacSync")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        program.uses_io = true;
+        program.needs_crypto_api = true;
+        program.needs_buffer = true;
+        call.checked_type = .buffer_type;
+        return .buffer_type;
+    }
+    if (std.mem.eql(u8, call.name, "encryptSync") or std.mem.eql(u8, call.name, "decryptSync")) {
+        if (call.args.len != 3) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        for (call.args) |arg| {
+            self.ensureAssignable(program, .buffer_type, arg, line, col) catch {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+        }
+        program.uses_io = true;
+        program.needs_crypto_api = true;
+        program.needs_buffer = true;
+        call.checked_type = .buffer_type;
+        return .buffer_type;
+    }
+    _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+/// Validate a `readline.*` static call (spec 058). One function, reusing
+/// `process.stdin()`/`process.stdout()` directly -- see spec.md.
+pub fn readlineCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    if (std.mem.eql(u8, call.name, "question")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const prompt_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, prompt_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_fs_streams = true;
+        program.needs_process_stdio = true;
+        program.needs_readline = true;
         call.checked_type = .string;
         return .string;
     }

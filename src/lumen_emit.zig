@@ -895,6 +895,36 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "__cryptoSha256(__alloc, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "randomBytesBuffer")) {
+                try w.appendSlice(arena, "__cryptoRandomBytesBuffer(__io, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "hmacSync")) {
+                try w.appendSlice(arena, "__cryptoHmacSync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "encryptSync")) {
+                try w.appendSlice(arena, "__cryptoEncryptSync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[2], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "decryptSync")) {
+                try w.appendSlice(arena, "__cryptoDecryptSync(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[2], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "readline") and std.mem.eql(u8, cl.name, "question")) {
+                try w.appendSlice(arena, "__readlineQuestion(__io, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "zlib") and std.mem.eql(u8, cl.name, "gzipSync")) {
                 try w.appendSlice(arena, "__zlibCompress(__alloc, .gzip, ");
                 try emitExpr(cl.args[0], w, arena);

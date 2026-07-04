@@ -1539,6 +1539,36 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_readline) {
+        // readline.question (spec 058): a thin, synchronous wrapper over
+        // process.stdout()/stdin(), both already shipped by spec 053 --
+        // see spec.md's "why one flat function". Strips exactly one
+        // trailing \r\n or \n that readLine() deliberately keeps (its own
+        // blank-line-vs-EOF fix), since question()'s return value should
+        // be "what the user typed", not a line-with-terminator.
+        try out.appendSlice(arena,
+            \\var __readline_stdin: ?*LumenReadableStream = null;
+            \\fn __readlineQuestion(io: std.Io, prompt: []const u8) []const u8 {
+            \\    __processStdout(io).write(prompt);
+            \\    // A fresh LumenReadableStream per call (like process.stdin()
+            \\    // itself) would each open its own std.Io.File.Reader with its
+            \\    // own internal read-ahead buffer -- the first call's buffer
+            \\    // can silently swallow bytes belonging to the *next* line
+            \\    // straight from the pipe, which the next call's brand-new,
+            \\    // empty buffer never sees. Confirmed directly: a two-line
+            \\    // heredoc lost its second line before this fix. One shared
+            \\    // instance across every question() call in the program
+            \\    // keeps the same underlying reader (and its buffer) alive.
+            \\    if (__readline_stdin == null) __readline_stdin = __processStdin(io);
+            \\    var line = __readline_stdin.?.readLine();
+            \\    if (line.len == 0) return "";
+            \\    if (line[line.len - 1] == '\n') line = line[0 .. line.len - 1];
+            \\    if (line.len > 0 and line[line.len - 1] == '\r') line = line[0 .. line.len - 1];
+            \\    return line;
+            \\}
+            \\
+        );
+    }
     if (program.needs_buffer) {
         // Buffer (spec 056): a dedicated heap-pointer type over `[]const u8`,
         // built the same way Map/Set/ReadableStream are -- allocated via
@@ -2531,6 +2561,57 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    var out: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
             \\    std.crypto.hash.sha2.Sha256.hash(data, &out, .{});
             \\    return __cryptoHexEncode(alloc, &out);
+            \\}
+            \\
+        );
+    }
+    if (program.needs_buffer and program.needs_crypto_api) {
+        // spec 057: HMAC-SHA256, AES-256-GCM, and raw (non-hex) random
+        // bytes, all Buffer in/out -- see spec.md's "Why additive, not
+        // breaking" for why the three hex-string functions above are
+        // untouched.
+        try out.appendSlice(arena,
+            \\fn __cryptoRandomBytesBuffer(io: std.Io, n: i32) *LumenBuffer {
+            \\    const count: usize = @intCast(@max(n, 0));
+            \\    const buf = __sa().alloc(u8, count) catch return LumenBuffer.__wrap("");
+            \\    std.Io.random(io, buf);
+            \\    return LumenBuffer.__wrap(buf);
+            \\}
+            \\fn __cryptoHmacSync(key: *LumenBuffer, data: *LumenBuffer) *LumenBuffer {
+            \\    var out: [std.crypto.auth.hmac.sha2.HmacSha256.mac_length]u8 = undefined;
+            \\    std.crypto.auth.hmac.sha2.HmacSha256.create(&out, data.data, key.data);
+            \\    const buf = __sa().alloc(u8, out.len) catch return LumenBuffer.__wrap("");
+            \\    @memcpy(buf, &out);
+            \\    return LumenBuffer.__wrap(buf);
+            \\}
+            \\fn __cryptoEncryptSync(key: *LumenBuffer, iv: *LumenBuffer, data: *LumenBuffer) *LumenBuffer {
+            \\    const Aead = std.crypto.aead.aes_gcm.Aes256Gcm;
+            \\    if (key.data.len != Aead.key_length or iv.data.len != Aead.nonce_length) return LumenBuffer.__wrap("");
+            \\    var k: [Aead.key_length]u8 = undefined;
+            \\    @memcpy(&k, key.data);
+            \\    var n: [Aead.nonce_length]u8 = undefined;
+            \\    @memcpy(&n, iv.data);
+            \\    const c = __sa().alloc(u8, data.data.len) catch return LumenBuffer.__wrap("");
+            \\    var tag: [Aead.tag_length]u8 = undefined;
+            \\    Aead.encrypt(c, &tag, data.data, "", n, k);
+            \\    const combined = __sa().alloc(u8, c.len + Aead.tag_length) catch return LumenBuffer.__wrap("");
+            \\    @memcpy(combined[0..c.len], c);
+            \\    @memcpy(combined[c.len..], &tag);
+            \\    return LumenBuffer.__wrap(combined);
+            \\}
+            \\fn __cryptoDecryptSync(key: *LumenBuffer, iv: *LumenBuffer, data: *LumenBuffer) *LumenBuffer {
+            \\    const Aead = std.crypto.aead.aes_gcm.Aes256Gcm;
+            \\    if (key.data.len != Aead.key_length or iv.data.len != Aead.nonce_length or data.data.len < Aead.tag_length) return LumenBuffer.__wrap("");
+            \\    var k: [Aead.key_length]u8 = undefined;
+            \\    @memcpy(&k, key.data);
+            \\    var n: [Aead.nonce_length]u8 = undefined;
+            \\    @memcpy(&n, iv.data);
+            \\    const clen = data.data.len - Aead.tag_length;
+            \\    var tag: [Aead.tag_length]u8 = undefined;
+            \\    @memcpy(&tag, data.data[clen..]);
+            \\    const m = __sa().alloc(u8, clen) catch return LumenBuffer.__wrap("");
+            \\    Aead.decrypt(m, data.data[0..clen], tag, "", n, k) catch return LumenBuffer.__wrap("");
+            \\    return LumenBuffer.__wrap(m);
             \\}
             \\
         );

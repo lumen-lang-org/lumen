@@ -61,6 +61,7 @@
     <a href="#path">path</a>
     <a href="#process">process</a>
     <a href="#stdio-streams">stdio streams</a>
+    <a href="#readline">readline</a>
     <a href="#os">os</a>
     <a href="#crypto">crypto</a>
     <a href="#url">url</a>
@@ -1159,6 +1160,44 @@ while (true) {
 }</code></pre>
   </div>
 
+  <h4 id="readline">readline</h4>
+  <p class="stability-note stability-experimental">Experimental &mdash; new
+  this milestone, not yet covered by the conformance suite &mdash; manually
+  smoke-tested with real piped/heredoc input across single-line, multi-line,
+  and exhausted-input scenarios, byte-verified (not just eyeballed) that no
+  stray newline survives in the returned value.</p>
+  <p class="sub">A practical subset of
+  <a href="https://nodejs.org/docs/latest/api/readline.html">Node's
+  <code>readline</code> module</a>: one blocking function, not Node's
+  event-based <code>readline.createInterface()</code>/
+  <code>.on('line', cb)</code> &mdash; every stdio primitive this is built
+  on (<code>.read()</code>/<code>.write()</code>/<code>.readLine()</code>)
+  is a blocking call, not an event-driven one, so a synchronous
+  <code>question()</code> fits the shape already there rather than needing
+  a background line-pump the language doesn't have.</p>
+
+  <div class="api-list">
+    <a href="#readline-question">question</a>
+  </div>
+
+  <div class="api" id="readline-question">
+    <h5><code>readline.question(prompt)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested with real piped/heredoc input.">Experimental</span></h5>
+    <p class="sub">string → string &mdash; writes <code>prompt</code> to
+    <code>process.stdout()</code>, then blocks reading one line from
+    <code>process.stdin()</code>. <strong>Deviation from
+    <code>ReadableStream.readLine()</code></strong>: the trailing
+    <code>\n</code>/<code>\r\n</code> is stripped before returning, matching
+    Node's own <code>question()</code> callback value &mdash;
+    <code>readLine()</code> keeps it for its own blank-line-vs-EOF safety,
+    which <code>question()</code> doesn't need. Every call shares one
+    underlying stdin reader internally, so consecutive calls see
+    consecutive lines rather than each silently discarding the next line's
+    already-buffered bytes. Returns <code>""</code> at true end-of-stream
+    (piped input exhausted).</p>
+<pre><code class="lumen">const name = readline.question("Name: ");
+console.log("Hi " + name);</code></pre>
+  </div>
+
   <h4 id="os">os</h4>
   <p class="stability-note stability-stable">Stable &mdash;
   almost the entire namespace is two raw Linux syscalls
@@ -1324,13 +1363,19 @@ console.log(loads[0]);</code></pre>
     <a href="#crypto-randomBytes">randomBytes</a>
     <a href="#crypto-randomUUID">randomUUID</a>
     <a href="#crypto-sha256">sha256</a>
+    <a href="#crypto-randomBytesBuffer">randomBytesBuffer</a>
+    <a href="#crypto-hmacSync">hmacSync</a>
+    <a href="#crypto-encryptSync">encryptSync</a>
+    <a href="#crypto-decryptSync">decryptSync</a>
   </div>
 
   <div class="api" id="crypto-randomBytes">
     <h5><code>crypto.randomBytes(n)</code></h5>
     <p class="sub">int → string &mdash; <code>n</code> random bytes,
-    hex-encoded (a <code>2n</code>-character string). No <code>Buffer</code>
-    type in the language yet, so this returns the encoded form directly.</p>
+    hex-encoded (a <code>2n</code>-character string). Kept as-is (not
+    changed to return <code>Buffer</code>) now that <code>Buffer</code>
+    exists &mdash; see <code>randomBytesBuffer</code> below for the raw-bytes
+    form.</p>
 <pre><code class="lumen">const token: string = crypto.randomBytes(16);
 console.log(token.length); // 32</code></pre>
   </div>
@@ -1348,6 +1393,65 @@ console.log(token.length); // 32</code></pre>
     <code>data</code>'s bytes.</p>
 <pre><code class="lumen">console.log(crypto.sha256("hello"));
 // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824</code></pre>
+  </div>
+
+  <div class="api" id="crypto-randomBytesBuffer">
+    <h5><code>crypto.randomBytesBuffer(n)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">int → <code>Buffer</code> &mdash; the same entropy source
+    as <code>randomBytes</code>, without the hex encoding. Additive, not a
+    replacement: <code>randomBytes</code> keeps returning a hex
+    <code>string</code>, since that's an already-shipped contract other code
+    relies on.</p>
+<pre><code class="lumen">const raw = crypto.randomBytesBuffer(16);
+console.log(raw.length); // 16</code></pre>
+  </div>
+
+  <div class="api" id="crypto-hmacSync">
+    <h5><code>crypto.hmacSync(key, data)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">(<code>Buffer</code>, <code>Buffer</code>) →
+    <code>Buffer</code> &mdash; HMAC-SHA256, a 32-byte MAC. One fixed
+    algorithm, no name parameter &mdash; the same "one well-chosen option"
+    shape as <code>sha256</code> itself.</p>
+<pre><code class="lumen">const key = Buffer.from("key");
+const data = Buffer.from("The quick brown fox jumps over the lazy dog");
+console.log(crypto.hmacSync(key, data).toString("hex"));
+// f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8</code></pre>
+  </div>
+
+  <div class="api" id="crypto-encryptSync">
+    <h5><code>crypto.encryptSync(key, iv, data)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">(<code>Buffer</code>, <code>Buffer</code>, <code>Buffer</code>)
+    → <code>Buffer</code> &mdash; AES-256-GCM authenticated encryption.
+    <code>key</code> must be exactly 32 bytes and <code>iv</code> exactly 12
+    bytes (GCM's standard nonce length); either wrong-length input returns
+    an empty <code>Buffer</code> rather than crashing. The result is
+    <code>ciphertext</code> followed by a 16-byte authentication tag,
+    concatenated into one <code>Buffer</code> &mdash; the simplest
+    single-value shape, since <code>decryptSync</code> re-splits it
+    internally.</p>
+<pre><code class="lumen">const key = Buffer.alloc(32);  // in real use, crypto.randomBytesBuffer(32)
+const iv = Buffer.alloc(12);   // in real use, a fresh nonce per message
+const ct = crypto.encryptSync(key, iv, Buffer.from("attack at dawn"));
+console.log(ct.length); // 30 -- 14-byte message + 16-byte tag</code></pre>
+  </div>
+
+  <div class="api" id="crypto-decryptSync">
+    <h5><code>crypto.decryptSync(key, iv, data)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">(<code>Buffer</code>, <code>Buffer</code>, <code>Buffer</code>)
+    → <code>Buffer</code> &mdash; inverse of <code>encryptSync</code>.
+    <strong>Deviation from Node</strong>: on a wrong-length key/iv, a
+    too-short <code>data</code>, or a failed authentication check (tampered
+    ciphertext or tag), returns an empty <code>Buffer</code> rather than
+    throwing &mdash; the same fallback-don't-crash shape every other
+    fallible builtin here uses.</p>
+<pre><code class="lumen">const key = Buffer.alloc(32);
+const iv = Buffer.alloc(12);
+const ct = crypto.encryptSync(key, iv, Buffer.from("attack at dawn"));
+const pt = crypto.decryptSync(key, iv, ct);
+console.log(pt.toString("utf8")); // attack at dawn
+
+const tampered = Buffer.alloc(ct.length);
+console.log(crypto.decryptSync(key, iv, tampered).length); // 0 -- auth failed</code></pre>
   </div>
 
   <h4 id="url">url</h4>
