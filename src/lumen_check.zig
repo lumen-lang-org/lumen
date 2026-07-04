@@ -104,6 +104,7 @@ pub const Checker = struct {
     pub const httpCallType = check_stdlib.httpCallType;
     pub const netCallType = check_stdlib.netCallType;
     pub const jsonCallType = check_stdlib.jsonCallType;
+    pub const zlibCallType = check_stdlib.zlibCallType;
     pub const promiseCallType = check_stdlib.promiseCallType;
     pub const mathCallType = check_stdlib.mathCallType;
     pub const stringCallType = check_stdlib.stringCallType;

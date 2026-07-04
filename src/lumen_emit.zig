@@ -881,6 +881,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "__cryptoSha256(__alloc, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "zlib") and std.mem.eql(u8, cl.name, "gzipSync")) {
+                try w.appendSlice(arena, "__zlibCompress(__alloc, .gzip, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "zlib") and std.mem.eql(u8, cl.name, "gunzipSync")) {
+                try w.appendSlice(arena, "__zlibDecompress(__alloc, .gzip, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "zlib") and std.mem.eql(u8, cl.name, "deflateSync")) {
+                try w.appendSlice(arena, "__zlibCompress(__alloc, .raw, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "zlib") and std.mem.eql(u8, cl.name, "inflateSync")) {
+                try w.appendSlice(arena, "__zlibDecompress(__alloc, .raw, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "Promise") and std.mem.eql(u8, cl.name, "resolve")) {
                 // Promise.resolve(v) -> an already-resolved promise of v's type.
                 const inner = cl.checked_arg_type orelse return error.ParseError;
