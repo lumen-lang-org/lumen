@@ -1009,6 +1009,79 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    if (program.needs_worker) {
+        // Worker.run(fn) -> Promise<T> (spec 059). Deliberately a bare
+        // std.Thread.spawn per call, not the shared xev.ThreadPool spec 047
+        // uses for fs: that pool is a fixed, CPU-count-sized set of workers
+        // meant for many small, quick blocking syscalls, where queuing is
+        // the right trade-off. A Worker models Node's own "one Worker == one
+        // real OS thread" CPU-bound-parallelism primitive -- queuing a
+        // CPU-bound Worker behind unrelated fs/http pool work would be a
+        // real semantic mismatch with what the caller asked for, not just a
+        // performance nuance. Confirmed against this project's vendored Zig
+        // 0.16.0 `lib/std/Thread.zig` before writing this: `Thread.spawn(config,
+        // comptime function, args) SpawnError!Thread` and `Thread.detach(self)
+        // void` are exactly what's needed; no join is required since nothing
+        // downstream waits on the OS thread itself, only on the Promise.
+        //
+        // Result handback reuses spec 047's exact worker-notifies-main shape:
+        // LumenPromise.resolve() is a plain, non-atomic field write raced
+        // against the main thread's await_/driveUntil poll if called from a
+        // worker thread directly, so the worker thread never calls it -- it
+        // pushes a completion record onto this dedicated, mutex-protected
+        // queue and wakes a dedicated xev.Async; only the main-thread wake-up
+        // callback below ever calls .resolve(). LumenPromise itself needs no
+        // changes. This queue/Async pair is independent of fs's own
+        // __fs_done_queue/__fs_async (Worker doesn't require fs to be used).
+        try out.appendSlice(arena,
+            \\const __WorkerDone = struct { ctx: *anyopaque, finish: *const fn (*anyopaque) void };
+            \\var __worker_async: xev.Async = undefined;
+            \\var __worker_async_c: xev.Completion = undefined;
+            \\var __worker_done_mutex: std.Io.Mutex = .init;
+            \\var __worker_done_queue: std.ArrayListUnmanaged(__WorkerDone) = .empty;
+            \\fn __workerInit() void {
+            \\    __worker_async = xev.Async.init() catch unreachable;
+            \\    __worker_async.wait(&__xev_loop, &__worker_async_c, void, null, __workerOnWake);
+            \\}
+            \\fn __workerOnWake(_: ?*void, _: *xev.Loop, _: *xev.Completion, r: xev.Async.WaitError!void) xev.CallbackAction {
+            \\    _ = r catch {};
+            \\    __worker_done_mutex.lock(__io) catch unreachable;
+            \\    const items = __worker_done_queue.toOwnedSlice(__alloc) catch &.{};
+            \\    __worker_done_mutex.unlock(__io);
+            \\    for (items) |it| it.finish(it.ctx);
+            \\    return .rearm;
+            \\}
+            \\fn __workerPushDone(ctx: *anyopaque, finish: *const fn (*anyopaque) void) void {
+            \\    __worker_done_mutex.lock(__io) catch unreachable;
+            \\    __worker_done_queue.append(__alloc, .{ .ctx = ctx, .finish = finish }) catch {};
+            \\    __worker_done_mutex.unlock(__io);
+            \\    __worker_async.notify() catch {};
+            \\}
+            \\fn __workerRun(comptime T: type, f: anytype) *LumenPromise(T) {
+            \\    const Cb = @TypeOf(f);
+            \\    const State = struct {
+            \\        f: Cb,
+            \\        promise: *LumenPromise(T),
+            \\        result: T = undefined,
+            \\        fn threadMain(self: *@This()) void {
+            \\            self.result = self.f.call(self.f.ctx);
+            \\            __workerPushDone(self, finish);
+            \\        }
+            \\        fn finish(ctx: *anyopaque) void {
+            \\            const self: *@This() = @ptrCast(@alignCast(ctx));
+            \\            self.promise.resolve(self.result);
+            \\        }
+            \\    };
+            \\    const p = LumenPromise(T).create();
+            \\    const st = __alloc.create(State) catch unreachable;
+            \\    st.* = .{ .f = f, .promise = p };
+            \\    const th = std.Thread.spawn(.{}, State.threadMain, .{st}) catch unreachable;
+            \\    th.detach();
+            \\    return p;
+            \\}
+            \\
+        );
+    }
     if (program.needs_fd_api) {
         // A Lumen "fd" is an index into this table, not a raw OS handle (so the
         // type stays a plain `int`). openSync supports only "r" (read, must
@@ -2702,11 +2775,14 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         if (program.needs_thread_pool_fs) {
             try out.appendSlice(arena, "    __fsThreadPoolInit();\n");
         }
+        if (program.needs_worker) {
+            try out.appendSlice(arena, "    __workerInit();\n");
+        }
     } else {
         try out.appendSlice(arena, "pub fn main() void {\n");
     }
     try out.appendSlice(arena, body.items);
-    if (program.needs_thread_pool_fs) {
+    if (program.needs_thread_pool_fs or program.needs_worker) {
         // LumenLoop.drain() (below) runs the loop with RunMode.until_done,
         // whose only stop condition is "no active completions left"
         // (verified by reading the io_uring backend's tick_ directly). The
@@ -2720,7 +2796,10 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         // wait for a background thread pool to naturally join" shape most
         // programs with one use. xev.ThreadPool's own worker threads block
         // forever waiting for more work otherwise, with nothing to join
-        // them once there's no more application work left.
+        // them once there's no more application work left. Worker.run's own
+        // detached std.Thread.spawn workers have the same problem for the
+        // same reason (nothing left to join them once main work is done),
+        // so needs_worker shares this exact exit-early branch.
         try out.appendSlice(arena, "    std.process.exit(0);\n");
     } else if (program.needs_async) {
         // Drain any remaining timers/microtasks so fire-and-forget

@@ -607,6 +607,45 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "Promise")) return self.promiseCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Buffer")) return self.bufferCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "readline")) return self.readlineCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "Worker")) return self.workerCallType(program, call, line, col);
+    _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+/// `Worker.run(fn) -> Promise<T>` (spec 059): `fn` must be a zero-parameter
+/// function value whose return type is one of the four scalar types verified
+/// safe to hand back across a real OS thread boundary this pass (see
+/// spec.md's thread-safety-boundary section) -- strings/arrays/objects are
+/// deliberately not accepted yet.
+pub fn workerCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    if (std.mem.eql(u8, call.name, "run")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const cb_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (cb_type != .func_type or cb_type.func_type.params.len != 0) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const ret = cb_type.func_type.ret.*;
+        switch (ret) {
+            .i32, .i64, .f64, .bool => {},
+            else => {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            },
+        }
+        const p = self.arena.create(types.Type) catch return null;
+        p.* = ret;
+        const result = types.Type{ .promise_type = p };
+        call.checked_arg_type = ret;
+        call.checked_type = result;
+        program.uses_io = true;
+        program.needs_async = true;
+        program.needs_worker = true;
+        return result;
+    }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
 }

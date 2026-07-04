@@ -73,6 +73,7 @@
     <a href="#json">JSON</a>
     <a href="#zlib">zlib</a>
     <a href="#buffer">Buffer</a>
+    <a href="#worker">Worker</a>
     <p class="docs-nav-title">Planned</p>
     <a href="#planned">Roadmap</a>
     <p class="docs-nav-title">Packages</p>
@@ -2060,6 +2061,87 @@ console.log(b.at(99)); // 0 -- out of range, not a crash</code></pre>
 console.log(Buffer.from("abc").equals(Buffer.from("abd"))); // false</code></pre>
   </div>
 
+  <h4 id="worker">Worker</h4>
+  <p class="stability-note stability-experimental">Experimental &mdash; new
+  this milestone, not yet covered by the conformance suite; manually
+  smoke-tested including 3 concurrent calls with overlapping start/end
+  timestamps confirmed on distinct OS thread ids, a slow-worker-doesn't-
+  block-the-caller wall-clock check, and scalar-capture correctness
+  (including a capture mutated on the main thread <em>after</em> the
+  worker started, to confirm captures are snapshotted by value, not by
+  live reference).</p>
+  <p class="sub">Real CPU parallelism: a Lumen function runs on its own
+  native OS thread. Node's <code>worker_threads</code> loads a
+  <strong>separate script file</strong> into an isolated realm &mdash;
+  Lumen has no equivalent (one program compiles to one static binary, no
+  second module to dynamically load), so <code>Worker.run</code> takes a
+  Lumen <strong>function value</strong> instead of a file path, the
+  closest honest adaptation of the same idea. Deliberately a flat,
+  one-shot namespace call (<code>Worker.run(fn)</code>) rather than a
+  <code>new Worker(...)</code> object &mdash; Node's class shape exists for
+  a stateful, message-passing, long-lived entity
+  (<code>postMessage</code>/<code>.on('message')</code>/<code>.terminate()</code>)
+  that Lumen has no channel primitive for yet; shipping the constructor
+  without any of the methods it implies would be worse than the flat shape
+  actually shipped.</p>
+
+  <div class="api" id="worker-run">
+    <h5><code>Worker.run(fn)</code></h5>
+    <p class="sub"><code>(() =&gt; T) → Promise&lt;T&gt;</code>, <code>T</code> one
+    of <code>i32</code> | <code>i64</code> | <code>f64</code> | <code>bool</code>
+    &mdash; spawns one real, detached <code>std.Thread</code> (not a shared,
+    CPU-count-bounded thread pool: a Worker models Node's own "one Worker
+    == one OS thread" primitive, so a CPU-bound call never queues behind
+    unrelated pool work), runs <code>fn</code> on it, and resolves the
+    returned <code>Promise</code> on the main thread once it finishes,
+    reusing the exact worker-notifies-main-thread bridge
+    <code>fs.unlink</code>/<code>mkdir</code>/<code>rmdir</code>/<code>stat</code>
+    already proved safe (the worker thread never calls
+    <code>Promise.resolve</code> itself; it hands a completion record to
+    the main thread via its own mutex-protected queue + <code>xev.Async</code>
+    wake-up). <code>fn</code> may be a plain named function (no captures at
+    all) or an arrow capturing only scalar outer bindings &mdash; Lumen's
+    existing closure lowering copies each capture <em>by value</em> into a
+    heap-allocated environment at the closure's creation point, so a
+    captured scalar is a true snapshot with no live aliasing back to the
+    caller's binding.</p>
+<pre><code class="lumen">function fib(): i32 {
+  let a: i32 = 0;
+  let b: i32 = 1;
+  let i: i32 = 0;
+  while (i &lt; 40) {
+    const next = a + b;
+    a = b;
+    b = next;
+    i = i + 1;
+  }
+  return a;
+}
+
+async function main(): Promise&lt;void&gt; {
+  const p = Worker.run(fib);
+  console.log("worker launched, main keeps going");
+  console.log(await p);
+}</code></pre>
+    <p class="sub"><strong>What's safe to cross the thread boundary, stated
+    narrowly on purpose</strong>: only the four scalar types above, checker-
+    enforced &mdash; Lumen has no borrow checker and no
+    <code>Send</code>/<code>Sync</code> distinction, so strings, arrays,
+    <code>Map</code>/<code>Set</code>/<code>Buffer</code>, and class
+    instances are deliberately not accepted as <code>T</code> yet (not
+    verified safe without a real deep-copy/capture-safety analysis).
+    <strong>This does not, by itself, make every closure safe</strong>:
+    capturing a <em>reference-shaped</em> outer binding (an array,
+    <code>Map</code>/<code>Set</code>/<code>Buffer</code>, a class
+    instance) only copies the pointer/slice header into the worker's
+    closure &mdash; the pointee is still the same shared, unsynchronized
+    memory. If the main thread (or another Worker) mutates it while the
+    worker reads or writes it too, that's a real, silent data race, the
+    same kind of trade-off <code>http.createServer</code>'s concurrent
+    handlers already document above. Not statically prevented this pass
+    &mdash; documented, not solved.</p>
+  </div>
+
   <h3 id="planned">Planned</h3>
   <p class="sub">The surface grows in explicit, conformance-backed slices. These
   modules use the same conventional names; some depend on upcoming language
@@ -2180,6 +2262,17 @@ console.log(Buffer.from("abc").equals(Buffer.from("abd"))); // false</code></pre
     <tr><td><code>JSON</code> (de)serialization of <code>Buffer</code></td><td>no existing convention in this codebase for how a byte array should round-trip through JSON (Node uses <code>{"type":"Buffer","data":[...]}</code>); not decided here</td></tr>
     <tr><td><code>Buffer.concat([...])</code></td><td>needs a decision on how a Lumen array of <code>Buffer</code> values is spelled (<code>Buffer[]</code> -- an untested combination of a new bare type with array-of syntax) before it's worth building</td></tr>
     <tr><td><code>buf[i]</code> index syntax</td><td>the indexing checker is array-type-specific; <code>.at(i)</code> covers the same need today</td></tr>
+  </table>
+
+  <h4>Worker</h4>
+  <table>
+    <tr><th>API</th><th>Notes</th></tr>
+    <tr><td><code>new Worker(...)</code> with <code>postMessage</code>/<code>on('message')</code>/<code>terminate()</code></td><td>needs a real cross-thread mutable message channel Lumen has no primitive for yet; shipping the constructor shape without the instance methods it implies would be worse than the flat <code>Worker.run</code> shape actually shipped</td></tr>
+    <tr><td>Non-scalar <code>T</code> (strings, arrays, <code>Map</code>/<code>Set</code>/<code>Buffer</code>, objects, class instances) crossing the boundary</td><td>not verified safe this pass without a real capture/deep-copy-semantics analysis; scalars alone are enough to prove the thread-spawn + promise-handback mechanism works correctly</td></tr>
+    <tr><td>Static prevention of unsafe reference-shaped captures</td><td>would need a real capture/<code>Send</code>-style analysis in the checker; documented as a known hazard instead, the same way <code>http.createServer</code>'s multi-threaded-handler trade-off above is documented rather than solved</td></tr>
+    <tr><td>A persistent worker pool / reusable <code>Worker</code> handle</td><td>no concrete use case needs one yet; one detached thread per <code>Worker.run()</code> call is simpler and sufficient</td></tr>
+    <tr><td>Worker cancellation / timeouts</td><td>not exercised by the v1 function set &mdash; each call is a single run-to-completion function, no cancellation hook exists to wire up</td></tr>
+    <tr><td><code>--wasm</code> support</td><td><code>Worker.run</code> requires the async/<code>Promise</code> event-loop machinery, which already hits the existing wasm-vs-<code>@import("xev")</code> gate &mdash; wasm32-wasi has no real OS threads anyway</td></tr>
   </table>
 
   <h3 id="community">Community packages</h3>
