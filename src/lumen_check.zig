@@ -92,6 +92,8 @@ pub const Checker = struct {
     pub const socketMethod = check_stdlib.socketMethod;
     pub const bufferMethod = check_stdlib.bufferMethod;
     pub const bufferCallType = check_stdlib.bufferCallType;
+    pub const hashMethod = check_stdlib.hashMethod;
+    pub const hmacMethod = check_stdlib.hmacMethod;
     pub const stringMethod = check_stdlib.stringMethod;
     pub const staticCallType = check_stdlib.staticCallType;
     pub const fsCallType = check_stdlib.fsCallType;
@@ -498,6 +500,11 @@ pub const Checker = struct {
         // `.readable_stream_type`/`.writable_stream_type` a construction call
         // produces -- verified concretely, not assumed, before adding this).
         if (std.mem.eql(u8, annotation, "Buffer")) return .buffer_type;
+        // `Hash`/`Hmac` (spec 060): same bare-type resolution as `Buffer`
+        // above, for `let h: Hash = crypto.createHash(...)`-style explicit
+        // annotations.
+        if (std.mem.eql(u8, annotation, "Hash")) return .hash_type;
+        if (std.mem.eql(u8, annotation, "Hmac")) return .hmac_type;
         // Function type: `(T,...)=>R`
         if (annotation.len > 0 and annotation[0] == '(') {
             var depth: u32 = 0;

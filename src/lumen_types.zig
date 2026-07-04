@@ -48,6 +48,8 @@ pub const Type = union(enum) {
     writable_stream_type, // WritableStream (fs.createWriteStream)  ->  *LumenWritableStream (heap pointer)
     socket_type, // Socket (net.connect/net.createServer's handler arg)  ->  *LumenSocket (heap pointer)
     buffer_type, // Buffer (Buffer.from/Buffer.alloc)  ->  *LumenBuffer (heap pointer)
+    hash_type, // Hash (crypto.createHash)  ->  *LumenHash (heap pointer)
+    hmac_type, // Hmac (crypto.createHmac)  ->  *LumenHmac (heap pointer)
     tuple_type: []const Type, // [A, B, ...]  ->  struct { @"0": A, @"1": B, ... }
     promise_type: *const Type, // Promise<T>  ->  *LumenPromise(T) (heap pointer)
 };
@@ -129,6 +131,8 @@ fn mangle(arena: std.mem.Allocator, t: Type) error{OutOfMemory}![]const u8 {
         .writable_stream_type => "writablestream",
         .socket_type => "socket",
         .buffer_type => "buffer",
+        .hash_type => "hash",
+        .hmac_type => "hmac",
         .promise_type => |inner| try std.fmt.allocPrint(arena, "prom_{s}", .{try mangle(arena, inner.*)}),
         .tuple_type => |elems| blk2: {
             var buf2: std.ArrayListUnmanaged(u8) = .empty;
@@ -283,6 +287,8 @@ pub fn same(a: Type, b: Type) bool {
         .writable_stream_type => b == .writable_stream_type,
         .socket_type => b == .socket_type,
         .buffer_type => b == .buffer_type,
+        .hash_type => b == .hash_type,
+        .hmac_type => b == .hmac_type,
         .promise_type => |a_e| switch (b) {
             .promise_type => |b_e| same(a_e.*, b_e.*),
             else => false,
@@ -359,6 +365,14 @@ pub fn isSocket(t: Type) bool {
 
 pub fn isBuffer(t: Type) bool {
     return t == .buffer_type;
+}
+
+pub fn isHash(t: Type) bool {
+    return t == .hash_type;
+}
+
+pub fn isHmac(t: Type) bool {
+    return t == .hmac_type;
 }
 
 pub fn isArray(t: Type) bool {
@@ -438,6 +452,8 @@ pub fn toAnnotation(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?[]con
         .writable_stream_type => "WritableStream",
         .socket_type => "Socket",
         .buffer_type => "Buffer",
+        .hash_type => "Hash",
+        .hmac_type => "Hmac",
         .promise_type => |inner| blk: {
             const e = (try toAnnotation(arena, inner.*)) orelse break :blk null;
             break :blk try std.fmt.allocPrint(arena, "Promise<{s}>", .{e});
@@ -540,6 +556,8 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .writable_stream_type => "*LumenWritableStream",
         .socket_type => "*LumenSocket",
         .buffer_type => "*LumenBuffer",
+        .hash_type => "*LumenHash",
+        .hmac_type => "*LumenHmac",
         .promise_type => |inner| try std.fmt.allocPrint(arena, "*LumenPromise({s})", .{try zigName(arena, inner.*)}),
         .tuple_type => |elems| try tupleStructName(arena, elems),
     };

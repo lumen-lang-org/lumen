@@ -2099,7 +2099,99 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         call.checked_type = .buffer_type;
         return .buffer_type;
     }
+    if (std.mem.eql(u8, call.name, "createHash")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .string, call.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        program.needs_buffer = true;
+        program.needs_streaming_crypto = true;
+        call.checked_type = .hash_type;
+        return .hash_type;
+    }
+    if (std.mem.eql(u8, call.name, "createHmac")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .string, call.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        program.needs_buffer = true;
+        program.needs_streaming_crypto = true;
+        call.checked_type = .hmac_type;
+        return .hmac_type;
+    }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+/// Validate a method call on a `Hash` receiver (spec 060): `crypto.
+/// createHash(algorithm)`'s return type. Mirrors `bufferMethod`'s shape.
+pub fn hashMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    if (eq(u8, name, "update")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .buffer_type, mc.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        return .hash_type; // returns self, for chaining
+    }
+    if (eq(u8, name, "digest")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.needs_buffer = true;
+        return .buffer_type;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
+/// Validate a method call on a `Hmac` receiver (spec 060): `crypto.
+/// createHmac(algorithm, key)`'s return type. Mirrors `hashMethod`.
+pub fn hmacMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    if (eq(u8, name, "update")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .buffer_type, mc.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        return .hmac_type; // returns self, for chaining
+    }
+    if (eq(u8, name, "digest")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.needs_buffer = true;
+        return .buffer_type;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
     return null;
 }
 

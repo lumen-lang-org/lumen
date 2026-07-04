@@ -1355,10 +1355,10 @@ console.log(loads[0]);</code></pre>
   works identically on the native and WebAssembly targets.</p>
   <p class="sub">A practical subset of
   <a href="https://nodejs.org/docs/latest/api/crypto.html">Node's
-  <code>crypto</code> module</a>. Static functions, not Node's
-  <code>createHash(...).update(...).digest(...)</code> fluent style &mdash;
-  there's no streaming-hash object in the language yet, and a one-shot
-  function covers the common case.</p>
+  <code>crypto</code> module</a>: mostly static one-shot functions, plus
+  (spec 060) two real streaming builder objects,
+  <code>createHash</code>/<code>createHmac</code>, for hashing data
+  incrementally without holding it all in memory at once.</p>
 
   <div class="api-list">
     <a href="#crypto-randomBytes">randomBytes</a>
@@ -1368,6 +1368,8 @@ console.log(loads[0]);</code></pre>
     <a href="#crypto-hmacSync">hmacSync</a>
     <a href="#crypto-encryptSync">encryptSync</a>
     <a href="#crypto-decryptSync">decryptSync</a>
+    <a href="#crypto-createHash">createHash</a>
+    <a href="#crypto-createHmac">createHmac</a>
   </div>
 
   <div class="api" id="crypto-randomBytes">
@@ -1453,6 +1455,47 @@ console.log(pt.toString("utf8")); // attack at dawn
 
 const tampered = Buffer.alloc(ct.length);
 console.log(crypto.decryptSync(key, iv, tampered).length); // 0 -- auth failed</code></pre>
+  </div>
+
+  <div class="api" id="crypto-createHash">
+    <h5><code>crypto.createHash(algorithm)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">string → <code>Hash</code> &mdash; a stateful hash
+    builder. <code>algorithm</code> is a runtime string, matching Node's
+    own real <code>createHash('sha256')</code> API: <code>"md5"</code> |
+    <code>"sha1"</code> | <code>"sha256"</code> | <code>"sha512"</code>;
+    an unrecognized name falls back to <code>"sha256"</code> rather than
+    throwing (the same "fallback, don't crash" shape as
+    <code>Buffer.from(s, encoding)</code>'s unrecognized encoding).
+    <code>Hash.update(data)</code> (<code>Buffer</code> → <code>Hash</code>)
+    feeds bytes in, any number of times, and returns <code>self</code> for
+    chaining; <code>Hash.digest()</code> (<code>() → Buffer</code>)
+    finalizes once. <strong>Deviation from Node</strong>: <code>digest()</code>
+    returns a raw <code>Buffer</code>, not a <code>string</code> with an
+    encoding argument &mdash; call <code>.toString("hex")</code>/
+    <code>.toString("base64")</code> on the result, which composes with
+    every other <code>Buffer</code>-returning API here instead of
+    reimplementing encoding a second time.</p>
+<pre><code class="lumen">const h = crypto.createHash("sha256");
+h.update(Buffer.from("ab"));
+h.update(Buffer.from("c"));
+console.log(h.digest().toString("hex"));
+// ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad -- same as sha256("abc")</code></pre>
+  </div>
+
+  <div class="api" id="crypto-createHmac">
+    <h5><code>crypto.createHmac(algorithm, key)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">(string, <code>Buffer</code>) → <code>Hmac</code>
+    &mdash; the streaming, algorithm-selectable counterpart to
+    <code>hmacSync</code> (which stays fixed at HMAC-SHA256). Same four
+    algorithms and unrecognized-name fallback as <code>createHash</code>.
+    <code>Hmac.update(data)</code>/<code>Hmac.digest()</code> have the
+    identical shape and the same <code>Buffer</code>-return design as
+    <code>Hash</code>'s.</p>
+<pre><code class="lumen">const key = Buffer.from("key");
+const mac = crypto.createHmac("sha256", key);
+mac.update(Buffer.from("The quick brown fox jumps over the lazy dog"));
+console.log(mac.digest().toString("hex"));
+// f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8 -- same as hmacSync</code></pre>
   </div>
 
   <h4 id="url">url</h4>
@@ -2201,10 +2244,10 @@ async function main(): Promise&lt;void&gt; {
   <h4>crypto</h4>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
-    <tr><td><code>crypto.createHash(algo)</code> streaming API</td><td>needs a stateful hash-builder object; the language has no built-in equivalent yet</td></tr>
-    <tr><td><code>crypto.createHmac()</code> · <code>crypto.sign()</code>/<code>verify()</code></td><td>asymmetric/keyed crypto, a much larger surface than this milestone's scope</td></tr>
+    <tr><td><code>crypto.createCipheriv</code>/streaming AEAD</td><td>a stateful encrypt/decrypt object is a real, separate shape (associated-data ordering, partial-block buffering) from <code>createHash</code>/<code>createHmac</code>'s pure hash accumulator (spec 060); not attempted yet</td></tr>
+    <tr><td><code>crypto.sign()</code>/<code>verify()</code></td><td>asymmetric/keyed crypto, a much larger surface than this milestone's scope</td></tr>
     <tr><td><code>crypto.pbkdf2()</code> · <code>crypto.scrypt()</code></td><td>deliberately deferred rather than rushed; picking the right default cost parameters deserves its own pass</td></tr>
-    <tr><td><code>md5</code>/<code>sha1</code> as named functions</td><td>available from the same source as <code>sha256</code> if needed later</td></tr>
+    <tr><td>Algorithms beyond md5/sha1/sha256/sha512</td><td><code>createHash</code>/<code>createHmac</code> (spec 060) cover those four; sha224/sha384/blake2/blake3/etc. are a real, separable expansion once there's a concrete need</td></tr>
   </table>
 
   <h4>url</h4>
