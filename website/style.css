@@ -220,7 +220,7 @@ th { color: var(--muted); font-weight: 600; }
 /* Docs layout: sticky left menu + content (stdlib page) */
 .docs { display: grid; grid-template-columns: 190px 1fr; gap: 44px; align-items: start; }
 .docs-main { min-width: 0; }
-.docs-nav { position: sticky; top: 76px; align-self: start; }
+.docs-nav { position: sticky; top: 76px; align-self: start; max-height: calc(100vh - 96px); overflow-y: auto; }
 .docs-nav nav { display: flex; flex-direction: column; border-left: 1px solid var(--border); }
 .docs-nav a { color: var(--muted); font-size: 14px; padding: 5px 14px; border-left: 2px solid transparent; margin-left: -1px; }
 .docs-nav a:hover { color: var(--fg); text-decoration: none; border-left-color: var(--accent); }
