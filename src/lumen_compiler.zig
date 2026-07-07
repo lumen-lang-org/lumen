@@ -2686,6 +2686,31 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    Aead.decrypt(m, data.data[0..clen], tag, "", n, k) catch return LumenBuffer.__wrap("");
             \\    return LumenBuffer.__wrap(m);
             \\}
+            \\fn __cryptoPbkdf2Sync(password: *LumenBuffer, salt: *LumenBuffer, iterations: i32, keylen: i32) *LumenBuffer {
+            \\    if (iterations < 1 or keylen <= 0) return LumenBuffer.__wrap("");
+            \\    const dk = __sa().alloc(u8, @intCast(keylen)) catch return LumenBuffer.__wrap("");
+            \\    std.crypto.pwhash.pbkdf2(dk, password.data, salt.data, @intCast(iterations), std.crypto.auth.hmac.sha2.HmacSha256) catch return LumenBuffer.__wrap("");
+            \\    return LumenBuffer.__wrap(dk);
+            \\}
+            \\fn __cryptoScryptSync(password: *LumenBuffer, salt: *LumenBuffer, keylen: i32) *LumenBuffer {
+            \\    if (keylen <= 0) return LumenBuffer.__wrap("");
+            \\    const dk = __sa().alloc(u8, @intCast(keylen)) catch return LumenBuffer.__wrap("");
+            \\    // Node's own crypto.scrypt default cost parameters
+            \\    // (N=16384, r=8, p=1) -- see spec 061's "Cost parameter
+            \\    // choice" for why this is used instead of Zig's own
+            \\    // `owasp`/`interactive` presets.
+            \\    const params = std.crypto.pwhash.scrypt.Params{ .ln = 14, .r = 8, .p = 1 };
+            \\    std.crypto.pwhash.scrypt.kdf(__sa(), dk, password.data, salt.data, params) catch return LumenBuffer.__wrap("");
+            \\    return LumenBuffer.__wrap(dk);
+            \\}
+            \\fn __cryptoTimingSafeEqual(a: *LumenBuffer, b: *LumenBuffer) bool {
+            \\    if (a.data.len != b.data.len) return false;
+            \\    var acc: u8 = 0;
+            \\    for (a.data, 0..) |x, i| {
+            \\        acc |= x ^ b.data[i];
+            \\    }
+            \\    return acc == 0;
+            \\}
             \\
         );
     }

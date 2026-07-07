@@ -2099,6 +2099,72 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         call.checked_type = .buffer_type;
         return .buffer_type;
     }
+    if (std.mem.eql(u8, call.name, "pbkdf2Sync")) {
+        if (call.args.len != 4) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .i32, call.args[2], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .i32, call.args[3], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        program.needs_crypto_api = true;
+        program.needs_buffer = true;
+        call.checked_type = .buffer_type;
+        return .buffer_type;
+    }
+    if (std.mem.eql(u8, call.name, "scryptSync")) {
+        if (call.args.len != 3) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .i32, call.args[2], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        program.needs_crypto_api = true;
+        program.needs_buffer = true;
+        call.checked_type = .buffer_type;
+        return .buffer_type;
+    }
+    if (std.mem.eql(u8, call.name, "timingSafeEqual")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        program.needs_crypto_api = true;
+        program.needs_buffer = true;
+        call.checked_type = .bool;
+        return .bool;
+    }
     if (std.mem.eql(u8, call.name, "createHash")) {
         if (call.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
