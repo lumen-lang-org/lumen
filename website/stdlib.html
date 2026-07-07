@@ -1353,6 +1353,9 @@ console.log(loads[0]);</code></pre>
     <a href="#crypto-decryptSync">decryptSync</a>
     <a href="#crypto-createHash">createHash</a>
     <a href="#crypto-createHmac">createHmac</a>
+    <a href="#crypto-pbkdf2Sync">pbkdf2Sync</a>
+    <a href="#crypto-scryptSync">scryptSync</a>
+    <a href="#crypto-timingSafeEqual">timingSafeEqual</a>
   </div>
 
   <div class="api" id="crypto-randomBytes">
@@ -1479,6 +1482,44 @@ const mac = crypto.createHmac("sha256", key);
 mac.update(Buffer.from("The quick brown fox jumps over the lazy dog"));
 console.log(mac.digest().toString("hex"));
 // f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8 -- same as hmacSync</code></pre>
+  </div>
+
+  <div class="api" id="crypto-pbkdf2Sync">
+    <h5><code>crypto.pbkdf2Sync(password, salt, iterations, keylen)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">(<code>Buffer</code>, <code>Buffer</code>, int, int) →
+    <code>Buffer</code> &mdash; PBKDF2-HMAC-SHA256 key derivation. One fixed
+    PRF, no algorithm parameter, matching <code>hmacSync</code>'s own
+    "one well-chosen option" shape. <code>iterations &lt; 1</code> or
+    <code>keylen &lt;= 0</code> returns an empty <code>Buffer</code> rather
+    than throwing.</p>
+<pre><code class="lumen">const key = crypto.pbkdf2Sync(Buffer.from("password"), Buffer.from("salt"), 4096, 20);
+console.log(key.toString("hex"));
+// c5e478d59288c841aa530db6845c4c8d962893a0</code></pre>
+  </div>
+
+  <div class="api" id="crypto-scryptSync">
+    <h5><code>crypto.scryptSync(password, salt, keylen)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">(<code>Buffer</code>, <code>Buffer</code>, int) →
+    <code>Buffer</code> &mdash; scrypt key derivation with fixed cost
+    parameters (N=16384, r=8, p=1, Node's own <code>crypto.scrypt</code>
+    default). Cost parameters aren't exposed as an option in v1.
+    <code>keylen &lt;= 0</code> returns an empty <code>Buffer</code>.</p>
+<pre><code class="lumen">const key = crypto.scryptSync(Buffer.from("password"), Buffer.from("salt"), 32);
+console.log(key.length); // 32</code></pre>
+  </div>
+
+  <div class="api" id="crypto-timingSafeEqual">
+    <h5><code>crypto.timingSafeEqual(a, b)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
+    <p class="sub">(<code>Buffer</code>, <code>Buffer</code>) → bool
+    &mdash; constant-time byte comparison, for checking secrets (MACs,
+    tokens) without leaking timing information about where two values
+    first differ. <strong>Deviation from Node</strong>: a length mismatch
+    returns <code>false</code> instead of throwing &mdash; lengths aren't
+    secret, so this leaks nothing a length-mismatch throw wouldn't already
+    reveal.</p>
+<pre><code class="lumen">const a = Buffer.from("secret");
+const b = Buffer.from("secret");
+console.log(crypto.timingSafeEqual(a, b)); // true</code></pre>
   </div>
 
   <h4 id="url">url</h4>
