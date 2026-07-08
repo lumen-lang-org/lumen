@@ -417,6 +417,11 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
             for (sc.args, 0..) |it, i| c[i] = try self.cloneExpr(it);
             break :blk .{ .static_call = .{ .namespace = sc.namespace, .name = sc.name, .args = c } };
         },
+        .optional_call => |oc| blk: {
+            const c = self.arena.alloc(*ast.Expr, oc.args.len) catch return error.OutOfMemory;
+            for (oc.args, 0..) |it, i| c[i] = try self.cloneExpr(it);
+            break :blk .{ .optional_call = .{ .callee = try self.cloneExpr(oc.callee), .args = c, .optional_chain = oc.optional_chain } };
+        },
         .cast => |c| .{ .cast = .{ .inner = try self.cloneExpr(c.inner), .annotation = try self.substCur(c.annotation), .is_satisfies = c.is_satisfies } },
     };
     return p;

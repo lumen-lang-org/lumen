@@ -255,6 +255,11 @@ fn accBadRef(e: *const Expr, name: []const u8) bool {
             for (sc.args) |it| if (accBadRef(it, name)) break :blk true;
             break :blk false;
         },
+        .optional_call => |oc| blk: {
+            if (accBadRef(oc.callee, name)) break :blk true;
+            for (oc.args) |it| if (accBadRef(it, name)) break :blk true;
+            break :blk false;
+        },
         .cast => |c| accBadRef(c.inner, name),
         else => false,
     };
@@ -466,6 +471,10 @@ fn markAccExpr(e: *Expr, name: []const u8) void {
         },
         .call => |cl| for (cl.args) |it| markAccExpr(it, name),
         .static_call => |sc| for (sc.args) |it| markAccExpr(it, name),
+        .optional_call => |oc| {
+            markAccExpr(oc.callee, name);
+            for (oc.args) |it| markAccExpr(it, name);
+        },
         .cast => |c| markAccExpr(c.inner, name),
         else => {},
     }
@@ -571,6 +580,11 @@ pub fn exprUsesName(e: *const Expr, name: []const u8) bool {
         },
         .static_call => |sc| blk: {
             for (sc.args) |it| if (exprUsesName(it, name)) break :blk true;
+            break :blk false;
+        },
+        .optional_call => |oc| blk: {
+            if (exprUsesName(oc.callee, name)) break :blk true;
+            for (oc.args) |it| if (exprUsesName(it, name)) break :blk true;
             break :blk false;
         },
         .cast => |c| exprUsesName(c.inner, name),

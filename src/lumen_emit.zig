@@ -1349,6 +1349,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try emitExpr(idx.value, w, arena);
             try w.appendSlice(arena, "))]");
         },
+        .optional_call => |oc| {
+            // a?.() -> (if (a) |__oc| @as(?R, __oc.call(__oc.ctx, args...)) else
+            // null). A Lumen closure value is a `{ ctx, call }` struct (spec
+            // 006), not a bare Zig function pointer, so the call-through goes
+            // via `.call(.ctx, ...)`, matching the non-optional closure `call`
+            // case's `f.call(f.ctx, ...)` emission (~line 233).
+            const rt = try types.zigName(arena, oc.chain_result_type orelse .none);
+            try w.appendSlice(arena, "(if (");
+            try emitExpr(oc.callee, w, arena);
+            try w.print(arena, ") |__oc| @as(?{s}, __oc.call(__oc.ctx", .{rt});
+            for (oc.args) |arg| {
+                try w.appendSlice(arena, ", ");
+                try emitExpr(arg, w, arena);
+            }
+            try w.appendSlice(arena, ")) else null)");
+        },
         .cast => |c| {
             // `expr as T` is a checker-only assertion; the runtime value is the
             // same flat struct / scalar, so emit the operand unchanged.

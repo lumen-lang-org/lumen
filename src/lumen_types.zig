@@ -209,7 +209,7 @@ pub fn inferExprType(e: *const ast.Expr) ?Type {
         },
         .template => .string,
         .await_expr => null, // resolved type comes from the checker (Promise<T> -> T)
-        .array, .spread, .tuple_lit, .var_ref, .obj, .field, .index, .call, .static_call, .coalesce, .arrow, .this_expr, .new_expr, .method_call, .super_call, .cast => null,
+        .array, .spread, .tuple_lit, .var_ref, .obj, .field, .index, .call, .optional_call, .static_call, .coalesce, .arrow, .this_expr, .new_expr, .method_call, .super_call, .cast => null,
     };
 }
 
