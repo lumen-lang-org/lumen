@@ -712,6 +712,43 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return elem_result;
         },
         .obj => null,
+        .optional_call => |*oc| {
+            // `a?.()` (spec 062): calling a possibly-null closure value
+            // directly. Narrower than `a?.b`/`a?.[i]`'s "any nullable
+            // value" -- the unwrapped type must specifically be a
+            // `func_type`, not just non-optional.
+            const callee_type = self.exprType(program, oc.callee, line, col) orelse return null;
+            if (callee_type != .optional) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            const inner = callee_type.optional.*;
+            if (inner != .func_type) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            const sig = inner.func_type;
+            if (oc.args.len != sig.params.len) {
+                _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                return null;
+            }
+            for (oc.args, sig.params) |arg, pt| {
+                self.ensureAssignable(program, pt, arg, line, col) catch {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                };
+            }
+            // A void-returning callee has no meaningful `?void` -- reject,
+            // matching spec 052's own precedent for `a?.b()` on a void method.
+            if (sig.ret.* == .void) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            oc.chain_result_type = sig.ret.*;
+            const p = self.arena.create(types.Type) catch return null;
+            p.* = sig.ret.*;
+            return .{ .optional = p };
+        },
         .call => |*call| {
             if (std.mem.eql(u8, call.name, "Error")) {
                 if (call.args.len != 1) {

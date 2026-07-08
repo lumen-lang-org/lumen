@@ -147,6 +147,11 @@ pub fn exprUsesThis(e: *const Expr) bool {
             for (sc.args) |it| if (exprUsesThis(it)) break :blk true;
             break :blk false;
         },
+        .optional_call => |oc| blk: {
+            if (exprUsesThis(oc.callee)) break :blk true;
+            for (oc.args) |it| if (exprUsesThis(it)) break :blk true;
+            break :blk false;
+        },
         .cast => |c| exprUsesThis(c.inner),
     };
 }

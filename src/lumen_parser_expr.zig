@@ -404,11 +404,26 @@ pub fn parsePostfixFrom(self: *Parser, base: *Expr) CompileError!*Expr {
                 e = try self.node(.{ .index = .{ .obj = e, .value = index_value, .optional_chain = true } });
                 continue;
             }
+            // Optional call `a?.()` (spec 062) -- calling the expression
+            // built up so far directly, no name involved. Checked before the
+            // ident-only guard so `(` doesn't require a preceding method name.
+            if (self.isOp('(')) {
+                try self.expectOp('(');
+                var call_args: std.ArrayListUnmanaged(*Expr) = .empty;
+                while (!self.isOp(')')) {
+                    try call_args.append(self.arena, try self.parseSpreadOrExpr());
+                    if (self.isOp(',')) try self.advance() else break;
+                }
+                try self.expectOp(')');
+                e = try self.node(.{ .optional_call = .{ .callee = e, .args = try call_args.toOwnedSlice(self.arena), .optional_chain = true } });
+                continue;
+            }
             if (self.cur != .ident) return error.ParseError;
             const name = self.cur.ident;
             try self.advance();
             // Optional method call `a?.b(args)` (spec 052). `a?.()` (an
-            // optional call on the value itself) is deferred.
+            // optional call on the value itself, no name) is handled above,
+            // before this ident guard (spec 062).
             if (self.isOp('(')) {
                 try self.expectOp('(');
                 var args: std.ArrayListUnmanaged(*Expr) = .empty;
