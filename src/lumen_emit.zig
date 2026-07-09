@@ -361,8 +361,40 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, "))");
                 }
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "asin") or std.mem.eql(u8, cl.name, "acos") or std.mem.eql(u8, cl.name, "atan") or std.mem.eql(u8, cl.name, "cbrt"))) {
+                const arg_type = cl.checked_arg_type orelse return error.ParseError;
+                try w.print(arena, "std.math.{s}(", .{cl.name});
+                if (arg_type == .f64) {
+                    try w.appendSlice(arena, "@as(f64, ");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.append(arena, ')');
+                } else {
+                    try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.appendSlice(arena, "))");
+                }
+                try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "atan2") or std.mem.eql(u8, cl.name, "hypot"))) {
+                const arg_type = cl.checked_arg_type orelse return error.ParseError;
+                try w.print(arena, "std.math.{s}(", .{cl.name});
+                if (arg_type == .f64) {
+                    try w.appendSlice(arena, "@as(f64, ");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.appendSlice(arena, "), @as(f64, ");
+                    try emitExpr(cl.args[1], w, arena);
+                    try w.append(arena, ')');
+                } else {
+                    try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.appendSlice(arena, ")), @as(f64, @floatFromInt(");
+                    try emitExpr(cl.args[1], w, arena);
+                    try w.appendSlice(arena, "))");
+                }
+                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "PI")) {
                 try w.appendSlice(arena, "@as(f64, std.math.pi)");
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "E")) {
+                try w.appendSlice(arena, "@as(f64, std.math.e)");
             } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "isEmpty")) {
                 try w.append(arena, '(');
                 try emitExpr(cl.args[0], w, arena);

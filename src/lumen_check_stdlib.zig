@@ -2924,10 +2924,44 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = .f64;
         return .f64;
     }
-    // Math.PI() -- a zero-arg function, not a property, the same deviation
-    // as path.sep()/process.platform() (no static-namespace constant-
-    // property mechanism yet).
-    if (std.mem.eql(u8, call.name, "PI")) {
+    // Unary std.math functions (no direct Zig builtin): inverse trig + cbrt.
+    if (std.mem.eql(u8, call.name, "asin") or std.mem.eql(u8, call.name, "acos") or
+        std.mem.eql(u8, call.name, "atan") or std.mem.eql(u8, call.name, "cbrt"))
+    {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const arg_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isNumeric(arg_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_arg_type = arg_type;
+        call.checked_type = .f64;
+        return .f64;
+    }
+    // Binary std.math functions. Same-type args as pow/max/min: simpler than
+    // tracking two independent arg types just to pick each one's coercion.
+    if (std.mem.eql(u8, call.name, "atan2") or std.mem.eql(u8, call.name, "hypot")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const a_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        const b_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        if (!types.isNumeric(a_type) or !types.same(a_type, b_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_arg_type = a_type;
+        call.checked_type = .f64;
+        return .f64;
+    }
+    // Math.PI() / Math.E() -- zero-arg functions, not properties, the same
+    // deviation as path.sep()/process.platform() (no static-namespace
+    // constant-property mechanism yet).
+    if (std.mem.eql(u8, call.name, "PI") or std.mem.eql(u8, call.name, "E")) {
         if (call.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
