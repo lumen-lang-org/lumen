@@ -379,6 +379,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "fromCharCode")) {
+                g_from_char_code_seq += 1;
+                const fcc_lbl = try std.fmt.allocPrint(arena, "__fcc{d}", .{g_from_char_code_seq});
+                try w.print(arena, "({s}: {{ const __b = __sa().alloc(u8, 1) catch unreachable; __b[0] = @intCast((", .{fcc_lbl});
+                try emitExpr(cl.args[0], w, arena);
+                try w.print(arena, ") & 0xFF); break :{s} @as([]const u8, __b); }})", .{fcc_lbl});
             } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "isEmpty")) {
                 try w.append(arena, '(');
                 try emitExpr(cl.args[0], w, arena);
@@ -1389,6 +1395,10 @@ pub const CompileOptions = struct {
 
 /// Collect the inheritance chain from a root ancestor down to `c` (inclusive).
 var g_program: ?*const Program = null;
+
+// Gives each emitted `String.fromCharCode(...)` block a unique label so nested
+// calls don't collide.
+var g_from_char_code_seq: usize = 0;
 
 // The Zig spelling of an async function's resolved value type while emitting its
 // body, so a `return v;` lowers to `return __promiseResolved(<T>, v);`. Null

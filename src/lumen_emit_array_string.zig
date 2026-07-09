@@ -264,6 +264,16 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         return;
     }
 
+    if (eq(u8, name, "trimStart")) {
+        try w.print(arena, "break :{s} @as([]const u8, std.mem.trimStart(u8, __s, \" \\t\\r\\n\")); }})", .{lbl});
+        return;
+    }
+
+    if (eq(u8, name, "trimEnd")) {
+        try w.print(arena, "break :{s} @as([]const u8, std.mem.trimEnd(u8, __s, \" \\t\\r\\n\")); }})", .{lbl});
+        return;
+    }
+
     if (eq(u8, name, "repeat")) {
         try A.idx("__n", mc.args[0], w, arena);
         try w.appendSlice(arena, "const __count: usize = if (__n < 0) 0 else @intCast(__n); ");
@@ -283,12 +293,33 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         return;
     }
 
+    if (eq(u8, name, "padEnd")) {
+        try A.idx("__target", mc.args[0], w, arena);
+        try w.appendSlice(arena, "const __pad: []const u8 = ");
+        try emitExpr(mc.args[1], w, arena);
+        try w.appendSlice(arena, "; const __goal: usize = if (__target < 0) 0 else @intCast(__target); ");
+        try w.appendSlice(arena, "var __buf: std.ArrayListUnmanaged(u8) = .empty; __buf.appendSlice(__sa(), __s) catch unreachable; ");
+        try w.appendSlice(arena, "if (__goal > __s.len and __pad.len > 0) { var __need: usize = __goal - __s.len; while (__need > 0) { const __take = if (__need < __pad.len) __need else __pad.len; __buf.appendSlice(__sa(), __pad[0..__take]) catch unreachable; __need -= __take; } } ");
+        try w.print(arena, "break :{s} @as([]const u8, __buf.items); }})", .{lbl});
+        return;
+    }
+
     if (eq(u8, name, "replace")) {
         try w.appendSlice(arena, "const __from: []const u8 = ");
         try emitExpr(mc.args[0], w, arena);
         try w.appendSlice(arena, "; const __to: []const u8 = ");
         try emitExpr(mc.args[1], w, arena);
         try w.appendSlice(arena, "; var __buf: std.ArrayListUnmanaged(u8) = .empty; if (__from.len > 0) { if (std.mem.indexOf(u8, __s, __from)) |__p| { __buf.appendSlice(__sa(), __s[0..__p]) catch unreachable; __buf.appendSlice(__sa(), __to) catch unreachable; __buf.appendSlice(__sa(), __s[__p + __from.len ..]) catch unreachable; } else { __buf.appendSlice(__sa(), __s) catch unreachable; } } else { __buf.appendSlice(__sa(), __s) catch unreachable; } ");
+        try w.print(arena, "break :{s} @as([]const u8, __buf.items); }})", .{lbl});
+        return;
+    }
+
+    if (eq(u8, name, "replaceAll")) {
+        try w.appendSlice(arena, "const __from: []const u8 = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.appendSlice(arena, "; const __to: []const u8 = ");
+        try emitExpr(mc.args[1], w, arena);
+        try w.appendSlice(arena, "; var __buf: std.ArrayListUnmanaged(u8) = .empty; if (__from.len > 0) { var __rest: []const u8 = __s; while (std.mem.indexOf(u8, __rest, __from)) |__p| { __buf.appendSlice(__sa(), __rest[0..__p]) catch unreachable; __buf.appendSlice(__sa(), __to) catch unreachable; __rest = __rest[__p + __from.len ..]; } __buf.appendSlice(__sa(), __rest) catch unreachable; } else { __buf.appendSlice(__sa(), __s) catch unreachable; } ");
         try w.print(arena, "break :{s} @as([]const u8, __buf.items); }})", .{lbl});
         return;
     }

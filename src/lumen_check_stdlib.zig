@@ -555,10 +555,14 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         if (eq(u8, name, "substring")) break :blk .{ .min = 1, .max = 2, .kinds = &.{ .int, .int }, .result = .string };
         if (eq(u8, name, "repeat")) break :blk .{ .min = 1, .max = 1, .kinds = &.{.int}, .result = .string };
         if (eq(u8, name, "padStart")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .int, .string }, .result = .string };
+        if (eq(u8, name, "padEnd")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .int, .string }, .result = .string };
         if (eq(u8, name, "replace")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .string, .string }, .result = .string };
+        if (eq(u8, name, "replaceAll")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .string, .string }, .result = .string };
         if (eq(u8, name, "toUpperCase")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "toLowerCase")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "trim")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
+        if (eq(u8, name, "trimStart")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
+        if (eq(u8, name, "trimEnd")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "split")) break :blk .{ .min = 1, .max = 1, .kinds = &.{.string}, .result = types.arrayOf(.string).? };
         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
         return null;
@@ -2888,6 +2892,19 @@ pub fn stringCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         }
         call.checked_type = .bool;
         return .bool;
+    }
+    if (std.mem.eql(u8, call.name, "fromCharCode")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const arg_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isInteger(arg_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_type = .string;
+        return .string;
     }
     if (std.mem.eql(u8, call.name, "contains") or std.mem.eql(u8, call.name, "startsWith")) {
         if (call.args.len != 2) {
