@@ -157,8 +157,8 @@
     <tr><td><code>a.filter(fn)</code></td><td>((T) =&gt; bool) → T[]</td></tr>
     <tr><td><code>a.reduce(fn, init)</code></td><td>(((U, T) =&gt; U), U) → U</td></tr>
     <tr><td><code>a.forEach(fn)</code></td><td>((T) =&gt; void) → void</td></tr>
-    <tr><td><code>a.find(fn)</code> · <code>a.some(fn)</code> · <code>a.every(fn)</code></td><td>predicate → T · bool · bool</td></tr>
-    <tr><td><code>a.indexOf(x)</code> · <code>a.includes(x)</code></td><td>→ int · bool</td></tr>
+    <tr><td><code>a.find(fn)</code> · <code>a.findIndex(fn)</code> · <code>a.some(fn)</code> · <code>a.every(fn)</code></td><td>predicate → T · int · bool · bool</td></tr>
+    <tr><td><code>a.indexOf(x)</code> · <code>a.lastIndexOf(x)</code> · <code>a.includes(x)</code></td><td>→ int · int · bool</td></tr>
     <tr><td><code>a.join(sep)</code></td><td>(string[], string) → string</td></tr>
     <tr><td><code>Array.isEmpty(a)</code></td><td>T[] → bool</td></tr>
   </table>

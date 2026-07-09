@@ -120,12 +120,30 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "findIndex")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; const __cb = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.print(arena, "; var __idx: i32 = -1; for (__arr, 0..) |__e, __i| {{ if (__cb.call(__cb.ctx, __e)) {{ __idx = @as(i32, @intCast(__i)); break; }} }} break :{s} __idx; }})", .{lbl});
+        return;
+    }
+
     if (eq(u8, name, "indexOf")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; var __idx: i32 = -1; for (__arr, 0..) |__e, __i| { if (");
         try emitElemEq(elem, mc.args[0], w, arena);
         try w.print(arena, ") {{ __idx = @as(i32, @intCast(__i)); break; }} }} break :{s} __idx; }})", .{lbl});
+        return;
+    }
+
+    if (eq(u8, name, "lastIndexOf")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; var __idx: i32 = -1; for (__arr, 0..) |__e, __i| { if (");
+        try emitElemEq(elem, mc.args[0], w, arena);
+        try w.print(arena, ") {{ __idx = @as(i32, @intCast(__i)); }} }} break :{s} __idx; }})", .{lbl});
         return;
     }
 

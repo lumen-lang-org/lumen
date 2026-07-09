@@ -114,8 +114,23 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return acc;
     }
 
-    // indexOf(x: T): int  /  includes(x: T): bool
-    if (eq(u8, name, "indexOf") or eq(u8, name, "includes")) {
+    // findIndex((T) => bool): int  — first matching index, or -1.
+    if (eq(u8, name, "findIndex")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const want = self.makeFuncType(&.{elem}, .bool) orelse return null;
+        self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        mc.array_result_type = .i32;
+        return .i32;
+    }
+
+    // indexOf(x: T): int  /  lastIndexOf(x: T): int  /  includes(x: T): bool
+    if (eq(u8, name, "indexOf") or eq(u8, name, "lastIndexOf") or eq(u8, name, "includes")) {
         if (mc.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
