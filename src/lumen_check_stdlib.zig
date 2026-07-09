@@ -144,6 +144,20 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // concat(other: T[]): T[]  — a new array, both sources untouched.
+    if (eq(u8, name, "concat")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, obj_type, mc.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        mc.array_result_type = obj_type;
+        return obj_type;
+    }
+
     // reverse(): T[]  — a new array, source untouched (arrays are immutable).
     if (eq(u8, name, "reverse")) {
         if (mc.args.len != 0) {
