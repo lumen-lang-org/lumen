@@ -156,6 +156,37 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "reverse")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len) catch unreachable; for (__arr, 0..) |__e, __i| {{ __r[__arr.len - 1 - __i] = __e; }} break :{s} @as([]const {s}, __r); }})", .{ elem_zig, lbl, elem_zig });
+        return;
+    }
+
+    if (eq(u8, name, "slice")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; const __len: isize = @intCast(__arr.len); const __a: isize = @intCast(");
+        if (mc.args.len >= 1) {
+            try emitExpr(mc.args[0], w, arena);
+        } else {
+            try w.appendSlice(arena, "@as(isize, 0)");
+        }
+        try w.appendSlice(arena, "); const __b: isize = ");
+        if (mc.args.len == 2) {
+            try w.appendSlice(arena, "@intCast(");
+            try emitExpr(mc.args[1], w, arena);
+            try w.appendSlice(arena, ")");
+        } else {
+            try w.appendSlice(arena, "__len");
+        }
+        try w.appendSlice(arena, "; const __c0: isize = if (__a < 0) 0 else if (__a > __len) __len else __a; ");
+        try w.appendSlice(arena, "const __c1: isize = if (__b < 0) 0 else if (__b > __len) __len else __b; ");
+        try w.appendSlice(arena, "const __hi: isize = if (__c1 < __c0) __c0 else __c1; ");
+        try w.print(arena, "break :{s} @as([]const {s}, __arr[@intCast(__c0)..@intCast(__hi)]); }})", .{ lbl, elem_zig });
+        return;
+    }
+
     if (eq(u8, name, "join")) {
         const spec = switch (elem) {
             .string, .string_literal_union => "{s}",

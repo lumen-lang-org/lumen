@@ -144,6 +144,34 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // reverse(): T[]  — a new array, source untouched (arrays are immutable).
+    if (eq(u8, name, "reverse")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        mc.array_result_type = obj_type;
+        return obj_type;
+    }
+
+    // slice(start: int, end?: int): T[]  — clamped like string slice, no
+    // negative-from-end indexing (consistent with spec 014).
+    if (eq(u8, name, "slice")) {
+        if (mc.args.len > 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        for (mc.args) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.isInteger(at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        mc.array_result_type = obj_type;
+        return obj_type;
+    }
+
     // join(sep?: string): string
     if (eq(u8, name, "join")) {
         if (mc.args.len > 1) {
