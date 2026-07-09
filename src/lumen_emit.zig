@@ -348,7 +348,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, "))");
                 }
                 try w.append(arena, ')');
-            } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "log") or std.mem.eql(u8, cl.name, "sin") or std.mem.eql(u8, cl.name, "cos"))) {
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "log") or std.mem.eql(u8, cl.name, "sin") or std.mem.eql(u8, cl.name, "cos") or std.mem.eql(u8, cl.name, "tan") or std.mem.eql(u8, cl.name, "exp") or std.mem.eql(u8, cl.name, "log2") or std.mem.eql(u8, cl.name, "log10"))) {
                 const arg_type = cl.checked_arg_type orelse return error.ParseError;
                 try w.print(arena, "@{s}(", .{cl.name});
                 if (arg_type == .f64) {
