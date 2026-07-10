@@ -1333,22 +1333,38 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 try w.append(arena, ')');
             } else if (mc.number_method) {
-                // toFixed(digits): format the numeric receiver as f64 with a
-                // runtime precision.
                 const recv_type = mc.array_elem_type orelse return error.ParseError;
-                try w.appendSlice(arena, "(std.fmt.allocPrint(__sa(), \"{d:.[1]}\", .{ ");
-                if (recv_type == .f64) {
-                    try w.appendSlice(arena, "@as(f64, ");
-                    try emitExpr(mc.obj, w, arena);
-                    try w.append(arena, ')');
-                } else {
-                    try w.appendSlice(arena, "@as(f64, @floatFromInt(");
-                    try emitExpr(mc.obj, w, arena);
-                    try w.appendSlice(arena, "))");
+                if (std.mem.eql(u8, mc.name, "toFixed")) {
+                    // Format the numeric receiver as f64 with a runtime precision.
+                    try w.appendSlice(arena, "(std.fmt.allocPrint(__sa(), \"{d:.[1]}\", .{ ");
+                    if (recv_type == .f64) {
+                        try w.appendSlice(arena, "@as(f64, ");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.append(arena, ')');
+                    } else {
+                        try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.appendSlice(arena, "))");
+                    }
+                    try w.appendSlice(arena, ", @as(usize, @intCast(");
+                    try emitExpr(mc.args[0], w, arena);
+                    try w.appendSlice(arena, ")) }) catch unreachable)");
+                } else { // toString
+                    if (mc.args.len == 1) {
+                        // Integer receiver, arbitrary radix, via std.fmt.printInt.
+                        g_number_tostring_seq += 1;
+                        try w.print(arena, "(__nts{d}: {{ var __b: [72]u8 = undefined; const __n = std.fmt.printInt(&__b, @as(i64, @intCast(", .{g_number_tostring_seq});
+                        try emitExpr(mc.obj, w, arena);
+                        try w.appendSlice(arena, ")), @as(u8, @intCast(");
+                        try emitExpr(mc.args[0], w, arena);
+                        try w.print(arena, ")), .lower, .{{}}); break :__nts{d} @as([]const u8, __sa().dupe(u8, __b[0..__n]) catch unreachable); }})", .{g_number_tostring_seq});
+                    } else {
+                        // Base-10 decimal for any number.
+                        try w.appendSlice(arena, "(std.fmt.allocPrint(__sa(), \"{d}\", .{ ");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.appendSlice(arena, " }) catch unreachable)");
+                    }
                 }
-                try w.appendSlice(arena, ", @as(usize, @intCast(");
-                try emitExpr(mc.args[0], w, arena);
-                try w.appendSlice(arena, ")) }) catch unreachable)");
             } else if (mc.array_result_type != null) {
                 try emitArrayMethod(mc, w, arena);
             } else if (mc.is_static) {
@@ -1569,6 +1585,9 @@ var g_program: ?*const Program = null;
 // Gives each emitted `String.fromCharCode(...)` block a unique label so nested
 // calls don't collide.
 var g_from_char_code_seq: usize = 0;
+
+// Unique labels for `number.toString(radix)` blocks.
+var g_number_tostring_seq: usize = 0;
 
 // The Zig spelling of an async function's resolved value type while emitting its
 // body, so a `return v;` lowers to `return __promiseResolved(<T>, v);`. Null

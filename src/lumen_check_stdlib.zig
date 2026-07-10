@@ -775,6 +775,22 @@ pub fn numberInstanceMethod(self: *Checker, program: *ast.Program, mc: anytype, 
         }
         return .string;
     }
+    // toString(radix?): base-10 decimal for any number; with a radix, the
+    // receiver must be an integer (arbitrary-base int formatting).
+    if (std.mem.eql(u8, name, "toString")) {
+        if (mc.args.len > 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        if (mc.args.len == 1) {
+            const rt = self.exprType(program, mc.args[0], line, col) orelse return null;
+            if (!types.isInteger(rt) or !types.isInteger(obj_type)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        return .string;
+    }
     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
     return null;
 }
