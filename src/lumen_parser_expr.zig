@@ -515,6 +515,11 @@ pub fn looksLikeArrow(self: *Parser) bool {
         if (self.isOp(')')) depth -= 1;
         self.advance() catch return false;
     }
+    // An optional return-type annotation `): R =>` precedes the arrow.
+    if (self.isOp(':')) {
+        self.advance() catch return false;
+        _ = self.parseTypeAnnotation() catch return false;
+    }
     return self.isOp2("=>");
 }
 
