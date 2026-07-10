@@ -571,18 +571,49 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             // Built-in container instantiation `new Map<K,V>()` / `new Set<T>()`.
             if (std.mem.eql(u8, ne.class_name, "Map") and self.classes.get("Map") == null) {
-                if (ne.type_args.len != 2) {
+                const k = self.arena.create(types.Type) catch return null;
+                const v = self.arena.create(types.Type) catch return null;
+                if (ne.type_args.len == 2) {
+                    k.* = self.typeFromAnnotation(ne.type_args[0], line, col) catch return null;
+                    v.* = self.typeFromAnnotation(ne.type_args[1], line, col) catch return null;
+                } else if (ne.type_args.len != 0) {
                     _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
                     return null;
                 }
-                if (ne.args.len != 0) {
+                // Optional entries initializer: an array literal of `[key, value]`
+                // pairs, `new Map([["a", 1], ["b", 2]])`.
+                if (ne.args.len == 1) {
+                    if (ne.args[0].* != .array) {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
+                    for (ne.args[0].array.items, 0..) |entry, ei| {
+                        if (entry.* != .array or entry.array.items.len != 2) {
+                            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                            return null;
+                        }
+                        const kt = self.exprType(program, entry.array.items[0], line, col) orelse return null;
+                        const vt = self.exprType(program, entry.array.items[1], line, col) orelse return null;
+                        if (ne.type_args.len == 0 and ei == 0) {
+                            // Infer K/V from the first entry.
+                            k.* = kt;
+                            v.* = vt;
+                        } else if (!types.same(k.*, kt) or !types.same(v.*, vt)) {
+                            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                            return null;
+                        }
+                    }
+                    if (ne.type_args.len == 0 and ne.args[0].array.items.len == 0) {
+                        _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
+                        return null;
+                    }
+                } else if (ne.args.len != 0) {
                     _ = self.fail(line, col, "E_ARG_COUNT") catch {};
                     return null;
+                } else if (ne.type_args.len == 0) {
+                    _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
+                    return null;
                 }
-                const k = self.arena.create(types.Type) catch return null;
-                const v = self.arena.create(types.Type) catch return null;
-                k.* = self.typeFromAnnotation(ne.type_args[0], line, col) catch return null;
-                v.* = self.typeFromAnnotation(ne.type_args[1], line, col) catch return null;
                 const m = self.arena.create(types.MapType) catch return null;
                 m.* = .{ .key = k, .value = v };
                 const ct = types.Type{ .map_type = m };

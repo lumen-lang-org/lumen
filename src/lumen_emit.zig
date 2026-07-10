@@ -1489,6 +1489,21 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.print(arena, "; for (__src) |__e| {{ __c.add(__e); }} break :__seti{d} __c; }})", .{s});
                     return;
                 }
+                // `new Map([[k, v], ...])`: init then set each entry.
+                if (ct == .map_type and ne.args.len == 1 and ne.args[0].* == .array) {
+                    g_global_pred_seq += 1;
+                    const s = g_global_pred_seq;
+                    try w.print(arena, "(__mapi{d}: {{ const __c = {s}.__init(); ", .{ s, tname });
+                    for (ne.args[0].array.items) |entry| {
+                        try w.appendSlice(arena, "__c.set(");
+                        try emitExpr(entry.array.items[0], w, arena);
+                        try w.appendSlice(arena, ", ");
+                        try emitExpr(entry.array.items[1], w, arena);
+                        try w.appendSlice(arena, "); ");
+                    }
+                    try w.print(arena, "break :__mapi{d} __c; }})", .{s});
+                    return;
+                }
                 try w.print(arena, "{s}.__init()", .{tname});
                 return;
             }
