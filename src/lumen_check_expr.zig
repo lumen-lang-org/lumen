@@ -33,6 +33,17 @@ pub fn checkCbArg(self: *Checker, program: *ast.Program, e: *ast.Expr, hint: []c
     return t;
 }
 
+/// Wrap an expression in the runtime `String(...)` conversion so a numeric or
+/// boolean operand of a string `+` becomes a string. Reuses the global
+/// String() codegen (a comptime type switch), which needs no arg type recorded.
+pub fn wrapStringify(self: *Checker, e: *ast.Expr) !*ast.Expr {
+    const args = try self.arena.alloc(*ast.Expr, 1);
+    args[0] = e;
+    const node = try self.arena.create(ast.Expr);
+    node.* = .{ .call = .{ .name = "String", .args = args, .is_global_parse = true } };
+    return node;
+}
+
 pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, col: u32) ?types.Type {
     return switch (e.*) {
         .var_ref => |*ref| blk: {
@@ -117,6 +128,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (bin.op == '+' and types.same(.string, left_type) and types.same(.string, right_type)) {
                 bin.checked_type = .string;
                 return .string;
+            }
+            // TS-style `+`: if either operand is a string, the expression is a
+            // string concatenation; a number/bool operand is coerced to string
+            // (`"n=" + 1` -> "n=1"). Wrap the non-string side in the runtime
+            // String() conversion so the concat sees two strings.
+            if (bin.op == '+' and (types.isStringLike(left_type) or types.isStringLike(right_type))) {
+                const l_ok = types.isStringLike(left_type) or types.isNumeric(left_type) or left_type == .bool;
+                const r_ok = types.isStringLike(right_type) or types.isNumeric(right_type) or right_type == .bool;
+                if (l_ok and r_ok) {
+                    if (!types.isStringLike(left_type)) bin.l = self.wrapStringify(bin.l) catch return null;
+                    if (!types.isStringLike(right_type)) bin.r = self.wrapStringify(bin.r) catch return null;
+                    bin.checked_type = .string;
+                    return .string;
+                }
             }
             // Bitwise and shift operators require integer operands.
             if (bin.op == '&' or bin.op == '|' or bin.op == '^' or bin.op == 'L' or bin.op == 'R') {
