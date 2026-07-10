@@ -427,7 +427,14 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         try w.appendSlice(arena, "; var __parts: std.ArrayListUnmanaged([]const u8) = .empty; ");
         try w.appendSlice(arena, "if (__sep.len == 0) { for (__s) |*__cp| __parts.append(__sa(), __cp[0..1]) catch unreachable; } ");
         try w.appendSlice(arena, "else { var __it = std.mem.splitSequence(u8, __s, __sep); while (__it.next()) |__seg| __parts.append(__sa(), __seg) catch unreachable; } ");
-        try w.print(arena, "break :{s} @as([]const []const u8, __parts.items); }})", .{lbl});
+        if (mc.args.len == 2) {
+            try w.appendSlice(arena, "const __lim: isize = @intCast(");
+            try emitExpr(mc.args[1], w, arena);
+            try w.appendSlice(arena, "); const __cap: usize = if (__lim < 0) __parts.items.len else @intCast(__lim); const __n: usize = if (__cap < __parts.items.len) __cap else __parts.items.len; ");
+            try w.print(arena, "break :{s} @as([]const []const u8, __parts.items[0..__n]); }})", .{lbl});
+        } else {
+            try w.print(arena, "break :{s} @as([]const []const u8, __parts.items); }})", .{lbl});
+        }
         return;
     }
 
