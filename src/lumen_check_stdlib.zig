@@ -455,10 +455,13 @@ pub fn mapMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             return null;
         }
         const want = self.makeFuncType(&.{ value, key }, .void) orelse return null;
+        self.arrow_param_hint = &.{ value, key };
         self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+            self.arrow_param_hint = null;
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
+        self.arrow_param_hint = null;
         return .void;
     }
     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
@@ -518,10 +521,13 @@ pub fn setMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             return null;
         }
         const want = self.makeFuncType(&.{elem}, .void) orelse return null;
+        self.arrow_param_hint = &.{elem};
         self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+            self.arrow_param_hint = null;
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
+        self.arrow_param_hint = null;
         return .void;
     }
     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
