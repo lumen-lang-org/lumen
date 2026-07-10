@@ -445,7 +445,8 @@ pub fn setMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
         };
         return .bool;
     }
-    if (eq(u8, name, "values")) {
+    // values() / keys() -- in a Set both yield the elements in insertion order.
+    if (eq(u8, name, "values") or eq(u8, name, "keys")) {
         if (mc.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;

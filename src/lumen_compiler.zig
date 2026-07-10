@@ -380,6 +380,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\        fn size(self: *Self) i32 { return @intCast(self.items_.items.len); }
             \\        fn clear(self: *Self) void { self.items_.clearRetainingCapacity(); }
             \\        fn values(self: *Self) []const T { return self.items_.items; }
+            \\        fn keys(self: *Self) []const T { return self.items_.items; }
             \\        fn forEach(self: *Self, cb: anytype) void {
             \\            for (self.items_.items) |v| { _ = cb.call(cb.ctx, v); }
             \\        }
