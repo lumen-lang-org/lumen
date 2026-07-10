@@ -437,6 +437,40 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "@as(?f64, std.fmt.parseFloat(f64, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ") catch null)");
+            } else if (std.mem.eql(u8, cl.namespace, "Number") and (std.mem.eql(u8, cl.name, "isInteger") or std.mem.eql(u8, cl.name, "isFinite") or std.mem.eql(u8, cl.name, "isNaN"))) {
+                // Evaluate the argument as f64 (so the check works uniformly for
+                // int and float inputs, and side effects still run).
+                const arg_type = cl.checked_arg_type orelse return error.ParseError;
+                const F = struct {
+                    fn emit(ex: anytype, aty: anytype, ww: *std.ArrayListUnmanaged(u8), ar: std.mem.Allocator) CompileError!void {
+                        if (aty == .f64) {
+                            try ww.appendSlice(ar, "@as(f64, ");
+                            try emitExpr(ex, ww, ar);
+                            try ww.append(ar, ')');
+                        } else {
+                            try ww.appendSlice(ar, "@as(f64, @floatFromInt(");
+                            try emitExpr(ex, ww, ar);
+                            try ww.appendSlice(ar, "))");
+                        }
+                    }
+                };
+                if (std.mem.eql(u8, cl.name, "isNaN")) {
+                    try w.appendSlice(arena, "std.math.isNan(");
+                    try F.emit(cl.args[0], arg_type, w, arena);
+                    try w.append(arena, ')');
+                } else if (std.mem.eql(u8, cl.name, "isFinite")) {
+                    try w.appendSlice(arena, "std.math.isFinite(");
+                    try F.emit(cl.args[0], arg_type, w, arena);
+                    try w.append(arena, ')');
+                } else { // isInteger
+                    try w.appendSlice(arena, "(blk_ni: { const __v: f64 = ");
+                    try F.emit(cl.args[0], arg_type, w, arena);
+                    try w.appendSlice(arena, "; break :blk_ni (std.math.isFinite(__v) and @floor(__v) == __v); })");
+                }
+            } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "EPSILON")) {
+                try w.appendSlice(arena, "@as(f64, std.math.floatEps(f64))");
+            } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "MAX_VALUE")) {
+                try w.appendSlice(arena, "@as(f64, std.math.floatMax(f64))");
             } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "compare")) {
                 try w.appendSlice(arena, "@as(i32, switch (std.mem.order(u8, ");
                 try emitExpr(cl.args[0], w, arena);

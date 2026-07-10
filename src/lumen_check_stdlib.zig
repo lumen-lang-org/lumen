@@ -725,6 +725,30 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
 /// when the whole string is not a valid number. Strict (the entire string must
 /// parse), unlike JavaScript's lenient prefix parse.
 pub fn numberCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    // Predicates on a numeric value: isInteger / isFinite / isNaN -> bool.
+    if (std.mem.eql(u8, call.name, "isInteger") or std.mem.eql(u8, call.name, "isFinite") or std.mem.eql(u8, call.name, "isNaN")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const at = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isNumeric(at)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_arg_type = at;
+        call.checked_type = .bool;
+        return .bool;
+    }
+    // Zero-arg float constants: EPSILON / MAX_VALUE.
+    if (std.mem.eql(u8, call.name, "EPSILON") or std.mem.eql(u8, call.name, "MAX_VALUE")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        call.checked_type = .f64;
+        return .f64;
+    }
     const is_int = std.mem.eql(u8, call.name, "parseInt");
     const is_float = std.mem.eql(u8, call.name, "parseFloat");
     if (!is_int and !is_float) {
