@@ -399,12 +399,15 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try body.appendSlice(arena, ";\n");
             for (d.bindings, 0..) |b, i| {
                 const bty = b.checked_type orelse return error.ParseError;
-                try body.print(arena, "    const {s}: {s} = ", .{ b.emit_name orelse b.name, try types.zigName(arena, bty) });
+                const bname = b.emit_name orelse b.name;
+                try body.print(arena, "    const {s}: {s} = ", .{ bname, try types.zigName(arena, bty) });
                 if (d.is_object) {
                     try body.print(arena, "{s}.{s};\n", .{ src, b.name });
                 } else {
                     try body.print(arena, "{s}[{d}];\n", .{ src, i });
                 }
+                // JS allows an unused destructured binding; Zig does not.
+                if (!std.mem.eql(u8, bname, "_")) try body.print(arena, "    _ = &{s};\n", .{bname});
             }
         },
         .assign => |assignment| {
