@@ -507,6 +507,9 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             } else {
                 try body.print(arena, "    const {s}: {s} = {s}[{s}];\n", .{ binding, elem_zig, seq, idx });
             }
+            // JS allows an unused loop variable; Zig does not. Mark it used so a
+            // body that ignores the element still compiles.
+            if (!std.mem.eql(u8, binding, "_")) try body.print(arena, "    _ = &{s};\n", .{binding});
             for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
             try body.appendSlice(arena, "    }\n");
