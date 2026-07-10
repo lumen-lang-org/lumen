@@ -544,9 +544,15 @@ pub fn parseArrow(self: *Parser) CompileError!*Expr {
     }
     if (!self.isOp2("=>")) return error.ParseError;
     try self.advance();
-    const body_expr = try self.parseExpr();
     const arrow = try self.arena.create(ast.ArrowExpr);
-    arrow.* = .{ .params = try params.toOwnedSlice(self.arena), .return_annotation = ret_annotation, .body_expr = body_expr };
+    if (self.isOp('{')) {
+        // Statement-body arrow `(...) => { ... }` (a void body).
+        const block = try self.parseBlock();
+        arrow.* = .{ .params = try params.toOwnedSlice(self.arena), .return_annotation = ret_annotation, .body_block = block };
+    } else {
+        const body_expr = try self.parseExpr();
+        arrow.* = .{ .params = try params.toOwnedSlice(self.arena), .return_annotation = ret_annotation, .body_expr = body_expr };
+    }
     return self.node(.{ .arrow = arrow });
 }
 
@@ -658,11 +664,14 @@ pub fn parsePrimary(self: *Parser) CompileError!*Expr {
         // param type is inferred from the call's expected callback signature.
         if (self.isOp2("=>")) {
             try self.advance();
-            const body_expr = try self.parseExpr();
             const ps = try self.arena.alloc(ast.FunctionParam, 1);
             ps[0] = .{ .name = name, .annotation = "" };
             const arrow = try self.arena.create(ast.ArrowExpr);
-            arrow.* = .{ .params = ps, .return_annotation = "", .body_expr = body_expr };
+            if (self.isOp('{')) {
+                arrow.* = .{ .params = ps, .return_annotation = "", .body_block = try self.parseBlock() };
+            } else {
+                arrow.* = .{ .params = ps, .return_annotation = "", .body_expr = try self.parseExpr() };
+            }
             return self.node(.{ .arrow = arrow });
         }
         // Explicit generic call `f<T, ...>(...)`. Only treated as type

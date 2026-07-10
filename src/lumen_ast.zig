@@ -555,7 +555,8 @@ pub const ArrowExpr = struct {
     params: []FunctionParam,
     return_annotation: []const u8 = "",
     checked_return_type: ?types.Type = null,
-    body_expr: *Expr,
+    body_expr: ?*Expr = null, // expression body `=> expr`; null when body_block is set
+    body_block: ?[]Stmt = null, // statement body `=> { ... }` (a void body)
     captures: []Capture = &.{},
 };
 

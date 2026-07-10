@@ -382,6 +382,17 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             if (!found_binding.mutable) {
                 return self.fail(assignment.line, assignment.col, "E_CONST_ASSIGNMENT");
             }
+            // A statement-body arrow captures outer bindings by value, so it
+            // cannot mutate them (Zig would reject the cross-scope write). Reject
+            // it clearly instead of emitting invalid code; use `reduce`/`map` or
+            // an expression body for accumulation.
+            if (self.current_captures != null) {
+                if (self.bindingDepth(assignment.name)) |depth| {
+                    if (depth < self.arrow_base) {
+                        return self.fail(assignment.line, assignment.col, "E_CAPTURED_MUTATION");
+                    }
+                }
+            }
             const expected_type = found_binding.ty;
             if (std.mem.eql(u8, assignment.op, "=")) {
                 switch (expected_type) {

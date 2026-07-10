@@ -117,7 +117,7 @@ pub fn exprUsesThis(e: *const Expr) bool {
         .cmp => |b| exprUsesThis(b.l) or exprUsesThis(b.r),
         .ternary => |t| exprUsesThis(t.cond) or exprUsesThis(t.then_expr) or exprUsesThis(t.else_expr),
         .coalesce => |c| exprUsesThis(c.l) or exprUsesThis(c.r),
-        .arrow => |a| exprUsesThis(a.body_expr),
+        .arrow => |a| if (a.body_expr) |be| exprUsesThis(be) else false,
         .new_expr => |ne| blk: {
             for (ne.args) |it| if (exprUsesThis(it)) break :blk true;
             break :blk false;

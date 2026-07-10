@@ -302,7 +302,23 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             const saved_in_function = self.in_function;
             self.in_async = false;
             self.in_function = true;
-            const body_type = self.exprType(program, arrow.body_expr, line, col);
+            var body_type: ?types.Type = null;
+            if (arrow.body_block) |block| {
+                // Statement-body arrow: a void body. `return;` is allowed;
+                // `return <value>;` is rejected (a value body must use `=> expr`).
+                const saved_ret = self.current_return_type;
+                self.current_return_type = .void;
+                body_type = .void;
+                for (block) |*stmt| {
+                    self.checkStmt(program, stmt) catch {
+                        body_type = null;
+                        break;
+                    };
+                }
+                self.current_return_type = saved_ret;
+            } else {
+                body_type = self.exprType(program, arrow.body_expr.?, line, col);
+            }
             self.in_async = saved_in_async;
             self.in_function = saved_in_function;
             self.popScope();

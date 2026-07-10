@@ -1621,9 +1621,19 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     for (ar.params) |p| {
                         if (!std.mem.eql(u8, p.name, "_")) try ww.print(a, "_ = &{s}; ", .{p.name});
                     }
-                    try ww.appendSlice(a, "return ");
-                    try emitExpr(ar.body_expr, ww, a);
-                    try ww.appendSlice(a, "; } }.__a");
+                    if (ar.body_block) |block| {
+                        // Statement-body arrow (a void body): emit the statements,
+                        // no trailing return. Statements emit their decls and code
+                        // into the same buffer (a nested named decl in an arrow
+                        // body is not part of this subset).
+                        try ww.appendSlice(a, "\n");
+                        for (block) |*stmt| try emit_stmt.emitStmtWithThrow(stmt, ww, ww, a, null, null, g_options.?);
+                        try ww.appendSlice(a, "} }.__a");
+                    } else {
+                        try ww.appendSlice(a, "return ");
+                        try emitExpr(ar.body_expr.?, ww, a);
+                        try ww.appendSlice(a, "; } }.__a");
+                    }
                 }
             };
 
@@ -1805,6 +1815,11 @@ pub const CompileOptions = struct {
 /// Collect the inheritance chain from a root ancestor down to `c` (inclusive).
 var g_program: ?*const Program = null;
 
+/// Compile options captured at program-emit time so nested emitters (a
+/// statement-body arrow) can reach them without threading them through every
+/// `emitExpr` call.
+var g_options: ?CompileOptions = null;
+
 // Gives each emitted `String.fromCharCode(...)` block a unique label so nested
 // calls don't collide.
 var g_from_char_code_seq: usize = 0;
@@ -1840,5 +1855,6 @@ pub fn findClass(name: []const u8) ?*const ast.ClassDecl {
 
 pub fn emitProgram(program: *const Program, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions) CompileError!void {
     g_program = program;
+    g_options = options;
     for (program.stmts) |*stmt| try emitStmt(stmt, decls, body, arena, options);
 }

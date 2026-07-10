@@ -222,7 +222,7 @@ fn accBadRef(e: *const Expr, name: []const u8) bool {
         .cmp => |b| accBadRef(b.l, name) or accBadRef(b.r, name),
         .ternary => |t| accBadRef(t.cond, name) or accBadRef(t.then_expr, name) or accBadRef(t.else_expr, name),
         .coalesce => |c| accBadRef(c.l, name) or accBadRef(c.r, name),
-        .arrow => |a| accBadRef(a.body_expr, name),
+        .arrow => |a| if (a.body_expr) |be| accBadRef(be, name) else true,
         .new_expr => |ne| blk: {
             for (ne.args) |it| if (accBadRef(it, name)) break :blk true;
             break :blk false;
@@ -455,7 +455,7 @@ fn markAccExpr(e: *Expr, name: []const u8) void {
             markAccExpr(c.l, name);
             markAccExpr(c.r, name);
         },
-        .arrow => |a| markAccExpr(a.body_expr, name),
+        .arrow => |a| if (a.body_expr) |be| markAccExpr(be, name),
         .new_expr => |ne| for (ne.args) |it| markAccExpr(it, name),
         .method_call => |mc| {
             markAccExpr(mc.obj, name);
@@ -550,7 +550,7 @@ pub fn exprUsesName(e: *const Expr, name: []const u8) bool {
         .cmp => |b| exprUsesName(b.l, name) or exprUsesName(b.r, name),
         .ternary => |t| exprUsesName(t.cond, name) or exprUsesName(t.then_expr, name) or exprUsesName(t.else_expr, name),
         .coalesce => |c| exprUsesName(c.l, name) or exprUsesName(c.r, name),
-        .arrow => |a| exprUsesName(a.body_expr, name),
+        .arrow => |a| if (a.body_expr) |be| exprUsesName(be, name) else true,
         .new_expr => |ne| blk: {
             for (ne.args) |it| if (exprUsesName(it, name)) break :blk true;
             break :blk false;

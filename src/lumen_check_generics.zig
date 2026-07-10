@@ -378,7 +378,7 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
             const na = self.arena.create(ast.ArrowExpr) catch return error.OutOfMemory;
             const nparams = self.arena.alloc(ast.FunctionParam, a.params.len) catch return error.OutOfMemory;
             for (a.params, 0..) |pp, i| nparams[i] = .{ .name = pp.name, .annotation = try self.substCur(pp.annotation) };
-            na.* = .{ .params = nparams, .return_annotation = try self.substCur(a.return_annotation), .body_expr = try self.cloneExpr(a.body_expr) };
+            na.* = .{ .params = nparams, .return_annotation = try self.substCur(a.return_annotation), .body_expr = if (a.body_expr) |be| try self.cloneExpr(be) else null, .body_block = a.body_block };
             break :blk .{ .arrow = na };
         },
         .new_expr => |ne| blk: {
