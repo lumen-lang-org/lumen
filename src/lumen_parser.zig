@@ -835,10 +835,12 @@ pub const Parser = struct {
             try self.expectOp(';');
             return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
         }
-        // An assignment (`x = ...`, `x += ...`) or, failing that, a general
-        // expression statement led by an identifier (`x > 0 ? a : b;`,
+        // An assignment (`x = ...`, `x += ...`, `x++`) or, failing that, a
+        // general expression statement led by an identifier (`x > 0 ? a : b;`,
         // `x + y;`). Restore to the identifier and parse the whole expression.
-        if (self.isOp('=') or self.isCompoundAssignOp()) {
+        if (self.isOp('=') or self.isCompoundAssignOp() or
+            (self.cur == .op2 and (std.mem.eql(u8, self.cur.op2, "++") or std.mem.eql(u8, self.cur.op2, "--"))))
+        {
             return .{ .assign = try self.parseAssignmentTail(name, line, col, true) };
         }
         self.lex = save_before_name;
