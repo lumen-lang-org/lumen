@@ -344,18 +344,31 @@ pub const Parser = struct {
                 try self.expectOp(';');
                 return .{ .destructure_decl = .{ .mutable = mutable, .is_object = is_object, .bindings = try bindings.toOwnedSlice(self.arena), .source = source, .line = line, .col = col } };
             }
-            if (self.cur != .ident) return error.ParseError;
-            const name = self.cur.ident;
-            try self.advance();
-            var annotation: ?[]const u8 = null;
-            if (self.isOp(':')) {
+            // One or more comma-separated declarators: `let a = 1, b = 2;`.
+            var decls: std.ArrayListUnmanaged(ast.VarDecl) = .empty;
+            while (true) {
+                if (self.cur != .ident) return error.ParseError;
+                const name = self.cur.ident;
+                const dline = self.cur_line;
+                const dcol = self.cur_col;
                 try self.advance();
-                annotation = try self.parseTypeAnnotation();
+                var annotation: ?[]const u8 = null;
+                if (self.isOp(':')) {
+                    try self.advance();
+                    annotation = try self.parseTypeAnnotation();
+                }
+                try self.expectOp('=');
+                const initial_value = try self.parseExpr();
+                try decls.append(self.arena, .{ .mutable = mutable, .name = name, .annotation = annotation, .init = initial_value, .line = dline, .col = dcol });
+                if (self.isOp(',')) {
+                    try self.advance();
+                    continue;
+                }
+                break;
             }
-            try self.expectOp('=');
-            const initial_value = try self.parseExpr();
             try self.expectOp(';');
-            return .{ .var_decl = .{ .mutable = mutable, .name = name, .annotation = annotation, .init = initial_value, .line = line, .col = col } };
+            if (decls.items.len == 1) return .{ .var_decl = decls.items[0] };
+            return .{ .var_decl_group = try decls.toOwnedSlice(self.arena) };
         }
 
         // `using NAME = EXPR;` — TypeScript 5.2 scope-exit disposal. Reuses the

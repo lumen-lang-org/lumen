@@ -30,6 +30,24 @@ const Stmt = ast.Stmt;
 const CompileOptions = emit_mod.CompileOptions;
 const emitExpr = emit_mod.emitExpr;
 
+/// Emit one `let`/`const`/`var` declarator. Shared by single and comma-grouped
+/// declarations.
+fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    // In an `__into` body the returned accumulator is the dest parameter, so its
+    // local declaration is dropped.
+    if (emit_mod.g_cur_into_acc != null and decl.is_accumulator and std.mem.eql(u8, decl.emit_name orelse decl.name, emit_mod.g_cur_into_acc.?)) return;
+    if (decl.is_accumulator) {
+        // String-builder: a growable buffer instead of an immutable slice. The
+        // init is always `""`, so it starts empty.
+        try body.print(arena, "    var {s}: std.ArrayListUnmanaged(u8) = .empty;\n", .{decl.emit_name orelse decl.name});
+    } else {
+        const final_zty = decl.checked_type orelse return error.ParseError;
+        try body.print(arena, "    {s} {s}: {s} = ", .{ if (decl.mutable and decl.reassigned) "var" else "const", decl.emit_name orelse decl.name, try types.zigName(arena, final_zty) });
+        try emitExpr(decl.init, body, arena);
+        try body.appendSlice(arena, ";\n");
+    }
+}
+
 pub fn emitStmt(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions) CompileError!void {
     return emitStmtWithThrow(stmt, decls, body, arena, null, null, options);
 }
@@ -198,6 +216,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             .test_decl => |decl| .{ .line = decl.line, .col = decl.col },
             .function_decl => |decl| .{ .line = decl.line, .col = decl.col },
             .var_decl => |decl| .{ .line = decl.line, .col = decl.col },
+            .var_decl_group => |group| .{ .line = group[0].line, .col = group[0].col },
             .using_decl => |decl| .{ .line = decl.line, .col = decl.col },
             .destructure_decl => |d| .{ .line = d.line, .col = d.col },
             .assign => |assignment| .{ .line = assignment.line, .col = assignment.col },
@@ -365,21 +384,8 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try decls.appendSlice(arena, "}\n");
             };
         },
-        .var_decl => |decl| {
-            // In an `__into` body the returned accumulator is the dest parameter,
-            // so its local declaration is dropped.
-            if (emit_mod.g_cur_into_acc != null and decl.is_accumulator and std.mem.eql(u8, decl.emit_name orelse decl.name, emit_mod.g_cur_into_acc.?)) return;
-            if (decl.is_accumulator) {
-                // String-builder: a growable buffer instead of an immutable slice.
-                // The init is always `""`, so it starts empty.
-                try body.print(arena, "    var {s}: std.ArrayListUnmanaged(u8) = .empty;\n", .{decl.emit_name orelse decl.name});
-            } else {
-                const final_zty = decl.checked_type orelse return error.ParseError;
-                try body.print(arena, "    {s} {s}: {s} = ", .{ if (decl.mutable and decl.reassigned) "var" else "const", decl.emit_name orelse decl.name, try types.zigName(arena, final_zty) });
-                try emitExpr(decl.init, body, arena);
-                try body.appendSlice(arena, ";\n");
-            }
-        },
+        .var_decl => |decl| try emitOneVarDecl(decl, body, arena),
+        .var_decl_group => |group| for (group) |decl| try emitOneVarDecl(decl, body, arena),
         .using_decl => |decl| {
             // `using` lowers to Zig `defer`, which already runs LIFO at scope
             // exit and interleaves correctly with `defer`-statement blocks.

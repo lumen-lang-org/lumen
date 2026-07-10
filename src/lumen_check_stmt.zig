@@ -240,6 +240,23 @@ pub fn stmtReturns(stmt: ast.Stmt) bool {
     };
 }
 
+/// Check one `let`/`const`/`var` declarator: resolve its type (annotation or
+/// inferred), verify the initializer, and bind the name. Shared by single and
+/// comma-grouped declarations.
+pub fn checkVarDecl(self: *Checker, program: *ast.Program, decl: *ast.VarDecl) CompileError!void {
+    const final_type = if (decl.annotation) |ann|
+        try self.typeFromAnnotation(ann, decl.line, decl.col)
+    else
+        self.exprType(program, decl.init, decl.line, decl.col) orelse
+            return self.inferenceFail(decl.line, decl.col, "cannot infer variable type");
+    if (final_type == .void) return self.fail(decl.line, decl.col, "E_VOID_VALUE");
+    if (final_type == .none) return self.inferenceFail(decl.line, decl.col, "cannot infer type of null; annotate as T | null");
+
+    try self.ensureAssignable(program, final_type, decl.init, decl.line, decl.col);
+    decl.checked_type = final_type;
+    try self.declare(decl.name, decl, final_type, decl.line, decl.col);
+}
+
 pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) CompileError!void {
     switch (stmt.*) {
         .type_decl => |*decl| {
@@ -288,19 +305,8 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             if (decl.checked_return_type == null) try self.declareFunction(decl);
             try self.checkFunctionBody(program, decl);
         },
-        .var_decl => |*decl| {
-            const final_type = if (decl.annotation) |ann|
-                try self.typeFromAnnotation(ann, decl.line, decl.col)
-            else
-                self.exprType(program, decl.init, decl.line, decl.col) orelse
-                    return self.inferenceFail(decl.line, decl.col, "cannot infer variable type");
-            if (final_type == .void) return self.fail(decl.line, decl.col, "E_VOID_VALUE");
-            if (final_type == .none) return self.inferenceFail(decl.line, decl.col, "cannot infer type of null; annotate as T | null");
-
-            try self.ensureAssignable(program, final_type, decl.init, decl.line, decl.col);
-            decl.checked_type = final_type;
-            try self.declare(decl.name, decl, final_type, decl.line, decl.col);
-        },
+        .var_decl => |*decl| try self.checkVarDecl(program, decl),
+        .var_decl_group => |group| for (group) |*decl| try self.checkVarDecl(program, decl),
         .using_decl => |*decl| {
             if (decl.defer_body) |body| {
                 // `using x = defer(() => BODY);` — the helper body runs at scope

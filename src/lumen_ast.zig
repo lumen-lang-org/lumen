@@ -388,6 +388,7 @@ pub const Stmt = union(enum) {
     class_decl: ClassDecl,
     function_decl: FunctionDecl,
     var_decl: VarDecl,
+    var_decl_group: []VarDecl, // `let a = 1, b = 2;` — several declarators in one statement
     using_decl: UsingDecl,
     destructure_decl: DestructureDecl,
     member_assign: MemberAssign,

@@ -158,6 +158,7 @@ pub const Checker = struct {
     pub const checkMemberAssign = check_stmt.checkMemberAssign;
     pub const assignField = check_stmt.assignField;
     pub const checkStmt = check_stmt.checkStmt;
+    pub const checkVarDecl = check_stmt.checkVarDecl;
 
     // Assignability/cast checking lives in lumen_check_assign.zig.
     pub const ensureAssignable = check_assign.ensureAssignable;
