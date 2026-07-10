@@ -716,8 +716,43 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "Buffer")) return self.bufferCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "readline")) return self.readlineCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Worker")) return self.workerCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "Number")) return self.numberCallType(program, call, line, col);
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
+}
+
+/// Number.parseInt(s, radix?) / Number.parseFloat(s): string -> number, or null
+/// when the whole string is not a valid number. Strict (the entire string must
+/// parse), unlike JavaScript's lenient prefix parse.
+pub fn numberCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    const is_int = std.mem.eql(u8, call.name, "parseInt");
+    const is_float = std.mem.eql(u8, call.name, "parseFloat");
+    if (!is_int and !is_float) {
+        _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+        return null;
+    }
+    const max_args: usize = if (is_int) 2 else 1;
+    if (call.args.len < 1 or call.args.len > max_args) {
+        _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+        return null;
+    }
+    const s_type = self.exprType(program, call.args[0], line, col) orelse return null;
+    if (!types.same(.string, s_type)) {
+        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+        return null;
+    }
+    if (call.args.len == 2) {
+        const r_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        if (!types.isInteger(r_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+    }
+    const inner = self.arena.create(types.Type) catch return null;
+    inner.* = if (is_int) .i32 else .f64;
+    const res = types.Type{ .optional = inner };
+    call.checked_type = res;
+    return res;
 }
 
 /// `Worker.run(fn) -> Promise<T>` (spec 059): `fn` must be a zero-parameter

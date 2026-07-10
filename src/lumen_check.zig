@@ -115,6 +115,7 @@ pub const Checker = struct {
     pub const stringCallType = check_stdlib.stringCallType;
     pub const arrayCallType = check_stdlib.arrayCallType;
     pub const workerCallType = check_stdlib.workerCallType;
+    pub const numberCallType = check_stdlib.numberCallType;
 
     // Generic function/class/type specialization lives in lumen_check_generics.zig.
     pub const isGenericTemplateStmt = check_generics.isGenericTemplateStmt;

@@ -421,6 +421,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "parseInt")) {
+                try w.appendSlice(arena, "@as(?i32, std.fmt.parseInt(i32, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                if (cl.args.len == 2) {
+                    try w.appendSlice(arena, "@intCast(");
+                    try emitExpr(cl.args[1], w, arena);
+                    try w.appendSlice(arena, ")");
+                } else {
+                    try w.appendSlice(arena, "10");
+                }
+                try w.appendSlice(arena, ") catch null)");
+            } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "parseFloat")) {
+                try w.appendSlice(arena, "@as(?f64, std.fmt.parseFloat(f64, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ") catch null)");
             } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "compare")) {
                 try w.appendSlice(arena, "@as(i32, switch (std.mem.order(u8, ");
                 try emitExpr(cl.args[0], w, arena);
