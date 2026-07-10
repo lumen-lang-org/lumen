@@ -446,6 +446,8 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "@as(f64, std.math.log10e)");
             } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "SQRT2")) {
                 try w.appendSlice(arena, "@as(f64, std.math.sqrt2)");
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "SQRT1_2")) {
+                try w.appendSlice(arena, "@as(f64, std.math.sqrt1_2)");
             } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "isEmpty")) {
                 try w.append(arena, '(');
                 try emitExpr(cl.args[0], w, arena);

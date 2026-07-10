@@ -3336,7 +3336,7 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
     if (std.mem.eql(u8, call.name, "PI") or std.mem.eql(u8, call.name, "E") or
         std.mem.eql(u8, call.name, "LN2") or std.mem.eql(u8, call.name, "LN10") or
         std.mem.eql(u8, call.name, "LOG2E") or std.mem.eql(u8, call.name, "LOG10E") or
-        std.mem.eql(u8, call.name, "SQRT2"))
+        std.mem.eql(u8, call.name, "SQRT2") or std.mem.eql(u8, call.name, "SQRT1_2"))
     {
         if (call.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
