@@ -134,11 +134,12 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const want = self.makeFuncType(&.{elem}, .bool) orelse return null;
-        self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem) or !types.same(cb_type.func_type.ret.*, .bool)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
-        };
+        }
+        mc.cb_wants_index = cb_type.func_type.params.len == 2;
         mc.array_result_type = .i32;
         return .i32;
     }
