@@ -3484,6 +3484,14 @@ pub fn arrayCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCal
             call.checked_type = src;
             return src;
         }
+        // Array.from(set): the set's elements as an array.
+        if (src == .set_type) {
+            call.checked_type = types.arrayOf(src.set_type.*) orelse {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+            return call.checked_type;
+        }
         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
         return null;
     }
