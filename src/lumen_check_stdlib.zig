@@ -129,9 +129,12 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return .i32;
     }
 
-    // indexOf(x: T): int  /  lastIndexOf(x: T): int  /  includes(x: T): bool
+    // indexOf(x: T, from?: int): int  /  includes(x: T, from?: int): bool  /
+    // lastIndexOf(x: T): int. indexOf/includes accept an optional start index.
     if (eq(u8, name, "indexOf") or eq(u8, name, "lastIndexOf") or eq(u8, name, "includes")) {
-        if (mc.args.len != 1) {
+        const allows_from = !eq(u8, name, "lastIndexOf");
+        const max_args: usize = if (allows_from) 2 else 1;
+        if (mc.args.len < 1 or mc.args.len > max_args) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
@@ -139,6 +142,13 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
+        if (mc.args.len == 2) {
+            const ft = self.exprType(program, mc.args[1], line, col) orelse return null;
+            if (!types.isInteger(ft)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
         const res: types.Type = if (eq(u8, name, "includes")) .bool else .i32;
         mc.array_result_type = res;
         return res;

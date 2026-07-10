@@ -35,6 +35,20 @@ pub fn emitElemEq(elem: types.Type, needle: *const Expr, w: *std.ArrayListUnmana
     }
 }
 
+/// Emit `const __start: isize = ...;` for `indexOf`/`includes`: the optional
+/// second argument is a start index that counts from the end when negative,
+/// clamped into `[0, len]`; with no argument the scan starts at 0. Assumes
+/// `__arr` is already bound in the surrounding block.
+fn emitArrayStart(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    if (mc.args.len == 2) {
+        try w.appendSlice(arena, "const __len: isize = @intCast(__arr.len); const __from: isize = @intCast(");
+        try emitExpr(mc.args[1], w, arena);
+        try w.appendSlice(arena, "); const __start: isize = if (__from < 0) (if (__len + __from < 0) 0 else __len + __from) else __from; ");
+    } else {
+        try w.appendSlice(arena, "const __start: isize = 0; ");
+    }
+}
+
 /// Monotonic counter giving each emitted array-method block a unique label so
 /// chained/nested calls (`xs.map(...).filter(...)`) don't collide on `blk`.
 var g_array_method_seq: usize = 0;
@@ -132,7 +146,9 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     if (eq(u8, name, "indexOf")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
-        try w.appendSlice(arena, "; var __idx: i32 = -1; for (__arr, 0..) |__e, __i| { if (");
+        try w.appendSlice(arena, "; ");
+        try emitArrayStart(mc, w, arena);
+        try w.appendSlice(arena, "var __idx: i32 = -1; for (__arr, 0..) |__e, __i| { if (@as(isize, @intCast(__i)) < __start) continue; if (");
         try emitElemEq(elem, mc.args[0], w, arena);
         try w.print(arena, ") {{ __idx = @as(i32, @intCast(__i)); break; }} }} break :{s} __idx; }})", .{lbl});
         return;
@@ -150,7 +166,9 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     if (eq(u8, name, "includes")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
-        try w.appendSlice(arena, "; var __r = false; for (__arr) |__e| { if (");
+        try w.appendSlice(arena, "; ");
+        try emitArrayStart(mc, w, arena);
+        try w.appendSlice(arena, "var __r = false; for (__arr, 0..) |__e, __i| { if (@as(isize, @intCast(__i)) < __start) continue; if (");
         try emitElemEq(elem, mc.args[0], w, arena);
         try w.print(arena, ") {{ __r = true; break; }} }} break :{s} __r; }})", .{lbl});
         return;
