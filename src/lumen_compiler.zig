@@ -1988,11 +1988,11 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         // already established as the correct choice for a real stream like
         // stdout, not a seekable file.
         try out.appendSlice(arena,
-            \\fn __consoleOut(comptime fmt: []const u8, args: anytype) void {
-            \\    var buf: [4096]u8 = undefined;
-            \\    var w = std.Io.File.stdout().writerStreaming(__io, &buf);
-            \\    w.interface.print(fmt, args) catch return;
-            \\    w.interface.flush() catch {};
+            \\fn __consoleOut(comptime __fmt: []const u8, __args: anytype) void {
+            \\    var __buf: [4096]u8 = undefined;
+            \\    var __w = std.Io.File.stdout().writerStreaming(__io, &__buf);
+            \\    __w.interface.print(__fmt, __args) catch return;
+            \\    __w.interface.flush() catch {};
             \\}
             \\
         );
