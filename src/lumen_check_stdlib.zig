@@ -175,12 +175,11 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
-    // indexOf(x: T, from?: int): int  /  includes(x: T, from?: int): bool  /
-    // lastIndexOf(x: T): int. indexOf/includes accept an optional start index.
+    // indexOf(x, from?) / includes(x, from?) / lastIndexOf(x, from?): each takes
+    // an optional integer start index (for lastIndexOf, the backward-search
+    // upper bound).
     if (eq(u8, name, "indexOf") or eq(u8, name, "lastIndexOf") or eq(u8, name, "includes")) {
-        const allows_from = !eq(u8, name, "lastIndexOf");
-        const max_args: usize = if (allows_from) 2 else 1;
-        if (mc.args.len < 1 or mc.args.len > max_args) {
+        if (mc.args.len < 1 or mc.args.len > 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }

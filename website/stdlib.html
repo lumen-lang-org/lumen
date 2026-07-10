@@ -170,7 +170,7 @@
     <tr><td><code>a.forEach(fn)</code></td><td>((T) =&gt; void) or ((T, int) =&gt; void) → void (optional index)</td></tr>
     <tr><td><code>a.find(fn)</code> · <code>a.findIndex(fn)</code> · <code>a.some(fn)</code> · <code>a.every(fn)</code></td><td>((T) or (T, int) =&gt; bool) predicate → T · int · bool · bool (optional index)</td></tr>
     <tr><td><code>a.findLast(fn)</code> · <code>a.findLastIndex(fn)</code></td><td>same predicate, scanning from the end → T | null · int</td></tr>
-    <tr><td><code>a.indexOf(x, from?)</code> · <code>a.lastIndexOf(x)</code> · <code>a.includes(x, from?)</code></td><td>→ int · int · bool (<code>from</code> allows negative index)</td></tr>
+    <tr><td><code>a.indexOf(x, from?)</code> · <code>a.lastIndexOf(x, from?)</code> · <code>a.includes(x, from?)</code></td><td>→ int · int · bool (<code>from</code> allows negative index; <code>lastIndexOf</code> searches backward from it)</td></tr>
     <tr><td><code>a.slice(start, end?)</code> · <code>a.reverse()</code> · <code>a.concat(b)</code> · <code>a.with(i, v)</code></td><td>→ T[] (new array; source unchanged; <code>with</code> replaces index <code>i</code>, negatives from the end)</td></tr>
     <tr><td><code>a.sort(cmp)</code> · <code>a.toSorted(cmp)</code></td><td>((T, T) =&gt; int) → T[] (new, stable; cmp&lt;0 ⇒ a first)</td></tr>
     <tr><td><code>a.toReversed()</code></td><td>→ T[] (alias of <code>reverse</code>; new array)</td></tr>

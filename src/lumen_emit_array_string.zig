@@ -206,7 +206,15 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     if (eq(u8, name, "lastIndexOf")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
-        try w.appendSlice(arena, "; var __idx: i32 = -1; for (__arr, 0..) |__e, __i| { if (");
+        try w.appendSlice(arena, "; const __len: isize = @intCast(__arr.len); ");
+        if (mc.args.len == 2) {
+            try w.appendSlice(arena, "const __from: isize = @intCast(");
+            try emitExpr(mc.args[1], w, arena);
+            try w.appendSlice(arena, "); const __ub: isize = if (__from < 0) __len + __from else (if (__from > __len - 1) __len - 1 else __from); ");
+        } else {
+            try w.appendSlice(arena, "const __ub: isize = __len - 1; ");
+        }
+        try w.appendSlice(arena, "var __idx: i32 = -1; for (__arr, 0..) |__e, __i| { if (@as(isize, @intCast(__i)) > __ub) break; if (");
         try emitElemEq(elem, mc.args[0], w, arena);
         try w.print(arena, ") {{ __idx = @as(i32, @intCast(__i)); }} }} break :{s} __idx; }})", .{lbl});
         return;
