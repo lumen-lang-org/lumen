@@ -456,6 +456,13 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         return;
     }
 
+    if (eq(u8, name, "localeCompare")) {
+        try w.appendSlice(arena, "const __other: []const u8 = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.print(arena, "; break :{s} @as(i32, switch (std.mem.order(u8, __s, __other)) {{ .lt => -1, .eq => 0, .gt => 1 }}); }})", .{lbl});
+        return;
+    }
+
     if (eq(u8, name, "includes")) {
         try w.appendSlice(arena, "const __needle: []const u8 = ");
         try emitExpr(mc.args[0], w, arena);
