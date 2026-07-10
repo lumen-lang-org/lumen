@@ -1707,7 +1707,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, ".@\"{d}\"", .{pos});
                 return;
             }
-            if (idx.checked_element_type != null and idx.checked_element_type.? == .string) {
+            if (idx.string_char) {
                 // `s[i]` on a string -> the one-byte substring (a string).
                 g_global_pred_seq += 1;
                 const s = g_global_pred_seq;

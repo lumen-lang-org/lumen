@@ -794,6 +794,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 // (a string), matching JS/TS.
                 if (types.isStringLike(obj_type)) {
                     index.checked_element_type = .string;
+                    index.string_char = true;
                     break :blk .string;
                 }
                 const elem_type = types.arrayElem(obj_type) orelse {
