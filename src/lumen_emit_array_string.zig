@@ -174,6 +174,15 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "sort")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; const __cb = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len) catch unreachable; @memcpy(__r, __arr); std.mem.sort({s}, __r, __cb, struct {{ fn __lt(__c: @TypeOf(__cb), __a: {s}, __b: {s}) bool {{ return __c.call(__c.ctx, __a, __b) < 0; }} }}.__lt); break :{s} @as([]const {s}, __r); }})", .{ elem_zig, elem_zig, elem_zig, elem_zig, lbl, elem_zig });
+        return;
+    }
+
     if (eq(u8, name, "reverse")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
