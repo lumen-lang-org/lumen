@@ -160,6 +160,16 @@ pub const Parser = struct {
         return body.toOwnedSlice(self.arena);
     }
 
+    /// A control-flow body: either a `{ ... }` block or a single unbraced
+    /// statement (`if (c) return x;`, `for (...) sum += i;`), wrapped as a
+    /// one-element body.
+    pub fn parseBlockOrStmt(self: *Parser) CompileError![]Stmt {
+        if (self.isOp('{')) return self.parseBlock();
+        const one = try self.arena.alloc(Stmt, 1);
+        one[0] = try self.parseStmt();
+        return one;
+    }
+
     fn parseSwitchBody(self: *Parser) CompileError![]Stmt {
         var body: std.ArrayListUnmanaged(Stmt) = .empty;
         while (!self.isOp('}') and !self.isKw("case") and !self.isKw("default")) {
@@ -423,7 +433,7 @@ pub const Parser = struct {
             try self.expectOp('(');
             const cond = try self.parseExpr();
             try self.expectOp(')');
-            const body = try self.parseBlock();
+            const body = try self.parseBlockOrStmt();
             return .{ .while_stmt = .{ .cond = cond, .body = body, .line = line, .col = col } };
         }
 
@@ -457,7 +467,7 @@ pub const Parser = struct {
                 try self.advance();
                 const iterable = try self.parseExpr();
                 try self.expectOp(')');
-                const body = try self.parseBlock();
+                const body = try self.parseBlockOrStmt();
                 return .{ .for_of_stmt = .{ .mutable = !is_const, .binding = init_name, .iterable = iterable, .body = body, .line = line, .col = col } };
             }
             // for...in: `for (const|let name in x) { ... }` (spec 052) --
@@ -466,7 +476,7 @@ pub const Parser = struct {
                 try self.advance();
                 const iterable = try self.parseExpr();
                 try self.expectOp(')');
-                const body = try self.parseBlock();
+                const body = try self.parseBlockOrStmt();
                 return .{ .for_in_stmt = .{ .mutable = !is_const, .binding = init_name, .iterable = iterable, .body = body, .line = line, .col = col } };
             }
             // C-style for loops require a reassignable binding for the update step.
@@ -493,7 +503,7 @@ pub const Parser = struct {
                 break :blk try self.parseAssignmentTail(update_name, update_line, update_col, false);
             };
             try self.expectOp(')');
-            const body = try self.parseBlock();
+            const body = try self.parseBlockOrStmt();
             return .{ .for_stmt = .{
                 .init = .{ .mutable = true, .name = init_name, .annotation = annotation, .init = init_value, .line = init_line, .col = init_col },
                 .cond = cond,
@@ -509,7 +519,7 @@ pub const Parser = struct {
             try self.expectOp('(');
             const cond = try self.parseExpr();
             try self.expectOp(')');
-            const then_body = try self.parseBlock();
+            const then_body = try self.parseBlockOrStmt();
             var else_body: ?[]Stmt = null;
             if (self.isKw("else")) {
                 try self.advance();
@@ -519,7 +529,7 @@ pub const Parser = struct {
                     nested_body[0] = nested_if;
                     else_body = nested_body;
                 } else {
-                    else_body = try self.parseBlock();
+                    else_body = try self.parseBlockOrStmt();
                 }
             }
             return .{ .if_stmt = .{ .cond = cond, .then_body = then_body, .else_body = else_body, .line = line, .col = col } };
