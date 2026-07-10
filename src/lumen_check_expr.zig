@@ -815,6 +815,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 call.is_global_parse = true;
                 return .string;
             }
+            // Global Boolean(x) conversion: truthiness of number/bool/string.
+            if (std.mem.eql(u8, call.name, "Boolean") and self.funcs.get(call.name) == null) {
+                if (call.args.len != 1) {
+                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                    return null;
+                }
+                const at = self.exprType(program, call.args[0], line, col) orelse return null;
+                if (!types.isNumeric(at) and !types.same(.string, at) and at != .bool) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                call.is_global_parse = true;
+                return .bool;
+            }
             // Global isNaN/isFinite: numeric predicate -> bool.
             if ((std.mem.eql(u8, call.name, "isNaN") or std.mem.eql(u8, call.name, "isFinite")) and self.funcs.get(call.name) == null) {
                 if (call.args.len != 1) {
