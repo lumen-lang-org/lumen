@@ -216,6 +216,7 @@ fn accBadRef(e: *const Expr, name: []const u8) bool {
         },
         .spread => |inner| accBadRef(inner, name),
         .typeof_expr => |to| accBadRef(to.operand, name),
+        .inc_dec => |id| accBadRef(id.target, name),
         .neg, .not, .bnot, .await_expr => |inner| accBadRef(inner, name),
         .bin => |b| accBadRef(b.l, name) or accBadRef(b.r, name),
         .bool_bin => |b| accBadRef(b.l, name) or accBadRef(b.r, name),
@@ -433,6 +434,7 @@ fn markAccExpr(e: *Expr, name: []const u8) void {
         .tuple_lit => |t| for (t.items) |it| markAccExpr(it, name),
         .spread => |inner| markAccExpr(inner, name),
         .typeof_expr => |to| markAccExpr(to.operand, name),
+        .inc_dec => |id| markAccExpr(id.target, name),
         .neg, .not, .bnot, .await_expr => |inner| markAccExpr(inner, name),
         .bin => |b| {
             markAccExpr(b.l, name);
@@ -544,6 +546,7 @@ pub fn exprUsesName(e: *const Expr, name: []const u8) bool {
         },
         .spread => |inner| exprUsesName(inner, name),
         .typeof_expr => |to| exprUsesName(to.operand, name),
+        .inc_dec => |id| exprUsesName(id.target, name),
         .neg, .not, .bnot, .await_expr => |inner| exprUsesName(inner, name),
         .bin => |b| exprUsesName(b.l, name) or exprUsesName(b.r, name),
         .bool_bin => |b| exprUsesName(b.l, name) or exprUsesName(b.r, name),

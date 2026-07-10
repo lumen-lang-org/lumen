@@ -1291,6 +1291,27 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try emitExpr(inner, w, arena);
             try w.append(arena, ')');
         },
+        .inc_dec => |id| {
+            const op = if (id.is_inc) "+= 1" else "-= 1";
+            g_global_pred_seq += 1;
+            const s = g_global_pred_seq;
+            if (id.is_prefix) {
+                // ++x: increment, then yield the new value.
+                try w.print(arena, "(__id{d}: {{ ", .{s});
+                try emitExpr(id.target, w, arena);
+                try w.print(arena, " {s}; break :__id{d} ", .{ op, s });
+                try emitExpr(id.target, w, arena);
+                try w.appendSlice(arena, "; })");
+            } else {
+                // x++: yield the old value, then increment.
+                const tz = try types.zigName(arena, id.checked_type orelse .i32);
+                try w.print(arena, "(__id{d}: {{ const __o: {s} = ", .{ s, tz });
+                try emitExpr(id.target, w, arena);
+                try w.appendSlice(arena, "; ");
+                try emitExpr(id.target, w, arena);
+                try w.print(arena, " {s}; break :__id{d} __o; }})", .{ op, s });
+            }
+        },
         .typeof_expr => |to| {
             // A compile-time constant string (the operand's static type name).
             // The operand is still evaluated and discarded so its side effects

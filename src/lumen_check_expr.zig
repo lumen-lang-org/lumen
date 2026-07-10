@@ -91,6 +91,28 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             break :blk found_binding.ty;
         },
         .neg => |inner| self.exprType(program, inner, line, col),
+        .inc_dec => |*id| {
+            // `x++` / `++x` (and --): the target must be a mutable numeric
+            // variable. Mark it reassigned so it emits as `var`.
+            const t = self.exprType(program, id.target, line, col) orelse return null;
+            if (!types.isNumeric(t)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            if (id.target.* == .var_ref) {
+                const b = self.bindingPtr(id.target.var_ref.name) orelse {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                };
+                if (!b.mutable) {
+                    _ = self.fail(line, col, "E_CONST_ASSIGNMENT") catch {};
+                    return null;
+                }
+                if (b.decl) |d| d.reassigned = true;
+            }
+            id.checked_type = t;
+            return t;
+        },
         .typeof_expr => |*to| {
             // `typeof x` resolves to a compile-time string from x's static type.
             const t = self.exprType(program, to.operand, line, col) orelse return null;

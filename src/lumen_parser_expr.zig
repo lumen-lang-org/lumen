@@ -394,6 +394,12 @@ pub fn parseUnary(self: *Parser) CompileError!*Expr {
         try self.advance();
         return self.node(.{ .bnot = try self.parseUnary() });
     }
+    // Prefix increment/decrement `++x` / `--x` as an expression value.
+    if (self.cur == .op2 and (std.mem.eql(u8, self.cur.op2, "++") or std.mem.eql(u8, self.cur.op2, "--"))) {
+        const is_inc = std.mem.eql(u8, self.cur.op2, "++");
+        try self.advance();
+        return self.node(.{ .inc_dec = .{ .target = try self.parseUnary(), .is_inc = is_inc, .is_prefix = true } });
+    }
     var e = try self.parsePostfix();
     // Postfix `as T` type assertion and `satisfies T` (spec 052), both
     // erased at emit; the checker distinguishes them (satisfies keeps the
@@ -491,6 +497,12 @@ pub fn parsePostfixFrom(self: *Parser, base: *Expr) CompileError!*Expr {
             try self.expectOp(']');
             e = try self.node(.{ .index = .{ .obj = e, .value = index_value } });
         }
+    }
+    // Postfix increment/decrement `x++` / `x--` as an expression value.
+    if (self.cur == .op2 and (std.mem.eql(u8, self.cur.op2, "++") or std.mem.eql(u8, self.cur.op2, "--"))) {
+        const is_inc = std.mem.eql(u8, self.cur.op2, "++");
+        try self.advance();
+        e = try self.node(.{ .inc_dec = .{ .target = e, .is_inc = is_inc, .is_prefix = false } });
     }
     return e;
 }
