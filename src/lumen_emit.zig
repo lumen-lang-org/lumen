@@ -388,7 +388,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, "))");
                 }
                 try w.append(arena, ')');
-            } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "asin") or std.mem.eql(u8, cl.name, "acos") or std.mem.eql(u8, cl.name, "atan") or std.mem.eql(u8, cl.name, "cbrt") or std.mem.eql(u8, cl.name, "sinh") or std.mem.eql(u8, cl.name, "cosh") or std.mem.eql(u8, cl.name, "tanh") or std.mem.eql(u8, cl.name, "asinh") or std.mem.eql(u8, cl.name, "acosh") or std.mem.eql(u8, cl.name, "atanh"))) {
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "asin") or std.mem.eql(u8, cl.name, "acos") or std.mem.eql(u8, cl.name, "atan") or std.mem.eql(u8, cl.name, "cbrt") or std.mem.eql(u8, cl.name, "sinh") or std.mem.eql(u8, cl.name, "cosh") or std.mem.eql(u8, cl.name, "tanh") or std.mem.eql(u8, cl.name, "asinh") or std.mem.eql(u8, cl.name, "acosh") or std.mem.eql(u8, cl.name, "atanh") or std.mem.eql(u8, cl.name, "expm1") or std.mem.eql(u8, cl.name, "log1p"))) {
                 const arg_type = cl.checked_arg_type orelse return error.ParseError;
                 try w.print(arena, "std.math.{s}(", .{cl.name});
                 if (arg_type == .f64) {

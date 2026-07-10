@@ -3175,7 +3175,8 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         std.mem.eql(u8, call.name, "atan") or std.mem.eql(u8, call.name, "cbrt") or
         std.mem.eql(u8, call.name, "sinh") or std.mem.eql(u8, call.name, "cosh") or
         std.mem.eql(u8, call.name, "tanh") or std.mem.eql(u8, call.name, "asinh") or
-        std.mem.eql(u8, call.name, "acosh") or std.mem.eql(u8, call.name, "atanh"))
+        std.mem.eql(u8, call.name, "acosh") or std.mem.eql(u8, call.name, "atanh") or
+        std.mem.eql(u8, call.name, "expm1") or std.mem.eql(u8, call.name, "log1p"))
     {
         if (call.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
