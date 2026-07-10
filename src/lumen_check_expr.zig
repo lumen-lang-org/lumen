@@ -427,6 +427,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             break :blk .{ .class_type = cls };
         },
         .new_expr => |*ne| {
+            // `new Error("msg")` is equivalent to `Error("msg")` -> error_obj.
+            if (std.mem.eql(u8, ne.class_name, "Error") and self.classes.get("Error") == null) {
+                if (ne.args.len != 1) {
+                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                    return null;
+                }
+                const message_type = self.exprType(program, ne.args[0], line, col) orelse return null;
+                if (!types.same(.string, message_type)) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                ne.container_type = .error_obj;
+                return .error_obj;
+            }
             // Built-in container instantiation `new Map<K,V>()` / `new Set<T>()`.
             if (std.mem.eql(u8, ne.class_name, "Map") and self.classes.get("Map") == null) {
                 if (ne.type_args.len != 2) {

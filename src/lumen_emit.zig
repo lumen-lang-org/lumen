@@ -1297,6 +1297,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
         .this_expr => try w.appendSlice(arena, "self"),
         .new_expr => |ne| {
             if (ne.container_type) |ct| {
+                // `new Error("msg")` -> the message string (same as `Error(...)`).
+                if (ct == .error_obj) {
+                    try emitExpr(ne.args[0], w, arena);
+                    return;
+                }
                 // Map/Set: allocate the generic container on the heap.
                 const tname = (try types.zigName(arena, ct))[1..]; // strip leading '*'
                 try w.print(arena, "{s}.__init()", .{tname});
