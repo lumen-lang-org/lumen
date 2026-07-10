@@ -54,7 +54,12 @@ fn emitCompoundRhs(op: []const u8, name: []const u8, value: *ast.Expr, checked_t
     if (eqs(u8, op, "=")) {
         try emitExpr(value, body, arena);
     } else if (op[0] == '/') {
-        try body.print(arena, "@divTrunc({s}, ", .{name});
+        // Float division keeps the fraction; integer division truncates.
+        if (checked_type != null and checked_type.? == .f64) {
+            try body.print(arena, "({s} / ", .{name});
+        } else {
+            try body.print(arena, "@divTrunc({s}, ", .{name});
+        }
         try emitExpr(value, body, arena);
         try body.append(arena, ')');
     } else if (op[0] == '%') {
