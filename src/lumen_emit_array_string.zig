@@ -337,14 +337,28 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
     if (eq(u8, name, "startsWith")) {
         try w.appendSlice(arena, "const __needle: []const u8 = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; break :{s} std.mem.startsWith(u8, __s, __needle); }})", .{lbl});
+        if (mc.args.len == 2) {
+            try w.appendSlice(arena, "; const __from: isize = @intCast(");
+            try emitExpr(mc.args[1], w, arena);
+            try w.appendSlice(arena, "); const __start: usize = if (__from < 0) 0 else if (__from > @as(isize, @intCast(__s.len))) __s.len else @intCast(__from); ");
+            try w.print(arena, "break :{s} std.mem.startsWith(u8, __s[__start..], __needle); }})", .{lbl});
+        } else {
+            try w.print(arena, "; break :{s} std.mem.startsWith(u8, __s, __needle); }})", .{lbl});
+        }
         return;
     }
 
     if (eq(u8, name, "endsWith")) {
         try w.appendSlice(arena, "const __needle: []const u8 = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; break :{s} std.mem.endsWith(u8, __s, __needle); }})", .{lbl});
+        if (mc.args.len == 2) {
+            try w.appendSlice(arena, "; const __ep: isize = @intCast(");
+            try emitExpr(mc.args[1], w, arena);
+            try w.appendSlice(arena, "); const __end: usize = if (__ep < 0) 0 else if (__ep > @as(isize, @intCast(__s.len))) __s.len else @intCast(__ep); ");
+            try w.print(arena, "break :{s} std.mem.endsWith(u8, __s[0..__end], __needle); }})", .{lbl});
+        } else {
+            try w.print(arena, "; break :{s} std.mem.endsWith(u8, __s, __needle); }})", .{lbl});
+        }
         return;
     }
 
