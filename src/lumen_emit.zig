@@ -522,6 +522,10 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "@as(f64, std.math.inf(f64))");
             } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "NEGATIVE_INFINITY")) {
                 try w.appendSlice(arena, "@as(f64, -std.math.inf(f64))");
+            } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "MAX_SAFE_INTEGER")) {
+                try w.appendSlice(arena, "@as(f64, 9007199254740991.0)");
+            } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "MIN_SAFE_INTEGER")) {
+                try w.appendSlice(arena, "@as(f64, -9007199254740991.0)");
             } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "compare")) {
                 try w.appendSlice(arena, "@as(i32, switch (std.mem.order(u8, ");
                 try emitExpr(cl.args[0], w, arena);
