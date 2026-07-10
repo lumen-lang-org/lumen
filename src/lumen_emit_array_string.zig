@@ -256,10 +256,24 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         return;
     }
 
+    if (eq(u8, name, "at")) {
+        try A.idx("__i0", mc.args[0], w, arena);
+        try w.appendSlice(arena, "const __len: isize = @intCast(__s.len); const __i: isize = if (__i0 < 0) __len + __i0 else __i0; ");
+        try w.print(arena, "break :{s} @as([]const u8, if (__i >= 0 and __i < __len) __s[@intCast(__i)..@as(usize, @intCast(__i)) + 1] else \"\"); }})", .{lbl});
+        return;
+    }
+
     if (eq(u8, name, "indexOf")) {
         try w.appendSlice(arena, "const __needle: []const u8 = ");
         try emitExpr(mc.args[0], w, arena);
         try w.print(arena, "; break :{s} @as(i32, if (std.mem.indexOf(u8, __s, __needle)) |__p| @intCast(__p) else -1); }})", .{lbl});
+        return;
+    }
+
+    if (eq(u8, name, "lastIndexOf")) {
+        try w.appendSlice(arena, "const __needle: []const u8 = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.print(arena, "; break :{s} @as(i32, if (std.mem.lastIndexOf(u8, __s, __needle)) |__p| @intCast(__p) else -1); }})", .{lbl});
         return;
     }
 
