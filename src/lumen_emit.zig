@@ -378,6 +378,13 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ")) *% @as(i32, @truncate(");
                 try emitExpr(cl.args[1], w, arena);
                 try w.appendSlice(arena, ")))");
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "max") or std.mem.eql(u8, cl.name, "min")) and cl.args.len == 1 and cl.args[0].* == .spread) {
+                // `Math.min(...arr)` -> a runtime fold over the array.
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__mm{d}: {{ const __arr = ", .{s});
+                try emitExpr(cl.args[0].spread, w, arena);
+                try w.print(arena, "; var __r = __arr[0]; for (__arr[1..]) |__e| {{ __r = @{s}(__r, __e); }} break :__mm{d} __r; }})", .{ cl.name, s });
             } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "max") or std.mem.eql(u8, cl.name, "min"))) {
                 // Left-fold over all arguments: @max(@max(a, b), c) ...
                 for (0..cl.args.len - 1) |_| try w.print(arena, "@{s}(", .{cl.name});

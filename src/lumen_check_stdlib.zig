@@ -3198,6 +3198,21 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         return .i32;
     }
     if (std.mem.eql(u8, call.name, "max") or std.mem.eql(u8, call.name, "min")) {
+        // `Math.min(...arr)` / `Math.max(...arr)`: fold over a numeric array.
+        if (call.args.len == 1 and call.args[0].* == .spread) {
+            const src_type = self.exprType(program, call.args[0].spread, line, col) orelse return null;
+            const elem = types.arrayElem(src_type) orelse {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+            if (!types.isNumeric(elem)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            call.checked_arg_type = elem;
+            call.checked_type = elem;
+            return elem;
+        }
         // Variadic: two or more arguments, all of the same numeric type.
         if (call.args.len < 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
