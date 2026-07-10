@@ -407,7 +407,11 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
     if (eq(u8, name, "padStart")) {
         try A.idx("__target", mc.args[0], w, arena);
         try w.appendSlice(arena, "const __pad: []const u8 = ");
-        try emitExpr(mc.args[1], w, arena);
+        if (mc.args.len == 2) {
+            try emitExpr(mc.args[1], w, arena);
+        } else {
+            try w.appendSlice(arena, "\" \"");
+        }
         try w.appendSlice(arena, "; const __goal: usize = if (__target < 0) 0 else @intCast(__target); ");
         try w.appendSlice(arena, "var __buf: std.ArrayListUnmanaged(u8) = .empty; if (__goal > __s.len and __pad.len > 0) { var __need: usize = __goal - __s.len; while (__need > 0) { const __take = if (__need < __pad.len) __need else __pad.len; __buf.appendSlice(__sa(), __pad[0..__take]) catch unreachable; __need -= __take; } } ");
         try w.appendSlice(arena, "__buf.appendSlice(__sa(), __s) catch unreachable; ");
@@ -418,7 +422,11 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
     if (eq(u8, name, "padEnd")) {
         try A.idx("__target", mc.args[0], w, arena);
         try w.appendSlice(arena, "const __pad: []const u8 = ");
-        try emitExpr(mc.args[1], w, arena);
+        if (mc.args.len == 2) {
+            try emitExpr(mc.args[1], w, arena);
+        } else {
+            try w.appendSlice(arena, "\" \"");
+        }
         try w.appendSlice(arena, "; const __goal: usize = if (__target < 0) 0 else @intCast(__target); ");
         try w.appendSlice(arena, "var __buf: std.ArrayListUnmanaged(u8) = .empty; __buf.appendSlice(__sa(), __s) catch unreachable; ");
         try w.appendSlice(arena, "if (__goal > __s.len and __pad.len > 0) { var __need: usize = __goal - __s.len; while (__need > 0) { const __take = if (__need < __pad.len) __need else __pad.len; __buf.appendSlice(__sa(), __pad[0..__take]) catch unreachable; __need -= __take; } } ");

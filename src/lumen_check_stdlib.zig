@@ -658,8 +658,8 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         if (eq(u8, name, "slice")) break :blk .{ .min = 1, .max = 2, .kinds = &.{ .int, .int }, .result = .string };
         if (eq(u8, name, "substring")) break :blk .{ .min = 1, .max = 2, .kinds = &.{ .int, .int }, .result = .string };
         if (eq(u8, name, "repeat")) break :blk .{ .min = 1, .max = 1, .kinds = &.{.int}, .result = .string };
-        if (eq(u8, name, "padStart")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .int, .string }, .result = .string };
-        if (eq(u8, name, "padEnd")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .int, .string }, .result = .string };
+        if (eq(u8, name, "padStart")) break :blk .{ .min = 1, .max = 2, .kinds = &.{ .int, .string }, .result = .string };
+        if (eq(u8, name, "padEnd")) break :blk .{ .min = 1, .max = 2, .kinds = &.{ .int, .string }, .result = .string };
         if (eq(u8, name, "replace")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .string, .string }, .result = .string };
         if (eq(u8, name, "replaceAll")) break :blk .{ .min = 2, .max = 2, .kinds = &.{ .string, .string }, .result = .string };
         if (eq(u8, name, "toUpperCase")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
