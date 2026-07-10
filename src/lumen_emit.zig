@@ -123,7 +123,11 @@ pub fn emitStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: [
 pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
     switch (e.*) {
         .num => |v| try w.print(arena, "{d}", .{v}),
-        .float => |v| try w.print(arena, "{d}", .{v}),
+        // A float literal is `comptime_float` (f128) in Zig; left bare, chains of
+        // literal arithmetic fold at f128 precision and print extra digits
+        // (`0.1 + 0.2` -> `0.3000...0004`). Pin it to f64 so arithmetic and
+        // formatting match JS's double semantics.
+        .float => |v| try w.print(arena, "@as(f64, {d})", .{v}),
         .regex => |rx| {
             try w.appendSlice(arena, "__LumenRegExp{ .source = ");
             try emitRawStrLit(w, arena, rx.source);
@@ -1302,11 +1306,21 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 try w.appendSlice(arena, " }) catch std.process.exit(1))");
             } else if (b.op == '/') {
-                try w.appendSlice(arena, "@divTrunc(");
-                try emitExpr(b.l, w, arena);
-                try w.appendSlice(arena, ", ");
-                try emitExpr(b.r, w, arena);
-                try w.append(arena, ')');
+                // Float division keeps the fraction (`1.0 / 3.0` -> 0.333...);
+                // integer division truncates toward zero (@divTrunc).
+                if (b.checked_type != null and b.checked_type.? == .f64) {
+                    try w.append(arena, '(');
+                    try emitExpr(b.l, w, arena);
+                    try w.appendSlice(arena, " / ");
+                    try emitExpr(b.r, w, arena);
+                    try w.append(arena, ')');
+                } else {
+                    try w.appendSlice(arena, "@divTrunc(");
+                    try emitExpr(b.l, w, arena);
+                    try w.appendSlice(arena, ", ");
+                    try emitExpr(b.r, w, arena);
+                    try w.append(arena, ')');
+                }
             } else if (b.op == '%') {
                 // Zig's `%` rejects signed operands → use @rem (operands are non-negative here).
                 try w.appendSlice(arena, "@rem(");
