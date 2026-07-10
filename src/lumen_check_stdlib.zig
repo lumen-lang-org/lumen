@@ -151,6 +151,30 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return .i32;
     }
 
+    // findLast(pred): T | null  /  findLastIndex(pred): int — like find /
+    // findIndex but scanning for the LAST match. Same optional-index predicate.
+    if (eq(u8, name, "findLast") or eq(u8, name, "findLastIndex")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem) or !types.same(cb_type.func_type.ret.*, .bool)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        mc.cb_wants_index = cb_type.func_type.params.len == 2;
+        if (eq(u8, name, "findLastIndex")) {
+            mc.array_result_type = .i32;
+            return .i32;
+        }
+        const inner = self.arena.create(types.Type) catch return null;
+        inner.* = elem;
+        const res = types.Type{ .optional = inner };
+        mc.array_result_type = res;
+        return res;
+    }
+
     // indexOf(x: T, from?: int): int  /  includes(x: T, from?: int): bool  /
     // lastIndexOf(x: T): int. indexOf/includes accept an optional start index.
     if (eq(u8, name, "indexOf") or eq(u8, name, "lastIndexOf") or eq(u8, name, "includes")) {
