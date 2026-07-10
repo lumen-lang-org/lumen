@@ -379,21 +379,35 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "atan2") or std.mem.eql(u8, cl.name, "hypot"))) {
                 const arg_type = cl.checked_arg_type orelse return error.ParseError;
-                try w.print(arena, "std.math.{s}(", .{cl.name});
-                if (arg_type == .f64) {
-                    try w.appendSlice(arena, "@as(f64, ");
-                    try emitExpr(cl.args[0], w, arena);
-                    try w.appendSlice(arena, "), @as(f64, ");
-                    try emitExpr(cl.args[1], w, arena);
-                    try w.append(arena, ')');
+                const F = struct {
+                    fn emit(ex: anytype, aty: anytype, ww: *std.ArrayListUnmanaged(u8), ar: std.mem.Allocator) CompileError!void {
+                        if (aty == .f64) {
+                            try ww.appendSlice(ar, "@as(f64, ");
+                            try emitExpr(ex, ww, ar);
+                            try ww.append(ar, ')');
+                        } else {
+                            try ww.appendSlice(ar, "@as(f64, @floatFromInt(");
+                            try emitExpr(ex, ww, ar);
+                            try ww.appendSlice(ar, "))");
+                        }
+                    }
+                };
+                if (std.mem.eql(u8, cl.name, "hypot")) {
+                    // Left fold: hypot(hypot(a, b), c) ... preserves overflow-safety.
+                    for (0..cl.args.len - 1) |_| try w.appendSlice(arena, "std.math.hypot(");
+                    try F.emit(cl.args[0], arg_type, w, arena);
+                    for (cl.args[1..]) |arg| {
+                        try w.appendSlice(arena, ", ");
+                        try F.emit(arg, arg_type, w, arena);
+                        try w.append(arena, ')');
+                    }
                 } else {
-                    try w.appendSlice(arena, "@as(f64, @floatFromInt(");
-                    try emitExpr(cl.args[0], w, arena);
-                    try w.appendSlice(arena, ")), @as(f64, @floatFromInt(");
-                    try emitExpr(cl.args[1], w, arena);
-                    try w.appendSlice(arena, "))");
+                    try w.appendSlice(arena, "std.math.atan2(");
+                    try F.emit(cl.args[0], arg_type, w, arena);
+                    try w.appendSlice(arena, ", ");
+                    try F.emit(cl.args[1], arg_type, w, arena);
+                    try w.append(arena, ')');
                 }
-                try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "PI")) {
                 try w.appendSlice(arena, "@as(f64, std.math.pi)");
             } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "E")) {

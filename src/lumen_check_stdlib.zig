@@ -3145,16 +3145,25 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
     }
     // Binary std.math functions. Same-type args as pow/max/min: simpler than
     // tracking two independent arg types just to pick each one's coercion.
+    // atan2 is strictly binary; hypot is variadic (two or more, same type).
     if (std.mem.eql(u8, call.name, "atan2") or std.mem.eql(u8, call.name, "hypot")) {
-        if (call.args.len != 2) {
+        const is_hypot = std.mem.eql(u8, call.name, "hypot");
+        const ok_count = if (is_hypot) call.args.len >= 2 else call.args.len == 2;
+        if (!ok_count) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
         const a_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        const b_type = self.exprType(program, call.args[1], line, col) orelse return null;
-        if (!types.isNumeric(a_type) or !types.same(a_type, b_type)) {
+        if (!types.isNumeric(a_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
+        }
+        for (call.args[1..]) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.same(a_type, at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
         }
         call.checked_arg_type = a_type;
         call.checked_type = .f64;
