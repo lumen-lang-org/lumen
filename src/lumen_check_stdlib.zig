@@ -724,6 +724,23 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
     const name = mc.name;
     const eq = std.mem.eql;
 
+    // concat(...strings): string -- variadic, doesn't fit the fixed-arity spec
+    // table below, so validate it directly.
+    if (eq(u8, name, "concat")) {
+        if (mc.args.len < 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        for (mc.args) |arg| {
+            self.ensureAssignable(program, .string, arg, line, col) catch {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+        }
+        mc.array_result_type = .string;
+        return .string;
+    }
+
     const ArgKind = enum { string, int };
     const Spec = struct { min: usize, max: usize, kinds: []const ArgKind, result: types.Type };
 

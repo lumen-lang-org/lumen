@@ -140,7 +140,7 @@
   <p class="sub">Called directly on any <code>string</code> value.</p>
   <table>
     <tr><th>API</th><th>Type</th></tr>
-    <tr><td><code>s.length</code> · <code>s + t</code></td><td>int · concatenation</td></tr>
+    <tr><td><code>s.length</code> · <code>s + t</code> · <code>s.concat(t, …)</code></td><td>int · concatenation · string (variadic)</td></tr>
     <tr><td><code>s.split(sep, limit?)</code></td><td>(string, int) → string[] (at most <code>limit</code> parts)</td></tr>
     <tr><td><code>s.slice(start, end?)</code> · <code>s.substring(start, end)</code></td><td>→ string</td></tr>
     <tr><td><code>s.indexOf(sub, from?)</code> · <code>s.lastIndexOf(sub)</code> · <code>s.includes(sub, from?)</code></td><td>→ int · int · bool</td></tr>

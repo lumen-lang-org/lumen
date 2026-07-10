@@ -346,6 +346,17 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         return;
     }
 
+    if (eq(u8, name, "concat")) {
+        try w.appendSlice(arena, "var __buf: std.ArrayListUnmanaged(u8) = .empty; __buf.appendSlice(__sa(), __s) catch unreachable; ");
+        for (mc.args) |arg| {
+            try w.appendSlice(arena, "__buf.appendSlice(__sa(), ");
+            try emitExpr(arg, w, arena);
+            try w.appendSlice(arena, ") catch unreachable; ");
+        }
+        try w.print(arena, "break :{s} @as([]const u8, __buf.items); }})", .{lbl});
+        return;
+    }
+
     if (eq(u8, name, "charCodeAt") or eq(u8, name, "codePointAt")) {
         try A.idx("__i", mc.args[0], w, arena);
         try w.print(arena, "break :{s} @as(i32, if (__i >= 0 and __i < @as(isize, @intCast(__s.len))) @intCast(__s[@intCast(__i)]) else -1); }})", .{lbl});
