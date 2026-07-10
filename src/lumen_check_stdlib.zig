@@ -219,6 +219,27 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // with(i: int, value: T): T[]  — a copy with index i replaced (immutable
+    // update). Negative i counts from the end; out of range leaves the copy
+    // unchanged (rather than trapping).
+    if (eq(u8, name, "with")) {
+        if (mc.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const it = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.isInteger(it)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, elem, mc.args[1], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        mc.array_result_type = obj_type;
+        return obj_type;
+    }
+
     // concat(other: T[]): T[]  — a new array, both sources untouched.
     if (eq(u8, name, "concat")) {
         if (mc.args.len != 1) {
