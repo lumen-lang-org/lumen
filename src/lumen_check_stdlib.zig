@@ -3032,6 +3032,22 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = if (std.mem.eql(u8, call.name, "sign")) .i32 else if (std.mem.eql(u8, call.name, "sqrt")) .f64 else arg_type;
         return call.checked_type;
     }
+    // imul(a, b): int -- 32-bit wrapping integer multiply.
+    if (std.mem.eql(u8, call.name, "imul")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        for (call.args) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.isInteger(at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        call.checked_type = .i32;
+        return .i32;
+    }
     if (std.mem.eql(u8, call.name, "max") or std.mem.eql(u8, call.name, "min")) {
         // Variadic: two or more arguments, all of the same numeric type.
         if (call.args.len < 2) {
