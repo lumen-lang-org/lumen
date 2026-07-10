@@ -126,11 +126,18 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         try emitArrayObj(mc, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; var __acc: {s} = ", .{acc_zig});
-        try emitExpr(mc.args[1], w, arena);
-        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
-        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
-        try w.print(arena, "; {s} {{ __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ loop_hdr, idx_arg, lbl });
+        if (mc.args.len == 2) {
+            // Seeded fold over every element (index counts from 0).
+            try w.print(arena, "; var __acc: {s} = ", .{acc_zig});
+            try emitExpr(mc.args[1], w, arena);
+            const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+            const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
+            try w.print(arena, "; {s} {{ __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ loop_hdr, idx_arg, lbl });
+        } else {
+            // No seed: the first element seeds the fold; iteration starts at 1.
+            const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__ri))" else "";
+            try w.print(arena, "; var __acc: {s} = __arr[0]; var __ri: usize = 1; while (__ri < __arr.len) : (__ri += 1) {{ const __e = __arr[__ri]; __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ acc_zig, idx_arg, lbl });
+        }
         return;
     }
 
@@ -142,9 +149,14 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         try emitArrayObj(mc, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; var __acc: {s} = ", .{acc_zig});
-        try emitExpr(mc.args[1], w, arena);
-        try w.print(arena, "; var __k: usize = __arr.len; while (__k > 0) {{ __k -= 1; const __e = __arr[__k]; __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ idx_arg, lbl });
+        if (mc.args.len == 2) {
+            try w.print(arena, "; var __acc: {s} = ", .{acc_zig});
+            try emitExpr(mc.args[1], w, arena);
+            try w.print(arena, "; var __k: usize = __arr.len; while (__k > 0) {{ __k -= 1; const __e = __arr[__k]; __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ idx_arg, lbl });
+        } else {
+            // No seed: the last element seeds the fold; iteration starts at len-2.
+            try w.print(arena, "; var __acc: {s} = __arr[__arr.len - 1]; var __k: usize = __arr.len - 1; while (__k > 0) {{ __k -= 1; const __e = __arr[__k]; __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ acc_zig, idx_arg, lbl });
+        }
         return;
     }
 
