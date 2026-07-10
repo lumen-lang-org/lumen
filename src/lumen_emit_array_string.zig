@@ -156,6 +156,15 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "at")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; const __len: isize = @intCast(__arr.len); const __i: isize = @intCast(");
+        try emitExpr(mc.args[0], w, arena);
+        try w.print(arena, "); const __j: isize = if (__i < 0) __len + __i else __i; break :{s} @as(?{s}, if (__j >= 0 and __j < __len) __arr[@intCast(__j)] else null); }})", .{ lbl, elem_zig });
+        return;
+    }
+
     if (eq(u8, name, "concat")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);

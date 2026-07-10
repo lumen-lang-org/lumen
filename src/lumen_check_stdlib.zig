@@ -144,6 +144,25 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // at(i: int): T | null  — element at i (negative counts from the end),
+    // or null when out of range. Optional result, like find.
+    if (eq(u8, name, "at")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const at = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.isInteger(at)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const inner = self.arena.create(types.Type) catch return null;
+        inner.* = elem;
+        const res = types.Type{ .optional = inner };
+        mc.array_result_type = res;
+        return res;
+    }
+
     // concat(other: T[]): T[]  — a new array, both sources untouched.
     if (eq(u8, name, "concat")) {
         if (mc.args.len != 1) {
