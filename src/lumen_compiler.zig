@@ -341,6 +341,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\            return false;
             \\        }
             \\        fn size(self: *Self) i32 { return @intCast(self.keys_.items.len); }
+            \\        fn clear(self: *Self) void { self.keys_.clearRetainingCapacity(); self.values_.clearRetainingCapacity(); }
             \\        fn keys(self: *Self) []const K { return self.keys_.items; }
             \\        fn values(self: *Self) []const V { return self.values_.items; }
             \\        fn forEach(self: *Self, cb: anytype) void {
@@ -377,6 +378,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\            return false;
             \\        }
             \\        fn size(self: *Self) i32 { return @intCast(self.items_.items.len); }
+            \\        fn clear(self: *Self) void { self.items_.clearRetainingCapacity(); }
             \\        fn values(self: *Self) []const T { return self.items_.items; }
             \\        fn forEach(self: *Self, cb: anytype) void {
             \\            for (self.items_.items) |v| { _ = cb.call(cb.ctx, v); }

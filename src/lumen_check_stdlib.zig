@@ -281,6 +281,13 @@ pub fn mapMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
     const name = mc.name;
     const eq = std.mem.eql;
 
+    if (eq(u8, name, "clear")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .void;
+    }
     if (eq(u8, name, "set")) {
         if (mc.args.len != 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
@@ -363,6 +370,13 @@ pub fn setMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
     const name = mc.name;
     const eq = std.mem.eql;
 
+    if (eq(u8, name, "clear")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .void;
+    }
     if (eq(u8, name, "add")) {
         if (mc.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
