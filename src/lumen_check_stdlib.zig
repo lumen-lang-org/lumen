@@ -807,8 +807,10 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
 /// when the whole string is not a valid number. Strict (the entire string must
 /// parse), unlike JavaScript's lenient prefix parse.
 pub fn numberCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
-    // Predicates on a numeric value: isInteger / isFinite / isNaN -> bool.
-    if (std.mem.eql(u8, call.name, "isInteger") or std.mem.eql(u8, call.name, "isFinite") or std.mem.eql(u8, call.name, "isNaN")) {
+    // Predicates on a numeric value -> bool.
+    if (std.mem.eql(u8, call.name, "isInteger") or std.mem.eql(u8, call.name, "isFinite") or
+        std.mem.eql(u8, call.name, "isNaN") or std.mem.eql(u8, call.name, "isSafeInteger"))
+    {
         if (call.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
