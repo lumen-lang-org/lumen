@@ -2945,9 +2945,13 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = .f64;
         return .f64;
     }
-    // Unary std.math functions (no direct Zig builtin): inverse trig + cbrt.
+    // Unary std.math functions (no direct Zig builtin): inverse trig, cbrt,
+    // and the hyperbolic family.
     if (std.mem.eql(u8, call.name, "asin") or std.mem.eql(u8, call.name, "acos") or
-        std.mem.eql(u8, call.name, "atan") or std.mem.eql(u8, call.name, "cbrt"))
+        std.mem.eql(u8, call.name, "atan") or std.mem.eql(u8, call.name, "cbrt") or
+        std.mem.eql(u8, call.name, "sinh") or std.mem.eql(u8, call.name, "cosh") or
+        std.mem.eql(u8, call.name, "tanh") or std.mem.eql(u8, call.name, "asinh") or
+        std.mem.eql(u8, call.name, "acosh") or std.mem.eql(u8, call.name, "atanh"))
     {
         if (call.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
@@ -2982,7 +2986,11 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
     // Math.PI() / Math.E() -- zero-arg functions, not properties, the same
     // deviation as path.sep()/process.platform() (no static-namespace
     // constant-property mechanism yet).
-    if (std.mem.eql(u8, call.name, "PI") or std.mem.eql(u8, call.name, "E")) {
+    if (std.mem.eql(u8, call.name, "PI") or std.mem.eql(u8, call.name, "E") or
+        std.mem.eql(u8, call.name, "LN2") or std.mem.eql(u8, call.name, "LN10") or
+        std.mem.eql(u8, call.name, "LOG2E") or std.mem.eql(u8, call.name, "LOG10E") or
+        std.mem.eql(u8, call.name, "SQRT2"))
+    {
         if (call.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
