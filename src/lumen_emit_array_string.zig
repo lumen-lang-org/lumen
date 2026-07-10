@@ -252,7 +252,7 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
-    if (eq(u8, name, "sort")) {
+    if (eq(u8, name, "sort") or eq(u8, name, "toSorted")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
@@ -261,7 +261,7 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
-    if (eq(u8, name, "reverse")) {
+    if (eq(u8, name, "reverse") or eq(u8, name, "toReversed")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len) catch unreachable; for (__arr, 0..) |__e, __i| {{ __r[__arr.len - 1 - __i] = __e; }} break :{s} @as([]const {s}, __r); }})", .{ elem_zig, lbl, elem_zig });

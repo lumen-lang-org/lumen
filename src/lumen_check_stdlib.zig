@@ -254,9 +254,10 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return obj_type;
     }
 
-    // sort((a: T, b: T) => int): T[]  — a new array ordered by the comparator
-    // (negative => a before b), source untouched. Stable.
-    if (eq(u8, name, "sort")) {
+    // sort/toSorted((a: T, b: T) => int): T[]  — a new array ordered by the
+    // comparator (negative => a before b), source untouched. Stable. Both names
+    // are equivalent here since Lumen arrays are immutable.
+    if (eq(u8, name, "sort") or eq(u8, name, "toSorted")) {
         if (mc.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
@@ -270,8 +271,8 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return obj_type;
     }
 
-    // reverse(): T[]  — a new array, source untouched (arrays are immutable).
-    if (eq(u8, name, "reverse")) {
+    // reverse/toReversed(): T[]  — a new array, source untouched.
+    if (eq(u8, name, "reverse") or eq(u8, name, "toReversed")) {
         if (mc.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
