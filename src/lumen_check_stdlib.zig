@@ -301,6 +301,16 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
     // comparator (negative => a before b), source untouched. Stable. Both names
     // are equivalent here since Lumen arrays are immutable.
     if (eq(u8, name, "sort") or eq(u8, name, "toSorted")) {
+        // No comparator: default ascending order (numeric for numbers,
+        // lexicographic for strings).
+        if (mc.args.len == 0) {
+            if (!types.isNumeric(elem) and !types.isStringLike(elem)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            mc.array_result_type = obj_type;
+            return obj_type;
+        }
         if (mc.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;

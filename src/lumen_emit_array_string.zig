@@ -352,6 +352,15 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     if (eq(u8, name, "sort") or eq(u8, name, "toSorted")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitArrayObj(mc, w, arena);
+        if (mc.args.len == 0) {
+            // Default ascending: numeric via `<`, string via lexicographic order.
+            const less = if (types.isStringLike(elem))
+                "std.mem.order(u8, __a, __b) == .lt"
+            else
+                "__a < __b";
+            try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len) catch unreachable; @memcpy(__r, __arr); std.mem.sort({s}, __r, {{}}, struct {{ fn __lt(_: void, __a: {s}, __b: {s}) bool {{ return {s}; }} }}.__lt); break :{s} @as([]const {s}, __r); }})", .{ elem_zig, elem_zig, elem_zig, elem_zig, less, lbl, elem_zig });
+            return;
+        }
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
         try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len) catch unreachable; @memcpy(__r, __arr); std.mem.sort({s}, __r, __cb, struct {{ fn __lt(__c: @TypeOf(__cb), __a: {s}, __b: {s}) bool {{ return __c.call(__c.ctx, __a, __b) < 0; }} }}.__lt); break :{s} @as([]const {s}, __r); }})", .{ elem_zig, elem_zig, elem_zig, elem_zig, lbl, elem_zig });
