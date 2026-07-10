@@ -757,6 +757,28 @@ pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
     return null;
 }
 
+/// Validate an instance method call on a numeric receiver (int/f64).
+/// Currently: `toFixed(digits: int): string`.
+pub fn numberInstanceMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.number_method = true;
+    mc.array_elem_type = obj_type; // receiver numeric type, for emit coercion
+    const name = mc.name;
+    if (std.mem.eql(u8, name, "toFixed")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const at = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.isInteger(at)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .string;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
 /// Validate an instance method call on a `string` receiver and return its
 /// statically-known result type. Mirrors `arrayMethod`.
 pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u32, col: u32) ?types.Type {

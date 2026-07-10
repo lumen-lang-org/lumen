@@ -1332,6 +1332,23 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try emitExpr(arg, w, arena);
                 }
                 try w.append(arena, ')');
+            } else if (mc.number_method) {
+                // toFixed(digits): format the numeric receiver as f64 with a
+                // runtime precision.
+                const recv_type = mc.array_elem_type orelse return error.ParseError;
+                try w.appendSlice(arena, "(std.fmt.allocPrint(__sa(), \"{d:.[1]}\", .{ ");
+                if (recv_type == .f64) {
+                    try w.appendSlice(arena, "@as(f64, ");
+                    try emitExpr(mc.obj, w, arena);
+                    try w.append(arena, ')');
+                } else {
+                    try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                    try emitExpr(mc.obj, w, arena);
+                    try w.appendSlice(arena, "))");
+                }
+                try w.appendSlice(arena, ", @as(usize, @intCast(");
+                try emitExpr(mc.args[0], w, arena);
+                try w.appendSlice(arena, ")) }) catch unreachable)");
             } else if (mc.array_result_type != null) {
                 try emitArrayMethod(mc, w, arena);
             } else if (mc.is_static) {

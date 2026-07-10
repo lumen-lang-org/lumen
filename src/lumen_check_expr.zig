@@ -588,6 +588,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (types.isStringLike(obj_type)) {
                 return self.stringMethod(program, mc, line, col);
             }
+            if (types.isNumeric(obj_type)) {
+                return self.numberInstanceMethod(program, mc, obj_type, line, col);
+            }
             if (types.isMap(obj_type)) {
                 return self.mapMethod(program, mc, obj_type, line, col);
             }
