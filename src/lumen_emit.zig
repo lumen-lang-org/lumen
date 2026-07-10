@@ -392,7 +392,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "floor") or std.mem.eql(u8, cl.name, "ceil") or std.mem.eql(u8, cl.name, "round") or std.mem.eql(u8, cl.name, "trunc"))) {
                 const arg_type = cl.checked_arg_type orelse return error.ParseError;
-                try w.print(arena, "@as(i32, @intFromFloat(@{s}(", .{cl.name});
+                // JS Math.round rounds a half toward +Infinity (floor(x + 0.5)),
+                // not away from zero like Zig's @round; the others map directly.
+                const is_round = std.mem.eql(u8, cl.name, "round");
+                if (is_round) {
+                    try w.appendSlice(arena, "@as(i32, @intFromFloat(@floor(");
+                } else {
+                    try w.print(arena, "@as(i32, @intFromFloat(@{s}(", .{cl.name});
+                }
                 if (arg_type == .f64) {
                     // See the sqrt branch above: a "whole" float literal
                     // like 4.0 emits as the bare numeral `4`, which these
@@ -405,6 +412,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try emitExpr(cl.args[0], w, arena);
                     try w.appendSlice(arena, "))");
                 }
+                if (is_round) try w.appendSlice(arena, " + 0.5");
                 try w.appendSlice(arena, ")))");
             } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "pow")) {
                 const arg_type = cl.checked_arg_type orelse return error.ParseError;
