@@ -29,6 +29,50 @@ const std = @import("std");
 
 // The regex runtime engine, embedded verbatim into programs that use regex.
 const REGEX_RT = @embedFile("regex_rt.zig");
+
+// JS-semantics parseInt/parseFloat, emitted into every program's prelude.
+const PARSE_RT =
+    \\fn __parseInt(s: []const u8, radix_in: i32) ?i32 {
+    \\    var i: usize = 0;
+    \\    while (i < s.len and (s[i] == ' ' or s[i] == '\t' or s[i] == '\n' or s[i] == '\r')) : (i += 1) {}
+    \\    var neg = false;
+    \\    if (i < s.len and (s[i] == '+' or s[i] == '-')) { neg = s[i] == '-'; i += 1; }
+    \\    var radix: i64 = radix_in;
+    \\    if ((radix == 16 or radix == 0) and i + 1 < s.len and s[i] == '0' and (s[i + 1] == 'x' or s[i + 1] == 'X')) { i += 2; radix = 16; }
+    \\    if (radix == 0) radix = 10;
+    \\    if (radix < 2 or radix > 36) return null;
+    \\    var val: i64 = 0;
+    \\    var any = false;
+    \\    while (i < s.len) : (i += 1) {
+    \\        const c = s[i];
+    \\        const d: i64 = if (c >= '0' and c <= '9') @as(i64, c - '0') else if (c >= 'a' and c <= 'z') @as(i64, c - 'a' + 10) else if (c >= 'A' and c <= 'Z') @as(i64, c - 'A' + 10) else 255;
+    \\        if (d >= radix) break;
+    \\        val = val * radix + d;
+    \\        any = true;
+    \\        if (val > 2147483648) return null;
+    \\    }
+    \\    if (!any) return null;
+    \\    if (neg) val = -val;
+    \\    if (val > 2147483647 or val < -2147483648) return null;
+    \\    return @intCast(val);
+    \\}
+    \\fn __parseFloat(s: []const u8) ?f64 {
+    \\    var i: usize = 0;
+    \\    while (i < s.len and (s[i] == ' ' or s[i] == '\t' or s[i] == '\n' or s[i] == '\r')) : (i += 1) {}
+    \\    const start = i;
+    \\    if (i < s.len and (s[i] == '+' or s[i] == '-')) i += 1;
+    \\    while (i < s.len) : (i += 1) {
+    \\        const c = s[i];
+    \\        if ((c >= '0' and c <= '9') or c == '.' or c == 'e' or c == 'E' or c == '+' or c == '-') continue;
+    \\        break;
+    \\    }
+    \\    var end = i;
+    \\    while (end > start) : (end -= 1) {
+    \\        if (std.fmt.parseFloat(f64, s[start..end])) |v| return v else |_| {}
+    \\    }
+    \\    return null;
+    \\}
+;
 // Compile-time regex specialization (Plan B): parses a literal pattern at build
 // time and emits a pattern-specific straight-line matcher. See regex_specialize.zig.
 const regex_specialize = @import("regex_specialize.zig");
@@ -198,6 +242,12 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     var out: std.ArrayListUnmanaged(u8) = .empty;
     try out.appendSlice(arena, "const std = @import(\"std\");\n");
     try out.appendSlice(arena, "var __sa_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);\nfn __sa() std.mem.Allocator { return __sa_arena.allocator(); }\n");
+    // JS-semantics parseInt/parseFloat: skip leading whitespace, read an optional
+    // sign, then consume the longest valid numeric prefix, ignoring trailing
+    // garbage. parseInt honors a `0x` prefix when the radix is 16 or unspecified
+    // (radix 0 sentinel). No valid digits -> null (JS NaN).
+    try out.appendSlice(arena, PARSE_RT);
+    try out.appendSlice(arena, "\n");
     // Regex literal value: the source/flags strings. Matching methods are added in
     // later cycles; for now it carries `.source` and `.flags`.
     try out.appendSlice(arena, "const __LumenRegExp = struct { source: []const u8, flags: []const u8 };\n");

@@ -182,7 +182,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             if (std.mem.eql(u8, cl.name, "Error")) {
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
             } else if (std.mem.eql(u8, cl.name, "parseInt") and cl.is_global_parse) {
-                try w.appendSlice(arena, "@as(?i32, std.fmt.parseInt(i32, ");
+                try w.appendSlice(arena, "__parseInt(");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ", ");
                 if (cl.args.len == 2) {
@@ -190,13 +190,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try emitExpr(cl.args[1], w, arena);
                     try w.appendSlice(arena, ")");
                 } else {
-                    try w.appendSlice(arena, "10");
+                    // 0 = infer the radix (honors a `0x` prefix as hex).
+                    try w.appendSlice(arena, "0");
                 }
-                try w.appendSlice(arena, ") catch null)");
+                try w.appendSlice(arena, ")");
             } else if (std.mem.eql(u8, cl.name, "parseFloat") and cl.is_global_parse) {
-                try w.appendSlice(arena, "@as(?f64, std.fmt.parseFloat(f64, ");
+                try w.appendSlice(arena, "__parseFloat(");
                 try emitExpr(cl.args[0], w, arena);
-                try w.appendSlice(arena, ") catch null)");
+                try w.appendSlice(arena, ")");
             } else if (std.mem.eql(u8, cl.name, "String") and cl.is_global_parse) {
                 // Convert number/bool/string to string with a comptime type branch.
                 g_global_pred_seq += 1;
@@ -519,7 +520,8 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "parseInt")) {
-                try w.appendSlice(arena, "@as(?i32, std.fmt.parseInt(i32, ");
+                // Number.parseInt is identical to the global parseInt.
+                try w.appendSlice(arena, "__parseInt(");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ", ");
                 if (cl.args.len == 2) {
@@ -527,13 +529,13 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try emitExpr(cl.args[1], w, arena);
                     try w.appendSlice(arena, ")");
                 } else {
-                    try w.appendSlice(arena, "10");
+                    try w.appendSlice(arena, "0");
                 }
-                try w.appendSlice(arena, ") catch null)");
+                try w.appendSlice(arena, ")");
             } else if (std.mem.eql(u8, cl.namespace, "Number") and std.mem.eql(u8, cl.name, "parseFloat")) {
-                try w.appendSlice(arena, "@as(?f64, std.fmt.parseFloat(f64, ");
+                try w.appendSlice(arena, "__parseFloat(");
                 try emitExpr(cl.args[0], w, arena);
-                try w.appendSlice(arena, ") catch null)");
+                try w.appendSlice(arena, ")");
             } else if (std.mem.eql(u8, cl.namespace, "Number") and (std.mem.eql(u8, cl.name, "isInteger") or std.mem.eql(u8, cl.name, "isFinite") or std.mem.eql(u8, cl.name, "isNaN") or std.mem.eql(u8, cl.name, "isSafeInteger"))) {
                 // Evaluate the argument as f64 (so the check works uniformly for
                 // int and float inputs, and side effects still run).
