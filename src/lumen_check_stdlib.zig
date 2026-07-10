@@ -111,18 +111,25 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return .void;
     }
 
-    // reduce((U, T) => U, init: U): U  — init fixes the accumulator type.
+    // reduce((U, T) => U, init: U): U  or  reduce((U, T, int) => U, init: U): U
+    // — init fixes the accumulator type; the optional third callback parameter
+    // is the element index.
     if (eq(u8, name, "reduce")) {
         if (mc.args.len != 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
         const acc = self.exprType(program, mc.args[1], line, col) orelse return null;
-        const want = self.makeFuncType(&.{ acc, elem }, acc) orelse return null;
-        self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        const p = if (cb_type == .func_type) cb_type.func_type.params else &[_]types.Type{};
+        const shape_ok = (p.len == 2 or p.len == 3) and
+            types.same(p[0], acc) and types.same(p[1], elem) and
+            (p.len == 2 or types.isInteger(p[2]));
+        if (cb_type != .func_type or !shape_ok or !types.same(cb_type.func_type.ret.*, acc)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
-        };
+        }
+        mc.cb_wants_index = p.len == 3;
         mc.array_acc_type = acc;
         mc.array_result_type = acc;
         return acc;

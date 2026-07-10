@@ -108,7 +108,9 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         try emitExpr(mc.args[0], w, arena);
         try w.print(arena, "; var __acc: {s} = ", .{acc_zig});
         try emitExpr(mc.args[1], w, arena);
-        try w.print(arena, "; for (__arr) |__e| {{ __acc = __cb.call(__cb.ctx, __acc, __e); }} break :{s} __acc; }})", .{lbl});
+        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
+        try w.print(arena, "; {s} {{ __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ loop_hdr, idx_arg, lbl });
         return;
     }
 
