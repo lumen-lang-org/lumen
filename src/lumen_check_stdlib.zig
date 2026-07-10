@@ -43,17 +43,19 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
     const name = mc.name;
     const eq = std.mem.eql;
 
-    // Methods taking a single `(T) => bool` predicate.
+    // Methods taking a `(T) => bool` or `(T, int) => bool` predicate; the
+    // optional second parameter is the element index.
     if (eq(u8, name, "filter") or eq(u8, name, "find") or eq(u8, name, "some") or eq(u8, name, "every")) {
         if (mc.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const want = self.makeFuncType(&.{elem}, .bool) orelse return null;
-        self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem) or !types.same(cb_type.func_type.ret.*, .bool)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
-        };
+        }
+        mc.cb_wants_index = cb_type.func_type.params.len == 2;
         if (eq(u8, name, "some") or eq(u8, name, "every")) {
             mc.array_result_type = .bool;
             return .bool;

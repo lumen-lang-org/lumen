@@ -78,11 +78,13 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     }
 
     if (eq(u8, name, "filter")) {
+        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; var __r: std.ArrayListUnmanaged({s}) = .empty; for (__arr) |__e| {{ if (__cb.call(__cb.ctx, __e)) __r.append(__sa(), __e) catch unreachable; }} break :{s} @as([]const {s}, __r.items); }})", .{ elem_zig, lbl, elem_zig });
+        try w.print(arena, "; var __r: std.ArrayListUnmanaged({s}) = .empty; {s} {{ if (__cb.call(__cb.ctx, __e{s})) __r.append(__sa(), __e) catch unreachable; }} break :{s} @as([]const {s}, __r.items); }})", .{ elem_zig, loop_hdr, idx_arg, lbl, elem_zig });
         return;
     }
 
@@ -111,29 +113,35 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     }
 
     if (eq(u8, name, "find")) {
+        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; var __found: ?{s} = null; for (__arr) |__e| {{ if (__cb.call(__cb.ctx, __e)) {{ __found = __e; break; }} }} break :{s} __found; }})", .{ elem_zig, lbl });
+        try w.print(arena, "; var __found: ?{s} = null; {s} {{ if (__cb.call(__cb.ctx, __e{s})) {{ __found = __e; break; }} }} break :{s} __found; }})", .{ elem_zig, loop_hdr, idx_arg, lbl });
         return;
     }
 
     if (eq(u8, name, "some")) {
+        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; var __r = false; for (__arr) |__e| {{ if (__cb.call(__cb.ctx, __e)) {{ __r = true; break; }} }} break :{s} __r; }})", .{lbl});
+        try w.print(arena, "; var __r = false; {s} {{ if (__cb.call(__cb.ctx, __e{s})) {{ __r = true; break; }} }} break :{s} __r; }})", .{ loop_hdr, idx_arg, lbl });
         return;
     }
 
     if (eq(u8, name, "every")) {
+        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; var __r = true; for (__arr) |__e| {{ if (!__cb.call(__cb.ctx, __e)) {{ __r = false; break; }} }} break :{s} __r; }})", .{lbl});
+        try w.print(arena, "; var __r = true; {s} {{ if (!__cb.call(__cb.ctx, __e{s})) {{ __r = false; break; }} }} break :{s} __r; }})", .{ loop_hdr, idx_arg, lbl });
         return;
     }
 
