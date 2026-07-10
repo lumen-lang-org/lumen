@@ -763,6 +763,10 @@ pub const Parser = struct {
         }
 
         const name = kw;
+        const save_before_name = self.lex;
+        const save_cur_name = self.cur;
+        const save_line_name = self.cur_line;
+        const save_col_name = self.cur_col;
         try self.advance();
         if (self.isOp('(')) {
             try self.expectOp('(');
@@ -814,14 +818,31 @@ pub const Parser = struct {
             self.lex = save_lex;
             self.cur = save_cur;
         }
-        // Member-expression statement: `obj.method(args);`, `obj.field...`.
+        // Member-expression statement: `obj.method(args);`, `obj.field...`,
+        // possibly continuing into an operator (`a.length > 2 ? ... : ...;`).
+        // Restore to the identifier and parse the full expression.
         if (self.isOp('.') or self.isOp('[') or self.isOp2("?.")) {
-            const base = try self.node(.{ .var_ref = .{ .name = name } });
-            const e = try self.parsePostfixFrom(base);
+            self.lex = save_before_name;
+            self.cur = save_cur_name;
+            self.cur_line = save_line_name;
+            self.cur_col = save_col_name;
+            const value = try self.parseExpr();
             try self.expectOp(';');
-            return .{ .expr_stmt = .{ .value = e, .line = line, .col = col } };
+            return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
         }
-        return .{ .assign = try self.parseAssignmentTail(name, line, col, true) };
+        // An assignment (`x = ...`, `x += ...`) or, failing that, a general
+        // expression statement led by an identifier (`x > 0 ? a : b;`,
+        // `x + y;`). Restore to the identifier and parse the whole expression.
+        if (self.isOp('=') or self.isCompoundAssignOp()) {
+            return .{ .assign = try self.parseAssignmentTail(name, line, col, true) };
+        }
+        self.lex = save_before_name;
+        self.cur = save_cur_name;
+        self.cur_line = save_line_name;
+        self.cur_col = save_col_name;
+        const value = try self.parseExpr();
+        try self.expectOp(';');
+        return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
     }
 
     pub fn parseProgram(self: *Parser) CompileError!Program {
