@@ -421,6 +421,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "compare")) {
+                try w.appendSlice(arena, "@as(i32, switch (std.mem.order(u8, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.appendSlice(arena, ")) { .lt => -1, .eq => 0, .gt => 1 })");
             } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "fromCharCode")) {
                 g_from_char_code_seq += 1;
                 const fcc_lbl = try std.fmt.allocPrint(arena, "__fcc{d}", .{g_from_char_code_seq});

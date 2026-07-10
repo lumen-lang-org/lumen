@@ -3059,6 +3059,22 @@ pub fn stringCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         call.checked_type = .bool;
         return .bool;
     }
+    // String.compare(a, b): int -- lexicographic byte ordering, -1/0/1. Gives
+    // string[] a usable `sort` comparator.
+    if (std.mem.eql(u8, call.name, "compare")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const left_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        const right_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        if (!types.same(.string, left_type) or !types.same(.string, right_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_type = .i32;
+        return .i32;
+    }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
 }
