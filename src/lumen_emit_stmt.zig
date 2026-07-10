@@ -538,6 +538,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 }
                 try body.appendSlice(arena, "};\n");
                 try body.print(arena, "    {s}for (__forin_keys) |__forin_k| {{\n    const {s}: []const u8 = __forin_k;\n", .{ try labelPrefix(arena, loop.label, loop.body), binding });
+                if (!std.mem.eql(u8, binding, "_")) try body.print(arena, "    _ = &{s};\n", .{binding});
                 for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n");
             } else {
@@ -550,6 +551,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
                 try body.print(arena, "    {s}while ({s} < {s}.len) : ({s} += 1) {{\n", .{ try labelPrefix(arena, loop.label, loop.body), idx, seq, idx });
                 try body.print(arena, "    const {s}: []const u8 = std.fmt.allocPrint(__alloc, \"{{d}}\", .{{{s}}}) catch unreachable;\n", .{ binding, idx });
+                if (!std.mem.eql(u8, binding, "_")) try body.print(arena, "    _ = &{s};\n", .{binding});
                 for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n");
             }
