@@ -573,12 +573,23 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
                     return null;
                 }
-                if (ne.args.len != 0) {
+                const set_elem = self.arena.create(types.Type) catch return null;
+                set_elem.* = self.typeFromAnnotation(ne.type_args[0], line, col) catch return null;
+                // Optional initializer: an array of elements (`new Set([1,2,3])`).
+                if (ne.args.len == 1) {
+                    const at = self.exprType(program, ne.args[0], line, col) orelse return null;
+                    const ae = types.arrayElem(at) orelse {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    };
+                    if (!types.same(ae, set_elem.*)) {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
+                } else if (ne.args.len != 0) {
                     _ = self.fail(line, col, "E_ARG_COUNT") catch {};
                     return null;
                 }
-                const set_elem = self.arena.create(types.Type) catch return null;
-                set_elem.* = self.typeFromAnnotation(ne.type_args[0], line, col) catch return null;
                 const ct = types.Type{ .set_type = set_elem };
                 ne.container_type = ct;
                 program.needs_set = true;

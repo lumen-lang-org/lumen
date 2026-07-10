@@ -1445,6 +1445,23 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 // Map/Set: allocate the generic container on the heap.
                 const tname = (try types.zigName(arena, ct))[1..]; // strip leading '*'
+                // `new Set([1,2,3])`: init then add each element.
+                if (ct == .set_type and ne.args.len == 1) {
+                    const elem = ct.set_type.*;
+                    const ez = try types.zigName(arena, elem);
+                    g_global_pred_seq += 1;
+                    const s = g_global_pred_seq;
+                    try w.print(arena, "(__seti{d}: {{ const __c = {s}.__init(); const __src = ", .{ s, tname });
+                    if (ne.args[0].* == .array and ne.args[0].array.elem_type == null) {
+                        try w.print(arena, "@as([]const {s}, ", .{ez});
+                        try emitExpr(ne.args[0], w, arena);
+                        try w.append(arena, ')');
+                    } else {
+                        try emitExpr(ne.args[0], w, arena);
+                    }
+                    try w.print(arena, "; for (__src) |__e| {{ __c.add(__e); }} break :__seti{d} __c; }})", .{s});
+                    return;
+                }
                 try w.print(arena, "{s}.__init()", .{tname});
                 return;
             }
