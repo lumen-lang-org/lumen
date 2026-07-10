@@ -149,7 +149,7 @@
     <tr><td><code>s.charAt(i)</code> · <code>s.at(i)</code> · <code>s.charCodeAt(i)</code></td><td>→ string · string · int (<code>at</code> allows negative index)</td></tr>
     <tr><td><code>String.isEmpty(s)</code> · <code>String.contains(s, sub)</code></td><td>→ bool</td></tr>
     <tr><td><code>String.compare(a, b)</code></td><td>(string, string) → int (−1 / 0 / 1; use as an array <code>sort</code> comparator)</td></tr>
-    <tr><td><code>String.fromCharCode(code)</code></td><td>int → string (single byte, <code>code &amp; 0xFF</code>)</td></tr>
+    <tr><td><code>String.fromCharCode(code, …)</code></td><td>(int, …) → string (one byte per code, each <code>&amp; 0xFF</code>)</td></tr>
   </table>
 
   <h4 id="arrays">Array methods</h4>

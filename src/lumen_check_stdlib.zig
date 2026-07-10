@@ -3148,14 +3148,17 @@ pub fn stringCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         return .bool;
     }
     if (std.mem.eql(u8, call.name, "fromCharCode")) {
-        if (call.args.len != 1) {
+        // Variadic: one byte per code, each masked to & 0xFF.
+        if (call.args.len < 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const arg_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        if (!types.isInteger(arg_type)) {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-            return null;
+        for (call.args) |arg| {
+            const arg_type = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.isInteger(arg_type)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
         }
         call.checked_type = .string;
         return .string;

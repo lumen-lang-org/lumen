@@ -489,9 +489,13 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "fromCharCode")) {
                 g_from_char_code_seq += 1;
                 const fcc_lbl = try std.fmt.allocPrint(arena, "__fcc{d}", .{g_from_char_code_seq});
-                try w.print(arena, "({s}: {{ const __b = __sa().alloc(u8, 1) catch unreachable; __b[0] = @intCast((", .{fcc_lbl});
-                try emitExpr(cl.args[0], w, arena);
-                try w.print(arena, ") & 0xFF); break :{s} @as([]const u8, __b); }})", .{fcc_lbl});
+                try w.print(arena, "({s}: {{ const __b = __sa().alloc(u8, {d}) catch unreachable; ", .{ fcc_lbl, cl.args.len });
+                for (cl.args, 0..) |arg, i| {
+                    try w.print(arena, "__b[{d}] = @intCast((", .{i});
+                    try emitExpr(arg, w, arena);
+                    try w.appendSlice(arena, ") & 0xFF); ");
+                }
+                try w.print(arena, "break :{s} @as([]const u8, __b); }})", .{fcc_lbl});
             } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "isEmpty")) {
                 try w.append(arena, '(');
                 try emitExpr(cl.args[0], w, arena);
