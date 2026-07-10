@@ -32,43 +32,43 @@ const REGEX_RT = @embedFile("regex_rt.zig");
 
 // JS-semantics parseInt/parseFloat, emitted into every program's prelude.
 const PARSE_RT =
-    \\fn __parseInt(s: []const u8, radix_in: i32) ?i32 {
-    \\    var i: usize = 0;
-    \\    while (i < s.len and (s[i] == ' ' or s[i] == '\t' or s[i] == '\n' or s[i] == '\r')) : (i += 1) {}
-    \\    var neg = false;
-    \\    if (i < s.len and (s[i] == '+' or s[i] == '-')) { neg = s[i] == '-'; i += 1; }
-    \\    var radix: i64 = radix_in;
-    \\    if ((radix == 16 or radix == 0) and i + 1 < s.len and s[i] == '0' and (s[i + 1] == 'x' or s[i + 1] == 'X')) { i += 2; radix = 16; }
-    \\    if (radix == 0) radix = 10;
-    \\    if (radix < 2 or radix > 36) return null;
-    \\    var val: i64 = 0;
-    \\    var any = false;
-    \\    while (i < s.len) : (i += 1) {
-    \\        const c = s[i];
-    \\        const d: i64 = if (c >= '0' and c <= '9') @as(i64, c - '0') else if (c >= 'a' and c <= 'z') @as(i64, c - 'a' + 10) else if (c >= 'A' and c <= 'Z') @as(i64, c - 'A' + 10) else 255;
-    \\        if (d >= radix) break;
-    \\        val = val * radix + d;
-    \\        any = true;
-    \\        if (val > 2147483648) return null;
+    \\fn __parseInt(__s: []const u8, __radix_in: i32) ?i32 {
+    \\    var __i: usize = 0;
+    \\    while (__i < __s.len and (__s[__i] == ' ' or __s[__i] == '\t' or __s[__i] == '\n' or __s[__i] == '\r')) : (__i += 1) {}
+    \\    var __neg = false;
+    \\    if (__i < __s.len and (__s[__i] == '+' or __s[__i] == '-')) { __neg = __s[__i] == '-'; __i += 1; }
+    \\    var __radix: i64 = __radix_in;
+    \\    if ((__radix == 16 or __radix == 0) and __i + 1 < __s.len and __s[__i] == '0' and (__s[__i + 1] == 'x' or __s[__i + 1] == 'X')) { __i += 2; __radix = 16; }
+    \\    if (__radix == 0) __radix = 10;
+    \\    if (__radix < 2 or __radix > 36) return null;
+    \\    var __val: i64 = 0;
+    \\    var __any = false;
+    \\    while (__i < __s.len) : (__i += 1) {
+    \\        const __ch = __s[__i];
+    \\        const __d: i64 = if (__ch >= '0' and __ch <= '9') @as(i64, __ch - '0') else if (__ch >= 'a' and __ch <= 'z') @as(i64, __ch - 'a' + 10) else if (__ch >= 'A' and __ch <= 'Z') @as(i64, __ch - 'A' + 10) else 255;
+    \\        if (__d >= __radix) break;
+    \\        __val = __val * __radix + __d;
+    \\        __any = true;
+    \\        if (__val > 2147483648) return null;
     \\    }
-    \\    if (!any) return null;
-    \\    if (neg) val = -val;
-    \\    if (val > 2147483647 or val < -2147483648) return null;
-    \\    return @intCast(val);
+    \\    if (!__any) return null;
+    \\    if (__neg) __val = -__val;
+    \\    if (__val > 2147483647 or __val < -2147483648) return null;
+    \\    return @intCast(__val);
     \\}
-    \\fn __parseFloat(s: []const u8) ?f64 {
-    \\    var i: usize = 0;
-    \\    while (i < s.len and (s[i] == ' ' or s[i] == '\t' or s[i] == '\n' or s[i] == '\r')) : (i += 1) {}
-    \\    const start = i;
-    \\    if (i < s.len and (s[i] == '+' or s[i] == '-')) i += 1;
-    \\    while (i < s.len) : (i += 1) {
-    \\        const c = s[i];
-    \\        if ((c >= '0' and c <= '9') or c == '.' or c == 'e' or c == 'E' or c == '+' or c == '-') continue;
+    \\fn __parseFloat(__s: []const u8) ?f64 {
+    \\    var __i: usize = 0;
+    \\    while (__i < __s.len and (__s[__i] == ' ' or __s[__i] == '\t' or __s[__i] == '\n' or __s[__i] == '\r')) : (__i += 1) {}
+    \\    const __start = __i;
+    \\    if (__i < __s.len and (__s[__i] == '+' or __s[__i] == '-')) __i += 1;
+    \\    while (__i < __s.len) : (__i += 1) {
+    \\        const __ch = __s[__i];
+    \\        if ((__ch >= '0' and __ch <= '9') or __ch == '.' or __ch == 'e' or __ch == 'E' or __ch == '+' or __ch == '-') continue;
     \\        break;
     \\    }
-    \\    var end = i;
-    \\    while (end > start) : (end -= 1) {
-    \\        if (std.fmt.parseFloat(f64, s[start..end])) |v| return v else |_| {}
+    \\    var __end = __i;
+    \\    while (__end > __start) : (__end -= 1) {
+    \\        if (std.fmt.parseFloat(f64, __s[__start..__end])) |__v| return __v else |_| {}
     \\    }
     \\    return null;
     \\}
@@ -249,10 +249,14 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     try out.appendSlice(arena, PARSE_RT);
     try out.appendSlice(arena, "\n");
     // Regex literal value: the source/flags strings. Matching methods are added in
-    // later cycles; for now it carries `.source` and `.flags`.
-    try out.appendSlice(arena, "const __LumenRegExp = struct { source: []const u8, flags: []const u8 };\n");
-    try out.appendSlice(arena, REGEX_RT);
-    try out.appendSlice(arena, "\n");
+    // later cycles; for now it carries `.source` and `.flags`. Only emitted when
+    // the program actually uses a regex -- the runtime's short capture names
+    // (`f`, `p`, `s`, ...) would otherwise shadow like-named user functions.
+    if (program.uses_regex) {
+        try out.appendSlice(arena, "const __LumenRegExp = struct { source: []const u8, flags: []const u8 };\n");
+        try out.appendSlice(arena, REGEX_RT);
+        try out.appendSlice(arena, "\n");
+    }
     // Async programs run their event loop on libxev (a pure-Zig dependency: no
     // system install, unlike the libuv this replaced). The CLI auto-fetches it
     // and injects `-Mxev=...` into the native build whenever a program uses

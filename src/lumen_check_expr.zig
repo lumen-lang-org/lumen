@@ -1149,6 +1149,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             c.checked_type = target;
             return target;
         },
+        .regex => {
+            // Flag regex use so the (capture-heavy) regex runtime is only
+            // emitted when needed -- otherwise its short capture names shadow
+            // like-named user functions (`function f`, `p`, `s`, ...).
+            program.uses_regex = true;
+            return types.inferExprType(e);
+        },
         else => types.inferExprType(e),
     };
 }
