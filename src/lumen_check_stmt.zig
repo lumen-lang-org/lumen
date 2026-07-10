@@ -483,6 +483,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             defer self.popScope();
             var init_stmt: ast.Stmt = .{ .var_decl = loop.init };
             try self.checkStmt(program, &init_stmt);
+            for (loop.extra_inits) |*extra| try self.checkVarDecl(program, extra);
             const cond_type = self.exprType(program, loop.cond, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer for condition type");
             if (!types.same(.bool, cond_type)) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
@@ -491,6 +492,13 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             try self.checkBlock(program, loop.body);
             var update_stmt: ast.Stmt = .{ .assign = loop.update };
             try self.checkStmt(program, &update_stmt);
+            for (loop.extra_updates) |*extra| {
+                var us: ast.Stmt = .{ .assign = extra.* };
+                try self.checkStmt(program, &us);
+                extra.* = us.assign;
+            }
+            // Write init back after the update marks the binding reassigned, so
+            // the loop variable emits as `var`, not `const`.
             loop.init = init_stmt.var_decl;
             loop.update = update_stmt.assign;
         },

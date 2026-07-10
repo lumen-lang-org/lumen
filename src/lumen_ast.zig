@@ -245,8 +245,10 @@ pub const DoWhileStmt = struct {
 
 pub const ForStmt = struct {
     init: VarDecl,
+    extra_inits: []VarDecl = &.{}, // `for (let i = 0, n = 5; ...)` — the declarators after the first
     cond: *Expr,
     update: Assign,
+    extra_updates: []Assign = &.{}, // `for (...; ...; i++, j--)` — the updates after the first
     body: []Stmt,
     label: ?[]const u8 = null,
     line: u32,

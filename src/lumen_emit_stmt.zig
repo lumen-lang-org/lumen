@@ -523,10 +523,26 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try body.appendSlice(arena, "    {\n");
             var init_stmt: Stmt = .{ .var_decl = loop.init };
             try emitStmtWithThrow(&init_stmt, decls, body, arena, throw_target, switch_break_target, options);
+            for (loop.extra_inits) |extra| {
+                var es: Stmt = .{ .var_decl = extra };
+                try emitStmtWithThrow(&es, decls, body, arena, throw_target, switch_break_target, options);
+            }
             try body.print(arena, "    {s}while (", .{try labelPrefix(arena, loop.label, loop.body)});
             try emitExpr(loop.cond, body, arena);
             try body.appendSlice(arena, ") : (");
-            try emitAssignExpr(loop.update, body, arena);
+            if (loop.extra_updates.len == 0) {
+                try emitAssignExpr(loop.update, body, arena);
+            } else {
+                // Several updates run each iteration: a block continue-expression.
+                try body.appendSlice(arena, "{ ");
+                try emitAssignExpr(loop.update, body, arena);
+                try body.appendSlice(arena, "; ");
+                for (loop.extra_updates) |u| {
+                    try emitAssignExpr(u, body, arena);
+                    try body.appendSlice(arena, "; ");
+                }
+                try body.appendSlice(arena, "}");
+            }
             try body.appendSlice(arena, ") {\n");
             for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");

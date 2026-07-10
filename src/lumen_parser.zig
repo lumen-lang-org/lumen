@@ -511,6 +511,24 @@ pub const Parser = struct {
             }
             try self.expectOp('=');
             const init_value = try self.parseExpr();
+            // Extra init declarators: `for (let i = 0, n = 5; ...)`.
+            var extra_inits: std.ArrayListUnmanaged(ast.VarDecl) = .empty;
+            while (self.isOp(',')) {
+                try self.advance();
+                if (self.cur != .ident) return error.ParseError;
+                const en = self.cur.ident;
+                const el = self.cur_line;
+                const ec = self.cur_col;
+                try self.advance();
+                var eann: ?[]const u8 = null;
+                if (self.isOp(':')) {
+                    try self.advance();
+                    eann = try self.parseTypeAnnotation();
+                }
+                try self.expectOp('=');
+                const ev = try self.parseExpr();
+                try extra_inits.append(self.arena, .{ .mutable = true, .name = en, .annotation = eann, .init = ev, .line = el, .col = ec });
+            }
             try self.expectOp(';');
             const cond = try self.parseExpr();
             try self.expectOp(';');
@@ -525,12 +543,31 @@ pub const Parser = struct {
                 try self.advance();
                 break :blk try self.parseAssignmentTail(update_name, update_line, update_col, false);
             };
+            // Extra updates: `for (...; ...; i++, j--)`.
+            var extra_updates: std.ArrayListUnmanaged(ast.Assign) = .empty;
+            while (self.isOp(',')) {
+                try self.advance();
+                const ul = self.cur_line;
+                const uc = self.cur_col;
+                const u = if (self.cur == .op2 and (std.mem.eql(u8, self.cur.op2, "++") or std.mem.eql(u8, self.cur.op2, "--"))) blk2: {
+                    const op = self.cur.op2;
+                    break :blk2 try self.parsePrefixUpdate(op, ul, uc, false);
+                } else blk2: {
+                    if (self.cur != .ident) return error.ParseError;
+                    const un = self.cur.ident;
+                    try self.advance();
+                    break :blk2 try self.parseAssignmentTail(un, ul, uc, false);
+                };
+                try extra_updates.append(self.arena, u);
+            }
             try self.expectOp(')');
             const body = try self.parseBlockOrStmt();
             return .{ .for_stmt = .{
                 .init = .{ .mutable = true, .name = init_name, .annotation = annotation, .init = init_value, .line = init_line, .col = init_col },
+                .extra_inits = try extra_inits.toOwnedSlice(self.arena),
                 .cond = cond,
                 .update = update,
+                .extra_updates = try extra_updates.toOwnedSlice(self.arena),
                 .body = body,
                 .line = line,
                 .col = col,
