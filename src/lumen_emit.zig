@@ -197,6 +197,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "@as(?f64, std.fmt.parseFloat(f64, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ") catch null)");
+            } else if ((std.mem.eql(u8, cl.name, "isNaN") or std.mem.eql(u8, cl.name, "isFinite")) and cl.is_global_parse) {
+                // Coerce the argument to f64 with a comptime type branch so the
+                // same emit works for int and float inputs.
+                const fn_name = if (std.mem.eql(u8, cl.name, "isNaN")) "isNan" else "isFinite";
+                g_global_pred_seq += 1;
+                try w.print(arena, "(__gp{d}: {{ const __v = ", .{g_global_pred_seq});
+                try emitExpr(cl.args[0], w, arena);
+                try w.print(arena, "; break :__gp{d} std.math.{s}(switch (@typeInfo(@TypeOf(__v))) {{ .float, .comptime_float => @as(f64, __v), else => @as(f64, @floatFromInt(__v)) }}); }})", .{ g_global_pred_seq, fn_name });
             } else if (std.mem.eql(u8, cl.name, "expect")) {
                 try w.appendSlice(arena, "try std.testing.expect(");
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
@@ -1651,6 +1659,9 @@ var g_number_tostring_seq: usize = 0;
 
 // Unique labels for `number.toExponential(...)` blocks.
 var g_number_toexp_seq: usize = 0;
+
+// Unique labels for global isNaN/isFinite predicate blocks.
+var g_global_pred_seq: usize = 0;
 
 // The Zig spelling of an async function's resolved value type while emitting its
 // body, so a `return v;` lowers to `return __promiseResolved(<T>, v);`. Null
