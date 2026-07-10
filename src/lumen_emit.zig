@@ -1349,6 +1349,34 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, ", @as(usize, @intCast(");
                     try emitExpr(mc.args[0], w, arena);
                     try w.appendSlice(arena, ")) }) catch unreachable)");
+                } else if (std.mem.eql(u8, mc.name, "toExponential")) {
+                    // Format as f64 exponential, then insert the '+' that Zig
+                    // omits before a positive exponent, to match JavaScript.
+                    g_number_toexp_seq += 1;
+                    const s = g_number_toexp_seq;
+                    try w.print(arena, "(__nte{d}: {{ const __raw = std.fmt.allocPrint(__sa(), ", .{s});
+                    if (mc.args.len == 1) {
+                        try w.appendSlice(arena, "\"{e:.[1]}\", .{ ");
+                    } else {
+                        try w.appendSlice(arena, "\"{e}\", .{ ");
+                    }
+                    if (recv_type == .f64) {
+                        try w.appendSlice(arena, "@as(f64, ");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.append(arena, ')');
+                    } else {
+                        try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.appendSlice(arena, "))");
+                    }
+                    if (mc.args.len == 1) {
+                        try w.appendSlice(arena, ", @as(usize, @intCast(");
+                        try emitExpr(mc.args[0], w, arena);
+                        try w.appendSlice(arena, "))");
+                    }
+                    try w.appendSlice(arena, " }) catch unreachable; ");
+                    try w.appendSlice(arena, "var __ob: std.ArrayListUnmanaged(u8) = .empty; for (__raw, 0..) |__c, __ci| { __ob.append(__sa(), __c) catch unreachable; if (__c == 'e' and __ci + 1 < __raw.len and __raw[__ci + 1] != '-') __ob.append(__sa(), '+') catch unreachable; } ");
+                    try w.print(arena, "break :__nte{d} @as([]const u8, __ob.items); }})", .{s});
                 } else { // toString
                     if (mc.args.len == 1) {
                         // Integer receiver, arbitrary radix, via std.fmt.printInt.
@@ -1588,6 +1616,9 @@ var g_from_char_code_seq: usize = 0;
 
 // Unique labels for `number.toString(radix)` blocks.
 var g_number_tostring_seq: usize = 0;
+
+// Unique labels for `number.toExponential(...)` blocks.
+var g_number_toexp_seq: usize = 0;
 
 // The Zig spelling of an async function's resolved value type while emitting its
 // body, so a `return v;` lowers to `return __promiseResolved(<T>, v);`. Null
