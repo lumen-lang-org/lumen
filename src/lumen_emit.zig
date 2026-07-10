@@ -534,7 +534,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.appendSlice(arena, ")) { .lt => -1, .eq => 0, .gt => 1 })");
-            } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "fromCharCode")) {
+            } else if (std.mem.eql(u8, cl.namespace, "String") and (std.mem.eql(u8, cl.name, "fromCharCode") or std.mem.eql(u8, cl.name, "fromCodePoint"))) {
                 g_from_char_code_seq += 1;
                 const fcc_lbl = try std.fmt.allocPrint(arena, "__fcc{d}", .{g_from_char_code_seq});
                 try w.print(arena, "({s}: {{ const __b = __sa().alloc(u8, {d}) catch unreachable; ", .{ fcc_lbl, cl.args.len });

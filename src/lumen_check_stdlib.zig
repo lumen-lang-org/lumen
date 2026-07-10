@@ -3363,7 +3363,7 @@ pub fn stringCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         call.checked_type = .bool;
         return .bool;
     }
-    if (std.mem.eql(u8, call.name, "fromCharCode")) {
+    if (std.mem.eql(u8, call.name, "fromCharCode") or std.mem.eql(u8, call.name, "fromCodePoint")) {
         // Variadic: one byte per code, each masked to & 0xFF.
         if (call.args.len < 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
