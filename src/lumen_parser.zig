@@ -50,6 +50,7 @@ pub const Parser = struct {
     pub const parseBitXor = parser_expr.parseBitXor;
     pub const parseBitAnd = parser_expr.parseBitAnd;
     pub const parseCmp = parser_expr.parseCmp;
+    pub const parseRelational = parser_expr.parseRelational;
     pub const parseShift = parser_expr.parseShift;
     pub const parseAdd = parser_expr.parseAdd;
     pub const parseMul = parser_expr.parseMul;

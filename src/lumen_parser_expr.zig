@@ -309,9 +309,23 @@ pub fn parseBitAnd(self: *Parser) CompileError!*Expr {
     }
     return left;
 }
+/// Equality (`== !=`) binds looser than relational (`< > <= >=`), matching JS,
+/// so `5 > 3 == true` parses as `(5 > 3) == true`. Equality chains left-assoc.
 pub fn parseCmp(self: *Parser) CompileError!*Expr {
+    var left = try self.parseRelational();
+    while (self.cur == .cmp and (std.mem.eql(u8, self.cur.cmp, "==") or std.mem.eql(u8, self.cur.cmp, "!="))) {
+        const op = self.cur.cmp;
+        try self.advance();
+        const right = try self.parseRelational();
+        left = try self.node(.{ .cmp = .{ .op = op, .l = left, .r = right } });
+    }
+    return left;
+}
+pub fn parseRelational(self: *Parser) CompileError!*Expr {
     var left = try self.parseShift();
-    if (self.isComparison()) {
+    if (self.cur == .cmp and (std.mem.eql(u8, self.cur.cmp, "<") or std.mem.eql(u8, self.cur.cmp, ">") or
+        std.mem.eql(u8, self.cur.cmp, "<=") or std.mem.eql(u8, self.cur.cmp, ">=")))
+    {
         const op = self.cur.cmp;
         try self.advance();
         const right = try self.parseShift();
