@@ -1352,6 +1352,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(b.r, w, arena);
                 try w.append(arena, ')');
+            } else if (b.checked_operand_type != null and b.checked_operand_type.? == .string) {
+                // Lexicographic string comparison (JS `"a" < "b"`).
+                const tail = if (std.mem.eql(u8, b.op, "<"))
+                    " == .lt)"
+                else if (std.mem.eql(u8, b.op, ">"))
+                    " == .gt)"
+                else if (std.mem.eql(u8, b.op, "<="))
+                    " != .gt)"
+                else
+                    " != .lt)";
+                try w.appendSlice(arena, "(std.mem.order(u8, ");
+                try emitExpr(b.l, w, arena);
+                try w.appendSlice(arena, ", ");
+                try emitExpr(b.r, w, arena);
+                try w.append(arena, ')');
+                try w.appendSlice(arena, tail);
             } else {
                 try w.append(arena, '(');
                 try emitExpr(b.l, w, arena);

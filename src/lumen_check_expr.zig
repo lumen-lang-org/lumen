@@ -139,6 +139,14 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 cmp.checked_operand_type = .string;
                 return .bool;
             }
+            // Relational string comparison is lexicographic (JS `"a" < "b"`).
+            if ((std.mem.eql(u8, cmp.op, "<") or std.mem.eql(u8, cmp.op, ">") or
+                std.mem.eql(u8, cmp.op, "<=") or std.mem.eql(u8, cmp.op, ">=")) and
+                types.isStringLike(left_type) and types.isStringLike(right_type))
+            {
+                cmp.checked_operand_type = .string;
+                return .bool;
+            }
             // Comparing an optional value against null/undefined (the
             // narrowing condition `x != null`) is allowed and yields bool.
             if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and
