@@ -3414,6 +3414,28 @@ pub fn stringCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
 }
 
 pub fn arrayCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    // Array.of(...items): T[] -- build an array from the arguments (all one type).
+    if (std.mem.eql(u8, call.name, "of")) {
+        if (call.args.len < 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const t = self.exprType(program, call.args[0], line, col) orelse return null;
+        for (call.args[1..]) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.same(t, at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        const res = types.arrayOf(t) orelse {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        call.checked_arg_type = t;
+        call.checked_type = res;
+        return res;
+    }
     if (!std.mem.eql(u8, call.name, "isEmpty")) {
         _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
         return null;

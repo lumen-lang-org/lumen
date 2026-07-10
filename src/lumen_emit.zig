@@ -592,6 +592,20 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, ") & 0xFF); ");
                 }
                 try w.print(arena, "break :{s} @as([]const u8, __b); }})", .{fcc_lbl});
+            } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "of")) {
+                // Heap-allocate an array from the arguments (avoids returning a
+                // pointer to an anonymous tuple literal).
+                const et = cl.checked_arg_type orelse return error.ParseError;
+                const ez = try types.zigName(arena, et);
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__aof{d}: {{ const __r = __sa().alloc({s}, {d}) catch unreachable; ", .{ s, ez, cl.args.len });
+                for (cl.args, 0..) |arg, i| {
+                    try w.print(arena, "__r[{d}] = ", .{i});
+                    try emitExpr(arg, w, arena);
+                    try w.appendSlice(arena, "; ");
+                }
+                try w.print(arena, "break :__aof{d} @as([]const {s}, __r); }})", .{ s, ez });
             } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "isEmpty")) {
                 try w.append(arena, '(');
                 try emitExpr(cl.args[0], w, arena);
