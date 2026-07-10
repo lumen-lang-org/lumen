@@ -68,11 +68,12 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     if (eq(u8, name, "map")) {
         const u = types.arrayElem(result) orelse return error.ParseError;
         const u_zig = try types.zigName(arena, u);
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len) catch unreachable; for (__arr, 0..) |__e, __i| {{ __r[__i] = __cb.call(__cb.ctx, __e); }} break :{s} @as([]const {s}, __r); }})", .{ u_zig, lbl, u_zig });
+        try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len) catch unreachable; for (__arr, 0..) |__e, __i| {{ __r[__i] = __cb.call(__cb.ctx, __e{s}); }} break :{s} @as([]const {s}, __r); }})", .{ u_zig, idx_arg, lbl, u_zig });
         return;
     }
 
@@ -86,11 +87,13 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     }
 
     if (eq(u8, name, "forEach")) {
+        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);
         try w.appendSlice(arena, "; const __cb = ");
         try emitExpr(mc.args[0], w, arena);
-        try w.print(arena, "; for (__arr) |__e| {{ __cb.call(__cb.ctx, __e); }} break :{s} {{}}; }})", .{lbl});
+        try w.print(arena, "; {s} {{ __cb.call(__cb.ctx, __e{s}); }} break :{s} {{}}; }})", .{ loop_hdr, idx_arg, lbl });
         return;
     }
 

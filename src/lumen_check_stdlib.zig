@@ -26,6 +26,14 @@ const check_mod = @import("lumen_check.zig");
 
 const Checker = check_mod.Checker;
 
+/// A map/forEach callback may be `(T) => U` or `(T, int) => U`: the first
+/// parameter is the element and the optional second is its integer index.
+fn cbParamsMatch(params: []const types.Type, elem: types.Type) bool {
+    if (params.len == 1) return types.same(params[0], elem);
+    if (params.len == 2) return types.same(params[0], elem) and types.isInteger(params[1]);
+    return false;
+}
+
 pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
     const elem = types.arrayElem(obj_type) orelse {
         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
@@ -62,17 +70,20 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
-    // map((T) => U): U[]  — result element type is the callback return type.
+    // map((T) => U): U[] or map((T, int) => U): U[]  — the optional second
+    // callback parameter is the element index; result element type is the
+    // callback return type.
     if (eq(u8, name, "map")) {
         if (mc.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
         const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
-        if (cb_type != .func_type or cb_type.func_type.params.len != 1 or !types.same(cb_type.func_type.params[0], elem)) {
+        if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
+        mc.cb_wants_index = cb_type.func_type.params.len == 2;
         const u = cb_type.func_type.ret.*;
         const res = types.arrayOf(u) orelse {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
@@ -82,17 +93,18 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
-    // forEach((T) => void): void
+    // forEach((T) => void): void or forEach((T, int) => void): void
     if (eq(u8, name, "forEach")) {
         if (mc.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const want = self.makeFuncType(&.{elem}, .void) orelse return null;
-        self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
-        };
+        }
+        mc.cb_wants_index = cb_type.func_type.params.len == 2;
         mc.array_result_type = .void;
         return .void;
     }
