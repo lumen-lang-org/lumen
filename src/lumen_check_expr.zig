@@ -591,12 +591,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return ct;
             }
             if (std.mem.eql(u8, ne.class_name, "Set") and self.classes.get("Set") == null) {
-                if (ne.type_args.len != 1) {
+                const set_elem = self.arena.create(types.Type) catch return null;
+                if (ne.type_args.len == 1) {
+                    set_elem.* = self.typeFromAnnotation(ne.type_args[0], line, col) catch return null;
+                } else if (ne.type_args.len == 0 and ne.args.len == 1) {
+                    // Infer `Set<T>` from the initializer array's element type.
+                    const at = self.exprType(program, ne.args[0], line, col) orelse return null;
+                    set_elem.* = types.arrayElem(at) orelse {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    };
+                } else {
                     _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
                     return null;
                 }
-                const set_elem = self.arena.create(types.Type) catch return null;
-                set_elem.* = self.typeFromAnnotation(ne.type_args[0], line, col) catch return null;
                 // Optional initializer: an array of elements (`new Set([1,2,3])`).
                 if (ne.args.len == 1) {
                     const at = self.exprType(program, ne.args[0], line, col) orelse return null;
