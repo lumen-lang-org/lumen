@@ -1638,6 +1638,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.appendSlice(arena, " }");
         },
         .field => |fa| {
+            if (fa.builtin_const) |lit| {
+                // A namespace constant (Math.PI, ...) — a raw f64 literal.
+                try w.print(arena, "@as(f64, {s})", .{lit});
+                return;
+            }
             if (fa.optional_chain) {
                 // a?.field  ->  (if (a) |__oc| @as(?T, __oc.field) else null)
                 // The @as keeps both branches of the same optional type.

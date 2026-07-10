@@ -368,6 +368,17 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 }
+                // `Math.PI` and the other Math constants read as f64 properties.
+                if (std.mem.eql(u8, field.obj.var_ref.name, "Math") and
+                    self.bindingPtr("Math") == null)
+                {
+                    const lit: ?[]const u8 =
+                        if (std.mem.eql(u8, field.name, "PI")) "3.141592653589793" else if (std.mem.eql(u8, field.name, "E")) "2.718281828459045" else if (std.mem.eql(u8, field.name, "LN2")) "0.6931471805599453" else if (std.mem.eql(u8, field.name, "LN10")) "2.302585092994046" else if (std.mem.eql(u8, field.name, "LOG2E")) "1.4426950408889634" else if (std.mem.eql(u8, field.name, "LOG10E")) "0.4342944819032518" else if (std.mem.eql(u8, field.name, "SQRT2")) "1.4142135623730951" else if (std.mem.eql(u8, field.name, "SQRT1_2")) "0.7071067811865476" else null;
+                    if (lit) |l| {
+                        field.builtin_const = l;
+                        return .f64;
+                    }
+                }
                 // `ClassName.staticField` — a static member read. Only when the
                 // name is a class and not shadowed by a local binding.
                 if (self.bindingPtr(field.obj.var_ref.name) == null) {
