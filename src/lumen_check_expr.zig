@@ -22,6 +22,17 @@ const check_mod = @import("lumen_check.zig");
 const Checker = check_mod.Checker;
 const CompileError = diag_mod.CompileError;
 
+/// Type-check a callback argument with positional param-type hints in scope, so
+/// a bare untyped arrow param (`v => ...`) infers its type from the expected
+/// signature. The hint is cleared afterward whether or not it was consumed (the
+/// argument may be a named function reference rather than an arrow).
+pub fn checkCbArg(self: *Checker, program: *ast.Program, e: *ast.Expr, hint: []const types.Type, line: u32, col: u32) ?types.Type {
+    self.arrow_param_hint = hint;
+    const t = self.exprType(program, e, line, col);
+    self.arrow_param_hint = null;
+    return t;
+}
+
 pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, col: u32) ?types.Type {
     return switch (e.*) {
         .var_ref => |*ref| blk: {
@@ -220,8 +231,21 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return then_type;
         },
         .arrow => |arrow| {
-            for (arrow.params) |*p| {
-                p.checked_type = self.typeFromAnnotation(p.annotation, line, col) catch return null;
+            // Consume any contextual param hints set by the enclosing call, then
+            // clear them so a nested arrow in the body doesn't reuse them.
+            const hint = self.arrow_param_hint;
+            self.arrow_param_hint = null;
+            for (arrow.params, 0..) |*p, i| {
+                if (p.annotation.len == 0) {
+                    if (hint != null and i < hint.?.len) {
+                        p.checked_type = hint.?[i];
+                    } else {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
+                } else {
+                    p.checked_type = self.typeFromAnnotation(p.annotation, line, col) catch return null;
+                }
             }
             // Check the body with outer scopes still visible; references to
             // bindings declared outside the arrow are recorded as captures.

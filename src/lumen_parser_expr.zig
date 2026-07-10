@@ -508,8 +508,13 @@ pub fn parseArrow(self: *Parser) CompileError!*Expr {
         if (self.cur != .ident) return error.ParseError;
         const pname = self.cur.ident;
         try self.advance();
-        try self.expectOp(':');
-        const annotation = try self.parseTypeAnnotation();
+        // The type annotation is optional: an untyped param (`(v) => ...`)
+        // infers its type from the call's expected callback signature.
+        var annotation: []const u8 = "";
+        if (self.isOp(':')) {
+            try self.advance();
+            annotation = try self.parseTypeAnnotation();
+        }
         try params.append(self.arena, .{ .name = pname, .annotation = annotation });
         if (self.isOp(',')) try self.advance() else break;
     }
@@ -631,6 +636,17 @@ pub fn parsePrimary(self: *Parser) CompileError!*Expr {
     if (self.cur == .ident) {
         const name = self.cur.ident;
         try self.advance();
+        // Bare single-parameter arrow `v => expr` (no parens, untyped). The
+        // param type is inferred from the call's expected callback signature.
+        if (self.isOp2("=>")) {
+            try self.advance();
+            const body_expr = try self.parseExpr();
+            const ps = try self.arena.alloc(ast.FunctionParam, 1);
+            ps[0] = .{ .name = name, .annotation = "" };
+            const arrow = try self.arena.create(ast.ArrowExpr);
+            arrow.* = .{ .params = ps, .return_annotation = "", .body_expr = body_expr };
+            return self.node(.{ .arrow = arrow });
+        }
         // Explicit generic call `f<T, ...>(...)`. Only treated as type
         // arguments when a `(` provably follows the matching `>`.
         var type_args: [][]const u8 = &.{};

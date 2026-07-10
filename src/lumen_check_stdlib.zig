@@ -50,7 +50,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ elem, .i32 }, line, col) orelse return null;
         if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem) or !types.same(cb_type.func_type.ret.*, .bool)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
@@ -80,7 +80,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ elem, .i32 }, line, col) orelse return null;
         if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
@@ -101,7 +101,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ elem, .i32 }, line, col) orelse return null;
         if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
@@ -120,7 +120,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             return null;
         }
         const acc = self.exprType(program, mc.args[1], line, col) orelse return null;
-        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ acc, elem, .i32 }, line, col) orelse return null;
         const p = if (cb_type == .func_type) cb_type.func_type.params else &[_]types.Type{};
         const shape_ok = (p.len == 2 or p.len == 3) and
             types.same(p[0], acc) and types.same(p[1], elem) and
@@ -141,7 +141,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ elem, .i32 }, line, col) orelse return null;
         if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem) or !types.same(cb_type.func_type.ret.*, .bool)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
@@ -158,7 +158,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const cb_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ elem, .i32 }, line, col) orelse return null;
         if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem) or !types.same(cb_type.func_type.ret.*, .bool)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
@@ -302,10 +302,13 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             return null;
         }
         const want = self.makeFuncType(&.{ elem, elem }, .i32) orelse return null;
+        self.arrow_param_hint = &.{ elem, elem };
         self.ensureAssignable(program, want, mc.args[0], line, col) catch {
+            self.arrow_param_hint = null;
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
+        self.arrow_param_hint = null;
         mc.array_result_type = obj_type;
         return obj_type;
     }

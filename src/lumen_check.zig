@@ -165,6 +165,7 @@ pub const Checker = struct {
 
     // Expression type-checking (the core dispatch) lives in lumen_check_expr.zig.
     pub const exprType = check_expr.exprType;
+    pub const checkCbArg = check_expr.checkCbArg;
     pub const fieldType = check_expr.fieldType;
 
     arena: std.mem.Allocator,
@@ -208,6 +209,11 @@ pub const Checker = struct {
     narrowed: std.ArrayListUnmanaged([]const u8) = .empty,
     narrowed_variants: std.ArrayListUnmanaged(NarrowedVariant) = .empty,
     arrow_base: usize = 0, // scope index at which the current arrow's params start
+    // Contextual typing for an arrow-function argument: when a stdlib method
+    // knows the callback signature it expects (e.g. `map` wants `(elem) => U`),
+    // it sets these hints before checking the callback so a bare untyped param
+    // (`v => ...`) can infer its type positionally. Consumed once by the arrow.
+    arrow_param_hint: ?[]const types.Type = null,
     current_captures: ?*std.ArrayListUnmanaged(ast.Capture) = null,
     last_line: u32 = 1,
     last_col: u32 = 1,
