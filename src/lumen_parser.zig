@@ -215,7 +215,17 @@ pub const Parser = struct {
             const op = self.cur.op2;
             return .{ .assign = try self.parsePrefixUpdate(op, line, col, true) };
         }
-        if (self.cur != .ident) return error.ParseError;
+        // An expression statement whose leading token is not an identifier —
+        // e.g. a method call on an array/string literal or a parenthesized
+        // expression (`[1,2].forEach(...)`, `"x".repeat(3)`, `(e).m()`).
+        if (self.cur != .ident) {
+            if (self.isOp('[') or self.isOp('(') or self.cur == .str or self.cur == .num or self.cur == .flt or self.cur == .template) {
+                const value = try self.parseExpr();
+                try self.expectOp(';');
+                return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
+            }
+            return error.ParseError;
+        }
         const kw = self.cur.ident;
 
         // Labeled statement `name: <loop>` (spec 052). A bare `ident :` at
