@@ -1475,23 +1475,27 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
         .method_call => |mc| {
             if (mc.is_console) {
                 // console.log/... as a void expression: print, then yield {}.
-                const at = mc.array_elem_type orelse .string;
-                const fmt = switch (at) {
-                    .string, .string_literal_union => "{s}",
-                    .bool => "{}",
-                    else => "{d}",
-                };
+                // Every argument was wrapped to a string by the checker, so each
+                // formats with "{s}", space-separated (JS semantics).
                 g_global_pred_seq += 1;
                 const s = g_global_pred_seq;
                 try w.print(arena, "(__cl{d}: {{ ", .{s});
-                if (std.mem.eql(u8, mc.name, "log") or std.mem.eql(u8, mc.name, "info") or std.mem.eql(u8, mc.name, "debug")) {
-                    try w.print(arena, "__consoleOut(\"{s}\\n\", .{{", .{fmt});
-                } else if (std.mem.eql(u8, mc.name, "trace")) {
-                    try w.print(arena, "std.debug.print(\"Trace: {s}\\n\", .{{", .{fmt});
-                } else {
-                    try w.print(arena, "std.debug.print(\"{s}\\n\", .{{", .{fmt});
+                const prefix = if (std.mem.eql(u8, mc.name, "log") or std.mem.eql(u8, mc.name, "info") or std.mem.eql(u8, mc.name, "debug"))
+                    "__consoleOut(\""
+                else if (std.mem.eql(u8, mc.name, "trace"))
+                    "std.debug.print(\"Trace: "
+                else
+                    "std.debug.print(\"";
+                try w.appendSlice(arena, prefix);
+                for (mc.args, 0..) |_, i| {
+                    if (i > 0) try w.appendSlice(arena, " ");
+                    try w.appendSlice(arena, "{s}");
                 }
-                try emitExpr(mc.args[0], w, arena);
+                try w.appendSlice(arena, "\\n\", .{");
+                for (mc.args, 0..) |arg, i| {
+                    if (i > 0) try w.appendSlice(arena, ", ");
+                    try emitExpr(arg, w, arena);
+                }
                 try w.print(arena, "}}); break :__cl{d} {{}}; }})", .{s});
                 return;
             }

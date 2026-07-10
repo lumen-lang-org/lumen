@@ -682,17 +682,23 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     std.mem.eql(u8, mc.name, "debug") or std.mem.eql(u8, mc.name, "error") or
                     std.mem.eql(u8, mc.name, "warn") or std.mem.eql(u8, mc.name, "trace")))
             {
-                if (mc.args.len != 1) {
+                if (mc.args.len < 1) {
                     _ = self.fail(line, col, "E_ARG_COUNT") catch {};
                     return null;
                 }
-                const at = self.exprType(program, mc.args[0], line, col) orelse return null;
-                if (!types.isStringLike(at) and !types.isNumeric(at) and at != .bool) {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                    return null;
+                // Each argument must be printable; wrap it in String() so the
+                // emitter can format any number of args uniformly as strings
+                // (joined by spaces, JS-style).
+                for (mc.args, 0..) |arg, i| {
+                    const at = self.exprType(program, arg, line, col) orelse return null;
+                    if (!types.isStringLike(at) and !types.isNumeric(at) and at != .bool) {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
+                    if (!types.isStringLike(at)) mc.args[i] = self.wrapStringify(arg) catch return null;
                 }
                 mc.is_console = true;
-                mc.array_elem_type = at;
+                mc.array_elem_type = .string;
                 // log/info/debug print to real stdout via __consoleOut, which
                 // needs __io hoisted; error/warn/trace use std.debug.print.
                 if (std.mem.eql(u8, mc.name, "log") or std.mem.eql(u8, mc.name, "info") or std.mem.eql(u8, mc.name, "debug")) {
