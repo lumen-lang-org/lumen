@@ -197,6 +197,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "@as(?f64, std.fmt.parseFloat(f64, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ") catch null)");
+            } else if (std.mem.eql(u8, cl.name, "String") and cl.is_global_parse) {
+                // Convert number/bool/string to string with a comptime type branch.
+                g_global_pred_seq += 1;
+                try w.print(arena, "(__sc{d}: {{ const __v = ", .{g_global_pred_seq});
+                try emitExpr(cl.args[0], w, arena);
+                try w.print(arena, "; break :__sc{d} switch (@typeInfo(@TypeOf(__v))) {{ .bool => std.fmt.allocPrint(__sa(), \"{{}}\", .{{__v}}) catch unreachable, .int, .comptime_int, .float, .comptime_float => std.fmt.allocPrint(__sa(), \"{{d}}\", .{{__v}}) catch unreachable, else => @as([]const u8, __v) }}; }})", .{g_global_pred_seq});
             } else if ((std.mem.eql(u8, cl.name, "isNaN") or std.mem.eql(u8, cl.name, "isFinite")) and cl.is_global_parse) {
                 // Coerce the argument to f64 with a comptime type branch so the
                 // same emit works for int and float inputs.
