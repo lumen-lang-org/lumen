@@ -197,6 +197,7 @@ pub fn inferExprType(e: *const ast.Expr) ?Type {
         .str => .string,
         .regex => .regexp,
         .neg => |inner| inferExprType(inner),
+        .typeof_expr => .string,
         .not => .bool,
         .bnot => |inner| inferExprType(inner),
         .bin => .i32,

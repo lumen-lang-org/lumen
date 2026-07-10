@@ -110,6 +110,7 @@ pub fn exprUsesThis(e: *const Expr) bool {
             break :blk false;
         },
         .spread => |inner| exprUsesThis(inner),
+        .typeof_expr => |to| exprUsesThis(to.operand),
         .neg, .not, .bnot, .await_expr => |inner| exprUsesThis(inner),
         .bin => |b| exprUsesThis(b.l) or exprUsesThis(b.r),
         .bool_bin => |b| exprUsesThis(b.l) or exprUsesThis(b.r),

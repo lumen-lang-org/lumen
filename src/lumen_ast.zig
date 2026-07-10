@@ -516,6 +516,7 @@ pub const Expr = union(enum) {
     neg: *Expr,
     not: *Expr,
     bnot: *Expr, // bitwise ~
+    typeof_expr: struct { operand: *Expr, result: ?[]const u8 = null }, // `typeof x` — a compile-time type-name string ("number"/"string"/...)
     await_expr: *Expr, // `await <expr>` — operand is a Promise<T>; yields T
     bin: struct { op: u8, l: *Expr, r: *Expr, checked_type: ?types.Type = null }, // + - * / % & | ^ and L=<< R=>> P=**
     bool_bin: struct { op: []const u8, l: *Expr, r: *Expr }, // && ||

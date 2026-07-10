@@ -386,6 +386,10 @@ pub fn parseUnary(self: *Parser) CompileError!*Expr {
         try self.advance();
         return self.node(.{ .not = try self.parseUnary() });
     }
+    if (self.isKw("typeof")) {
+        try self.advance();
+        return self.node(.{ .typeof_expr = .{ .operand = try self.parseUnary() } });
+    }
     if (self.isOp('~')) {
         try self.advance();
         return self.node(.{ .bnot = try self.parseUnary() });

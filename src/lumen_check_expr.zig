@@ -91,6 +91,19 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             break :blk found_binding.ty;
         },
         .neg => |inner| self.exprType(program, inner, line, col),
+        .typeof_expr => |*to| {
+            // `typeof x` resolves to a compile-time string from x's static type.
+            const t = self.exprType(program, to.operand, line, col) orelse return null;
+            to.result = switch (t) {
+                .i32, .i64, .f64, .int_literal_union => "number",
+                .string, .string_literal_union => "string",
+                .bool => "boolean",
+                .func_type => "function",
+                .optional, .none => "undefined",
+                else => "object",
+            };
+            return .string;
+        },
         .not => |inner| {
             const inner_type = self.exprType(program, inner, line, col) orelse return null;
             if (!types.same(.bool, inner_type)) {
