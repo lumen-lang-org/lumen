@@ -1448,6 +1448,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     } else {
                         try ww.appendSlice(a, "_ = __ctx; ");
                     }
+                    // JS allows unused parameters; Zig does not. Mark each used
+                    // so a body that ignores a parameter still compiles.
+                    for (ar.params) |p| {
+                        if (!std.mem.eql(u8, p.name, "_")) try ww.print(a, "_ = &{s}; ", .{p.name});
+                    }
                     try ww.appendSlice(a, "return ");
                     try emitExpr(ar.body_expr, ww, a);
                     try ww.appendSlice(a, "; } }.__a");
