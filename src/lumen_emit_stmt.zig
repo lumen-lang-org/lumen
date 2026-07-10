@@ -48,6 +48,33 @@ fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: s
     }
 }
 
+var g_log_seq: usize = 0;
+
+/// Emit a `[]const u8` expression that renders an array `console.log`-style,
+/// e.g. `[1, 2, 3]` or `['a', 'b']`.
+fn emitArrayLogString(value: *ast.Expr, elem: types.Type, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    g_log_seq += 1;
+    const n = g_log_seq;
+    try body.print(arena, "(__la{d}: {{ const __arr = ", .{n});
+    // A bare array literal emits as a tuple; wrap it in a real slice so it is
+    // iterable with a runtime index.
+    if (value.* == .array and value.array.elem_type == null) {
+        try body.print(arena, "@as([]const {s}, ", .{try types.zigName(arena, elem)});
+        try emitExpr(value, body, arena);
+        try body.append(arena, ')');
+    } else {
+        try emitExpr(value, body, arena);
+    }
+    try body.appendSlice(arena, "; var __lb: std.ArrayListUnmanaged(u8) = .empty; __lb.append(__sa(), '[') catch unreachable; for (__arr, 0..) |__le, __li| { if (__li > 0) __lb.appendSlice(__sa(), \", \") catch unreachable; ");
+    if (types.isStringLike(elem)) {
+        try body.appendSlice(arena, "__lb.append(__sa(), '\\'') catch unreachable; __lb.appendSlice(__sa(), __le) catch unreachable; __lb.append(__sa(), '\\'') catch unreachable;");
+    } else {
+        const spec = if (elem == .bool) "{}" else "{d}";
+        try body.print(arena, "__lb.appendSlice(__sa(), std.fmt.allocPrint(__sa(), \"{s}\", .{{__le}}) catch unreachable) catch unreachable;", .{spec});
+    }
+    try body.print(arena, " }} __lb.append(__sa(), ']') catch unreachable; break :__la{d} @as([]const u8, __lb.items); }})", .{n});
+}
+
 pub fn emitStmt(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions) CompileError!void {
     return emitStmtWithThrow(stmt, decls, body, arena, null, null, options);
 }
@@ -460,24 +487,23 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         },
         .console_log => |log| {
             const log_type = log.checked_type orelse return error.ParseError;
-            const fmt = analysis.printFormat(log_type);
-            if (std.mem.eql(u8, log.method, "log") or std.mem.eql(u8, log.method, "info") or std.mem.eql(u8, log.method, "debug")) {
-                // Real stdout (see __consoleOut in lumen_compiler.zig's prelude).
-                try body.print(arena, "    __consoleOut(\"{s}\\n\", .{{", .{fmt});
-                try emitExpr(log.value, body, arena);
-                try body.appendSlice(arena, "});\n");
-            } else if (std.mem.eql(u8, log.method, "trace")) {
-                // Real stderr, Node-style "Trace: " prefix. No call stack: Lumen
-                // has no backtrace-walking mechanism to show one (spec 048).
-                try body.print(arena, "    std.debug.print(\"Trace: {s}\\n\", .{{", .{fmt});
-                try emitExpr(log.value, body, arena);
-                try body.appendSlice(arena, "});\n");
+            // Arrays print JS-style (`[1, 2, 3]`) via a runtime formatter; scalars
+            // use a plain format spec.
+            const is_arr = types.isArray(log_type);
+            const fmt = if (is_arr) "{s}" else analysis.printFormat(log_type);
+            const dest = if (std.mem.eql(u8, log.method, "log") or std.mem.eql(u8, log.method, "info") or std.mem.eql(u8, log.method, "debug"))
+                "__consoleOut(\""
+            else if (std.mem.eql(u8, log.method, "trace"))
+                "std.debug.print(\"Trace: "
+            else
+                "std.debug.print(\"";
+            try body.print(arena, "    {s}{s}\\n\", .{{", .{ dest, fmt });
+            if (is_arr) {
+                try emitArrayLogString(log.value, types.arrayElem(log_type) orelse .i32, body, arena);
             } else {
-                // error / warn: real stderr, unchanged mechanism.
-                try body.print(arena, "    std.debug.print(\"{s}\\n\", .{{", .{fmt});
                 try emitExpr(log.value, body, arena);
-                try body.appendSlice(arena, "});\n");
             }
+            try body.appendSlice(arena, "});\n");
         },
         .while_stmt => |loop| {
             try body.print(arena, "    {s}while (", .{try labelPrefix(arena, loop.label, loop.body)});
