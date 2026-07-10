@@ -181,6 +181,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             // builtins lower to a Zig std wrapper taking (__io, __alloc, args...).
             if (std.mem.eql(u8, cl.name, "Error")) {
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
+            } else if (std.mem.eql(u8, cl.name, "parseInt") and cl.is_global_parse) {
+                try w.appendSlice(arena, "@as(?i32, std.fmt.parseInt(i32, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ", ");
+                if (cl.args.len == 2) {
+                    try w.appendSlice(arena, "@intCast(");
+                    try emitExpr(cl.args[1], w, arena);
+                    try w.appendSlice(arena, ")");
+                } else {
+                    try w.appendSlice(arena, "10");
+                }
+                try w.appendSlice(arena, ") catch null)");
+            } else if (std.mem.eql(u8, cl.name, "parseFloat") and cl.is_global_parse) {
+                try w.appendSlice(arena, "@as(?f64, std.fmt.parseFloat(f64, ");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ") catch null)");
             } else if (std.mem.eql(u8, cl.name, "expect")) {
                 try w.appendSlice(arena, "try std.testing.expect(");
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);

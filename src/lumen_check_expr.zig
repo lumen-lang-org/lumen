@@ -767,6 +767,31 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return .{ .optional = p };
         },
         .call => |*call| {
+            // Global parseInt/parseFloat: aliases of Number.parseInt/parseFloat.
+            if ((std.mem.eql(u8, call.name, "parseInt") or std.mem.eql(u8, call.name, "parseFloat")) and self.funcs.get(call.name) == null) {
+                const is_int = std.mem.eql(u8, call.name, "parseInt");
+                const max_args: usize = if (is_int) 2 else 1;
+                if (call.args.len < 1 or call.args.len > max_args) {
+                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                    return null;
+                }
+                const s_type = self.exprType(program, call.args[0], line, col) orelse return null;
+                if (!types.same(.string, s_type)) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                if (call.args.len == 2) {
+                    const r_type = self.exprType(program, call.args[1], line, col) orelse return null;
+                    if (!types.isInteger(r_type)) {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
+                }
+                call.is_global_parse = true;
+                const inner = self.arena.create(types.Type) catch return null;
+                inner.* = if (is_int) .i32 else .f64;
+                return .{ .optional = inner };
+            }
             if (std.mem.eql(u8, call.name, "Error")) {
                 if (call.args.len != 1) {
                     _ = self.fail(line, col, "E_ARG_COUNT") catch {};
