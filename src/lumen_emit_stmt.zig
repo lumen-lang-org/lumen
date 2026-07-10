@@ -91,6 +91,11 @@ fn emitCompoundRhs(op: []const u8, name: []const u8, value: *ast.Expr, checked_t
             try emitExpr(value, body, arena);
             try body.appendSlice(arena, ") catch std.process.exit(1))");
         }
+    } else if (op[0] == '+' and checked_type != null and checked_type.? == .string) {
+        // String `s += x` concatenates, like `s = s + x`.
+        try body.print(arena, "(std.mem.concat(__sa(), u8, &.{{ {s}, ", .{name});
+        try emitExpr(value, body, arena);
+        try body.appendSlice(arena, " }) catch std.process.exit(1))");
     } else {
         // `+= -= *=` and bitwise `&= |= ^=` -- Zig uses the same single char.
         try body.print(arena, "({s} {c} ", .{ name, op[0] });

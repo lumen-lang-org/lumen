@@ -410,6 +410,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                         if (!types.isInteger(expected_type) or !types.same(expected_type, actual_type)) {
                             return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
                         }
+                    } else if (eqs(u8, op, "+=") and types.isStringLike(expected_type)) {
+                        // String concatenation: `s += "x"` mirrors `s = s + "x"`.
+                        if (!types.isStringLike(actual_type)) {
+                            return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
+                        }
                     } else {
                         if (!types.isNumeric(expected_type) or !types.same(expected_type, actual_type)) {
                             return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
