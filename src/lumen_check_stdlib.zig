@@ -3108,7 +3108,7 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         return .f64;
     }
     if (std.mem.eql(u8, call.name, "log") or std.mem.eql(u8, call.name, "sin") or std.mem.eql(u8, call.name, "cos") or
-        std.mem.eql(u8, call.name, "tan") or std.mem.eql(u8, call.name, "exp") or
+        std.mem.eql(u8, call.name, "tan") or std.mem.eql(u8, call.name, "exp") or std.mem.eql(u8, call.name, "exp2") or
         std.mem.eql(u8, call.name, "log2") or std.mem.eql(u8, call.name, "log10"))
     {
         if (call.args.len != 1) {
