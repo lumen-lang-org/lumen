@@ -2946,19 +2946,26 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         return call.checked_type;
     }
     if (std.mem.eql(u8, call.name, "max") or std.mem.eql(u8, call.name, "min")) {
-        if (call.args.len != 2) {
+        // Variadic: two or more arguments, all of the same numeric type.
+        if (call.args.len < 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const left_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        const right_type = self.exprType(program, call.args[1], line, col) orelse return null;
-        if (!types.isNumeric(left_type) or !types.same(left_type, right_type)) {
+        const first_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isNumeric(first_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
-        call.checked_arg_type = left_type;
-        call.checked_type = left_type;
-        return left_type;
+        for (call.args[1..]) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.same(first_type, at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        call.checked_arg_type = first_type;
+        call.checked_type = first_type;
+        return first_type;
     }
     if (std.mem.eql(u8, call.name, "clamp")) {
         if (call.args.len != 3) {
