@@ -3436,6 +3436,25 @@ pub fn arrayCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCal
         call.checked_type = res;
         return res;
     }
+    // Array.from(x): a string -> array of single-char strings; an array -> copy.
+    if (std.mem.eql(u8, call.name, "from")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const src = self.exprType(program, call.args[0], line, col) orelse return null;
+        call.checked_arg_type = src;
+        if (types.same(.string, src)) {
+            call.checked_type = types.arrayOf(.string).?;
+            return call.checked_type;
+        }
+        if (types.isArray(src)) {
+            call.checked_type = src;
+            return src;
+        }
+        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+        return null;
+    }
     if (!std.mem.eql(u8, call.name, "isEmpty")) {
         _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
         return null;

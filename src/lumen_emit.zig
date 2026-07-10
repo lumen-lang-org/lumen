@@ -592,6 +592,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, ") & 0xFF); ");
                 }
                 try w.print(arena, "break :{s} @as([]const u8, __b); }})", .{fcc_lbl});
+            } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "from")) {
+                const src = cl.checked_arg_type orelse return error.ParseError;
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                if (types.isStringLike(src)) {
+                    // String -> array of single-character strings.
+                    try w.print(arena, "(__afr{d}: {{ const __s = ", .{s});
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.print(arena, "; var __parts: std.ArrayListUnmanaged([]const u8) = .empty; for (__s) |*__cp| __parts.append(__sa(), __cp[0..1]) catch unreachable; break :__afr{d} @as([]const []const u8, __parts.items); }})", .{s});
+                } else {
+                    // Array -> shallow copy.
+                    const ez = try types.zigName(arena, types.arrayElem(src) orelse return error.ParseError);
+                    try w.print(arena, "(__afr{d}: {{ const __a = ", .{s});
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.print(arena, "; const __r = __sa().alloc({s}, __a.len) catch unreachable; @memcpy(__r, __a); break :__afr{d} @as([]const {s}, __r); }})", .{ ez, s, ez });
+                }
             } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "of")) {
                 // Heap-allocate an array from the arguments (avoids returning a
                 // pointer to an anonymous tuple literal).
