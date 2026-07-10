@@ -646,6 +646,34 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 _ = self.fail(line, col, "E_UNSUPPORTED_OPTIONAL_CALL") catch {};
                 return null;
             }
+            // `console.log(x)` (and .info/.debug/.error/.warn/.trace) used as a
+            // void expression — enables it inside an arrow body, e.g.
+            // `xs.forEach(x => console.log(x))`.
+            if (mc.obj.* == .var_ref and std.mem.eql(u8, mc.obj.var_ref.name, "console") and
+                self.bindingPtr("console") == null and
+                (std.mem.eql(u8, mc.name, "log") or std.mem.eql(u8, mc.name, "info") or
+                    std.mem.eql(u8, mc.name, "debug") or std.mem.eql(u8, mc.name, "error") or
+                    std.mem.eql(u8, mc.name, "warn") or std.mem.eql(u8, mc.name, "trace")))
+            {
+                if (mc.args.len != 1) {
+                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                    return null;
+                }
+                const at = self.exprType(program, mc.args[0], line, col) orelse return null;
+                if (!types.isStringLike(at) and !types.isNumeric(at) and at != .bool) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                mc.is_console = true;
+                mc.array_elem_type = at;
+                // log/info/debug print to real stdout via __consoleOut, which
+                // needs __io hoisted; error/warn/trace use std.debug.print.
+                if (std.mem.eql(u8, mc.name, "log") or std.mem.eql(u8, mc.name, "info") or std.mem.eql(u8, mc.name, "debug")) {
+                    program.uses_io = true;
+                    program.needs_console_stdout = true;
+                }
+                return .void;
+            }
             // `ClassName.staticMethod(args)` — static method call.
             if (mc.obj.* == .var_ref and self.bindingPtr(mc.obj.var_ref.name) == null and self.classes.get(mc.obj.var_ref.name) != null) {
                 const cname = mc.obj.var_ref.name;

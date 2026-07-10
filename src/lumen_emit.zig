@@ -1456,6 +1456,28 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.append(arena, ')');
         },
         .method_call => |mc| {
+            if (mc.is_console) {
+                // console.log/... as a void expression: print, then yield {}.
+                const at = mc.array_elem_type orelse .string;
+                const fmt = switch (at) {
+                    .string, .string_literal_union => "{s}",
+                    .bool => "{}",
+                    else => "{d}",
+                };
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__cl{d}: {{ ", .{s});
+                if (std.mem.eql(u8, mc.name, "log") or std.mem.eql(u8, mc.name, "info") or std.mem.eql(u8, mc.name, "debug")) {
+                    try w.print(arena, "__consoleOut(\"{s}\\n\", .{{", .{fmt});
+                } else if (std.mem.eql(u8, mc.name, "trace")) {
+                    try w.print(arena, "std.debug.print(\"Trace: {s}\\n\", .{{", .{fmt});
+                } else {
+                    try w.print(arena, "std.debug.print(\"{s}\\n\", .{{", .{fmt});
+                }
+                try emitExpr(mc.args[0], w, arena);
+                try w.print(arena, "}}); break :__cl{d} {{}}; }})", .{s});
+                return;
+            }
             if (mc.container_type != null and mc.container_type.? == .regexp) {
                 // Plan B: if the object is a literal regex, try to emit a
                 // specialized straight-line matcher; otherwise fall back to the
