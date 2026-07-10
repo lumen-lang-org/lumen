@@ -240,6 +240,36 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "copyWithin")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; const __len: isize = @intCast(__arr.len); const __t0: isize = @intCast(");
+        try emitExpr(mc.args[0], w, arena);
+        try w.appendSlice(arena, "); const __s0: isize = @intCast(");
+        if (mc.args.len >= 2) {
+            try emitExpr(mc.args[1], w, arena);
+        } else {
+            try w.appendSlice(arena, "@as(isize, 0)");
+        }
+        try w.appendSlice(arena, "); const __e0: isize = ");
+        if (mc.args.len == 3) {
+            try w.appendSlice(arena, "@intCast(");
+            try emitExpr(mc.args[2], w, arena);
+            try w.appendSlice(arena, ")");
+        } else {
+            try w.appendSlice(arena, "__len");
+        }
+        // Clamp each endpoint into [0, len], negatives from the end.
+        try w.appendSlice(arena, "; const __ct: isize = if (__t0 < 0) (if (__len + __t0 < 0) 0 else __len + __t0) else (if (__t0 > __len) __len else __t0); ");
+        try w.appendSlice(arena, "const __cs: isize = if (__s0 < 0) (if (__len + __s0 < 0) 0 else __len + __s0) else (if (__s0 > __len) __len else __s0); ");
+        try w.appendSlice(arena, "const __ce: isize = if (__e0 < 0) (if (__len + __e0 < 0) 0 else __len + __e0) else (if (__e0 > __len) __len else __e0); ");
+        try w.print(arena, "const __r = __sa().alloc({s}, __arr.len) catch unreachable; @memcpy(__r, __arr); ", .{elem_zig});
+        try w.appendSlice(arena, "const __cnt0: isize = __ce - __cs; const __cnt1: isize = __len - __ct; const __cnt: isize = if (__cnt0 < __cnt1) __cnt0 else __cnt1; ");
+        try w.appendSlice(arena, "var __j: isize = 0; while (__j < __cnt) : (__j += 1) { __r[@intCast(__ct + __j)] = __arr[@intCast(__cs + __j)]; } ");
+        try w.print(arena, "break :{s} @as([]const {s}, __r); }})", .{ lbl, elem_zig });
+        return;
+    }
+
     if (eq(u8, name, "fill")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);

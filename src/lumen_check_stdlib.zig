@@ -218,6 +218,24 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // copyWithin(target: int, start?: int, end?: int): T[]  — a copy with the
+    // block [start, end) copied to position target (immutable; new array).
+    if (eq(u8, name, "copyWithin")) {
+        if (mc.args.len < 1 or mc.args.len > 3) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        for (mc.args) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.isInteger(at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        mc.array_result_type = obj_type;
+        return obj_type;
+    }
+
     // fill(value: T, start?: int, end?: int): T[]  — a copy with [start, end)
     // set to value (immutable; returns a new array). JS range semantics.
     if (eq(u8, name, "fill")) {
