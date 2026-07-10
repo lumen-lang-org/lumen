@@ -33,6 +33,15 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     ref.func_sig = t.func_type;
                     break :blk t;
                 }
+                // Global float constants NaN / Infinity.
+                if (std.mem.eql(u8, ref.name, "NaN")) {
+                    ref.builtin_const = "@as(f64, std.math.nan(f64))";
+                    break :blk types.Type.f64;
+                }
+                if (std.mem.eql(u8, ref.name, "Infinity")) {
+                    ref.builtin_const = "@as(f64, std.math.inf(f64))";
+                    break :blk types.Type.f64;
+                }
                 _ = self.undefined_(ref.name, line, col) catch {};
                 return null;
             };

@@ -1180,6 +1180,10 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             } else return error.ParseError;
         },
         .var_ref => |ref| {
+            if (ref.builtin_const) |c| {
+                try w.appendSlice(arena, c);
+                return;
+            }
             if (ref.is_func_ref) {
                 // A named function used as a function value: a fat pointer whose
                 // call thunk ignores ctx and forwards to the real function.
