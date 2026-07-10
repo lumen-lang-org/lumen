@@ -563,6 +563,19 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         },
         .for_of_stmt => |loop| {
             const iter_ty = loop.iter_type orelse return error.ParseError;
+            // `for (const [k, v] of map)` — iterate the map's keys and values in
+            // parallel.
+            if (loop.is_pair) {
+                const kn = loop.binding_emit_name orelse loop.binding;
+                const vn = loop.value_binding;
+                try body.appendSlice(arena, "    {\n    const __pm = ");
+                try emitExpr(loop.iterable, body, arena);
+                try body.print(arena, ";\n    for (__pm.keys(), __pm.values()) |{s}, {s}| {{\n", .{ kn, vn });
+                try body.print(arena, "    _ = &{s}; _ = &{s};\n", .{ kn, vn });
+                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try body.appendSlice(arena, "    }\n    }\n");
+                return;
+            }
             const elem_ty = loop.elem_type orelse return error.ParseError;
             const seq = try std.fmt.allocPrint(arena, "__lumen_of_seq_{d}_{d}", .{ loop.line, loop.col });
             const idx = try std.fmt.allocPrint(arena, "__lumen_of_idx_{d}_{d}", .{ loop.line, loop.col });

@@ -515,13 +515,35 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
         .for_of_stmt => |*loop| {
             const iter_type = self.exprType(program, loop.iterable, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer for-of iterable type");
+            loop.iter_type = iter_type;
+            // `for (const [k, v] of map)` — pair destructuring over a Map.
+            if (loop.is_pair) {
+                if (iter_type != .map_type) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+                try self.pushScope();
+                defer self.popScope();
+                const scope = self.currentScope();
+                const kn = try self.freshEmitName(loop.binding);
+                const vn = try self.freshEmitName(loop.value_binding);
+                loop.binding_emit_name = kn;
+                loop.elem_type = vn_marker: {
+                    scope.put(self.arena, loop.binding, .{ .ty = iter_type.map_type.key.*, .mutable = loop.mutable, .emit_name = kn }) catch return error.OutOfMemory;
+                    scope.put(self.arena, loop.value_binding, .{ .ty = iter_type.map_type.value.*, .mutable = loop.mutable, .emit_name = vn }) catch return error.OutOfMemory;
+                    break :vn_marker iter_type.map_type.value.*;
+                };
+                // Stash the value's emit name in value_binding (rewritten) so emit
+                // can use it; store it via a side field.
+                loop.value_binding = vn;
+                self.loop_depth += 1;
+                defer self.loop_depth -= 1;
+                try self.checkBlock(program, loop.body);
+                return;
+            }
             const elem_type: types.Type = if (types.isArray(iter_type))
                 (types.arrayElem(iter_type) orelse return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH"))
             else if (types.isStringLike(iter_type))
                 .string
             else
                 return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
-            loop.iter_type = iter_type;
             loop.elem_type = elem_type;
             try self.pushScope();
             defer self.popScope();

@@ -261,6 +261,8 @@ pub const ForOfStmt = struct {
     mutable: bool,
     binding: []const u8,
     binding_emit_name: ?[]const u8 = null,
+    is_pair: bool = false, // `for (const [k, v] of map)` — binding is the key, value_binding the value
+    value_binding: []const u8 = "",
     iterable: *Expr,
     iter_type: ?types.Type = null,
     elem_type: ?types.Type = null,

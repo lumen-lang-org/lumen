@@ -485,6 +485,24 @@ pub const Parser = struct {
             const is_const = eq(u8, init_kw, "const");
             if (!eq(u8, init_kw, "let") and !eq(u8, init_kw, "var") and !is_const) return error.ParseError;
             try self.advance();
+            // `for (const [k, v] of map)` — a pair-destructuring for-of binding.
+            if (self.isOp('[')) {
+                try self.advance();
+                if (self.cur != .ident) return error.ParseError;
+                const kname = self.cur.ident;
+                try self.advance();
+                try self.expectOp(',');
+                if (self.cur != .ident) return error.ParseError;
+                const vname = self.cur.ident;
+                try self.advance();
+                try self.expectOp(']');
+                if (!self.isKw("of")) return error.ParseError;
+                try self.advance();
+                const iterable = try self.parseExpr();
+                try self.expectOp(')');
+                const body = try self.parseBlockOrStmt();
+                return .{ .for_of_stmt = .{ .mutable = !is_const, .binding = kname, .is_pair = true, .value_binding = vname, .iterable = iterable, .body = body, .line = line, .col = col } };
+            }
             if (self.cur != .ident) return error.ParseError;
             const init_name = self.cur.ident;
             const init_line = self.cur_line;
