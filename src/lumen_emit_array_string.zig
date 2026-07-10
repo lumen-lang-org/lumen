@@ -382,8 +382,10 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         } else {
             try w.appendSlice(arena, "__len");
         }
-        try w.appendSlice(arena, "; const __c0: isize = if (__a < 0) 0 else if (__a > __len) __len else __a; ");
-        try w.appendSlice(arena, "const __c1: isize = if (__b < 0) 0 else if (__b > __len) __len else __b; ");
+        // A negative endpoint counts from the end (len + idx), then clamps into
+        // [0, len]; a positive one clamps to len.
+        try w.appendSlice(arena, "; const __c0: isize = if (__a < 0) (if (__len + __a < 0) 0 else __len + __a) else (if (__a > __len) __len else __a); ");
+        try w.appendSlice(arena, "const __c1: isize = if (__b < 0) (if (__len + __b < 0) 0 else __len + __b) else (if (__b > __len) __len else __b); ");
         try w.appendSlice(arena, "const __hi: isize = if (__c1 < __c0) __c0 else __c1; ");
         try w.print(arena, "break :{s} @as([]const {s}, __arr[@intCast(__c0)..@intCast(__hi)]); }})", .{ lbl, elem_zig });
         return;
@@ -546,13 +548,17 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         } else {
             try w.appendSlice(arena, "const __b: isize = __len; ");
         }
-        // Clamp both endpoints into [0, len].
-        try w.appendSlice(arena, "const __c0: isize = if (__a < 0) 0 else if (__a > __len) __len else __a; ");
-        try w.appendSlice(arena, "const __c1: isize = if (__b < 0) 0 else if (__b > __len) __len else __b; ");
         if (is_sub) {
+            // substring treats a negative (or NaN) endpoint as 0 and clamps to len.
+            try w.appendSlice(arena, "const __c0: isize = if (__a < 0) 0 else if (__a > __len) __len else __a; ");
+            try w.appendSlice(arena, "const __c1: isize = if (__b < 0) 0 else if (__b > __len) __len else __b; ");
             // substring swaps so the smaller endpoint is the start.
             try w.appendSlice(arena, "const __lo: isize = if (__c0 < __c1) __c0 else __c1; const __hi: isize = if (__c0 < __c1) __c1 else __c0; ");
         } else {
+            // slice counts a negative endpoint from the end (len + idx), then
+            // clamps into [0, len]; it yields empty when start > end.
+            try w.appendSlice(arena, "const __c0: isize = if (__a < 0) (if (__len + __a < 0) 0 else __len + __a) else (if (__a > __len) __len else __a); ");
+            try w.appendSlice(arena, "const __c1: isize = if (__b < 0) (if (__len + __b < 0) 0 else __len + __b) else (if (__b > __len) __len else __b); ");
             // slice yields empty when start > end.
             try w.appendSlice(arena, "const __lo: isize = __c0; const __hi: isize = if (__c1 < __c0) __c0 else __c1; ");
         }
