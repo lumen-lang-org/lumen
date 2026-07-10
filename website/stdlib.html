@@ -157,6 +157,7 @@
     <tr><td><code>String.compare(a, b)</code></td><td>(string, string) → int (−1 / 0 / 1; use as an array <code>sort</code> comparator)</td></tr>
     <tr><td><code>String(x)</code></td><td>number | bool | string → string (global conversion)</td></tr>
     <tr><td><code>Boolean(x)</code></td><td>number | bool | string → bool (truthiness: nonzero / nonempty / itself)</td></tr>
+    <tr><td><code>Number(x)</code></td><td>number | bool | string → f64 (NaN if a string doesn't parse)</td></tr>
     <tr><td><code>String.fromCharCode(code, …)</code> · <code>String.fromCodePoint(code, …)</code></td><td>(int, …) → string (one byte per code, each <code>&amp; 0xFF</code>)</td></tr>
   </table>
 
