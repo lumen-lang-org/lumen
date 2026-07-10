@@ -346,7 +346,7 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         return;
     }
 
-    if (eq(u8, name, "charCodeAt")) {
+    if (eq(u8, name, "charCodeAt") or eq(u8, name, "codePointAt")) {
         try A.idx("__i", mc.args[0], w, arena);
         try w.print(arena, "break :{s} @as(i32, if (__i >= 0 and __i < @as(isize, @intCast(__s.len))) @intCast(__s[@intCast(__i)]) else -1); }})", .{lbl});
         return;
