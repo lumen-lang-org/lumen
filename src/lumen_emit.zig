@@ -303,6 +303,10 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, "))");
                 }
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "clz32")) {
+                try w.appendSlice(arena, "@as(i32, @clz(@as(u32, @bitCast(@as(i32, @truncate(");
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, "))))))");
             } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "imul")) {
                 // 32-bit wrapping multiply; truncate each operand to i32 first.
                 try w.appendSlice(arena, "(@as(i32, @truncate(");
