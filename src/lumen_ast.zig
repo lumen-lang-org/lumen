@@ -223,6 +223,8 @@ pub const ConsoleLog = struct {
     method: []const u8 = "log",
     value: *Expr,
     checked_type: ?types.Type = null,
+    extra_values: []*Expr = &.{}, // `console.log(a, b, c)` — args after the first, printed space-separated
+    extra_types: []types.Type = &.{}, // checked types of extra_values (filled by the checker)
     line: u32,
     col: u32,
 };

@@ -443,9 +443,14 @@ pub const Parser = struct {
                 try self.advance();
                 try self.expectOp('(');
                 const value = try self.parseExpr();
+                var extra_values: std.ArrayListUnmanaged(*Expr) = .empty;
+                while (self.isOp(',')) {
+                    try self.advance();
+                    try extra_values.append(self.arena, try self.parseExpr());
+                }
                 try self.expectOp(')');
                 try self.expectOp(';');
-                return .{ .console_log = .{ .method = method, .value = value, .line = line, .col = col } };
+                return .{ .console_log = .{ .method = method, .value = value, .extra_values = try extra_values.toOwnedSlice(self.arena), .line = line, .col = col } };
             }
             self.last_err = "E_UNSUPPORTED_STD";
             return error.ParseError;

@@ -487,21 +487,34 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         },
         .console_log => |log| {
             const log_type = log.checked_type orelse return error.ParseError;
-            // Arrays print JS-style (`[1, 2, 3]`) via a runtime formatter; scalars
-            // use a plain format spec.
-            const is_arr = types.isArray(log_type);
-            const fmt = if (is_arr) "{s}" else analysis.printFormat(log_type);
             const dest = if (std.mem.eql(u8, log.method, "log") or std.mem.eql(u8, log.method, "info") or std.mem.eql(u8, log.method, "debug"))
                 "__consoleOut(\""
             else if (std.mem.eql(u8, log.method, "trace"))
                 "std.debug.print(\"Trace: "
             else
                 "std.debug.print(\"";
-            try body.print(arena, "    {s}{s}\\n\", .{{", .{ dest, fmt });
-            if (is_arr) {
+            // Format string: each argument's spec, space-separated (JS joins
+            // console.log args with spaces), then a newline.
+            try body.print(arena, "    {s}", .{dest});
+            try body.appendSlice(arena, if (types.isArray(log_type)) "{s}" else analysis.printFormat(log_type));
+            for (log.extra_types) |et| {
+                try body.appendSlice(arena, " ");
+                try body.appendSlice(arena, if (types.isArray(et)) "{s}" else analysis.printFormat(et));
+            }
+            try body.appendSlice(arena, "\\n\", .{");
+            // Arguments.
+            if (types.isArray(log_type)) {
                 try emitArrayLogString(log.value, types.arrayElem(log_type) orelse .i32, body, arena);
             } else {
                 try emitExpr(log.value, body, arena);
+            }
+            for (log.extra_values, log.extra_types) |ev, et| {
+                try body.appendSlice(arena, ", ");
+                if (types.isArray(et)) {
+                    try emitArrayLogString(ev, types.arrayElem(et) orelse .i32, body, arena);
+                } else {
+                    try emitExpr(ev, body, arena);
+                }
             }
             try body.appendSlice(arena, "});\n");
         },

@@ -454,6 +454,16 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 return self.inferenceFail(log.line, log.col, "cannot infer console.log argument type");
             if (log_type == .void) return self.fail(log.line, log.col, "E_VOID_VALUE");
             log.checked_type = log_type;
+            if (log.extra_values.len > 0) {
+                const ets = self.arena.alloc(types.Type, log.extra_values.len) catch return error.OutOfMemory;
+                for (log.extra_values, 0..) |ev, i| {
+                    const et = self.exprType(program, ev, log.line, log.col) orelse
+                        return self.inferenceFail(log.line, log.col, "cannot infer console.log argument type");
+                    if (et == .void) return self.fail(log.line, log.col, "E_VOID_VALUE");
+                    ets[i] = et;
+                }
+                log.extra_types = ets;
+            }
             // log/info/debug print to real stdout via the __consoleOut
             // runtime helper, which needs __io; error/warn/trace keep using
             // std.debug.print (real stderr) directly and need no io at all.
