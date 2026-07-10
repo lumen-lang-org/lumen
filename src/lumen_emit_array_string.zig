@@ -114,6 +114,20 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "reduceRight")) {
+        const acc = mc.array_acc_type orelse return error.ParseError;
+        const acc_zig = try types.zigName(arena, acc);
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__k))" else "";
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; const __cb = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.print(arena, "; var __acc: {s} = ", .{acc_zig});
+        try emitExpr(mc.args[1], w, arena);
+        try w.print(arena, "; var __k: usize = __arr.len; while (__k > 0) {{ __k -= 1; const __e = __arr[__k]; __acc = __cb.call(__cb.ctx, __acc, __e{s}); }} break :{s} __acc; }})", .{ idx_arg, lbl });
+        return;
+    }
+
     if (eq(u8, name, "find")) {
         const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
         const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";

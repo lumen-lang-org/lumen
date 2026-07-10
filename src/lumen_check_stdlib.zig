@@ -111,10 +111,10 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return .void;
     }
 
-    // reduce((U, T) => U, init: U): U  or  reduce((U, T, int) => U, init: U): U
-    // — init fixes the accumulator type; the optional third callback parameter
-    // is the element index.
-    if (eq(u8, name, "reduce")) {
+    // reduce / reduceRight ((U, T) => U or (U, T, int) => U, init: U): U — init
+    // fixes the accumulator type; the optional third callback parameter is the
+    // element index. reduceRight folds from the end.
+    if (eq(u8, name, "reduce") or eq(u8, name, "reduceRight")) {
         if (mc.args.len != 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
