@@ -495,7 +495,14 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             const binding = loop.binding_emit_name orelse loop.binding;
             const elem_zig = try types.zigName(arena, elem_ty);
             try body.appendSlice(arena, "    {\n");
-            try body.print(arena, "    const {s} = ", .{seq});
+            // Annotate the sequence's slice type for arrays so an array *literal*
+            // iterable (which lowers to an anonymous tuple) coerces to a real
+            // slice and can be indexed at runtime. Strings are already []const u8.
+            if (types.isStringLike(iter_ty)) {
+                try body.print(arena, "    const {s} = ", .{seq});
+            } else {
+                try body.print(arena, "    const {s}: []const {s} = ", .{ seq, elem_zig });
+            }
             try emitExpr(loop.iterable, body, arena);
             try body.appendSlice(arena, ";\n");
             try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
