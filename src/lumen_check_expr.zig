@@ -790,6 +790,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 }
+                // `s[i]` on a string is the single-character substring at `i`
+                // (a string), matching JS/TS.
+                if (types.isStringLike(obj_type)) {
+                    index.checked_element_type = .string;
+                    break :blk .string;
+                }
                 const elem_type = types.arrayElem(obj_type) orelse {
                     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;

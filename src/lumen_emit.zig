@@ -1707,6 +1707,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, ".@\"{d}\"", .{pos});
                 return;
             }
+            if (idx.checked_element_type != null and idx.checked_element_type.? == .string) {
+                // `s[i]` on a string -> the one-byte substring (a string).
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__si{d}: {{ const __str = ", .{s});
+                try emitExpr(idx.obj, w, arena);
+                try w.appendSlice(arena, "; const __ix = @as(usize, @intCast(");
+                try emitExpr(idx.value, w, arena);
+                try w.print(arena, ")); break :__si{d} @as([]const u8, __str[__ix .. __ix + 1]); }})", .{s});
+                return;
+            }
             try emitExpr(idx.obj, w, arena);
             try w.appendSlice(arena, "[@as(usize, @intCast(");
             try emitExpr(idx.value, w, arena);
