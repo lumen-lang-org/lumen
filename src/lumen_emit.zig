@@ -303,6 +303,19 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, "))");
                 }
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "fround")) {
+                const arg_type = cl.checked_arg_type orelse return error.ParseError;
+                try w.appendSlice(arena, "@as(f64, @as(f32, @floatCast(");
+                if (arg_type == .f64) {
+                    try w.appendSlice(arena, "@as(f64, ");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.append(arena, ')');
+                } else {
+                    try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.appendSlice(arena, "))");
+                }
+                try w.appendSlice(arena, ")))");
             } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "clz32")) {
                 try w.appendSlice(arena, "@as(i32, @clz(@as(u32, @bitCast(@as(i32, @truncate(");
                 try emitExpr(cl.args[0], w, arena);

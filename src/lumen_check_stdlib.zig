@@ -3032,6 +3032,21 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = if (std.mem.eql(u8, call.name, "sign")) .i32 else if (std.mem.eql(u8, call.name, "sqrt")) .f64 else arg_type;
         return call.checked_type;
     }
+    // fround(x): number -- round to the nearest 32-bit float, back to f64.
+    if (std.mem.eql(u8, call.name, "fround")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const at = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isNumeric(at)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        call.checked_arg_type = at;
+        call.checked_type = .f64;
+        return .f64;
+    }
     // clz32(x): int -- count leading zero bits in the 32-bit representation.
     if (std.mem.eql(u8, call.name, "clz32")) {
         if (call.args.len != 1) {
