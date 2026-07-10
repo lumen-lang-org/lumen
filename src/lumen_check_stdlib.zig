@@ -940,7 +940,7 @@ pub fn numberCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.name, "EPSILON") or std.mem.eql(u8, call.name, "MAX_VALUE") or
         std.mem.eql(u8, call.name, "MIN_VALUE") or std.mem.eql(u8, call.name, "POSITIVE_INFINITY") or
         std.mem.eql(u8, call.name, "NEGATIVE_INFINITY") or std.mem.eql(u8, call.name, "MAX_SAFE_INTEGER") or
-        std.mem.eql(u8, call.name, "MIN_SAFE_INTEGER"))
+        std.mem.eql(u8, call.name, "MIN_SAFE_INTEGER") or std.mem.eql(u8, call.name, "NaN"))
     {
         if (call.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
