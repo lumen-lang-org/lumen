@@ -240,6 +240,33 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "fill")) {
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitExpr(mc.obj, w, arena);
+        try w.appendSlice(arena, "; const __len: isize = @intCast(__arr.len); const __fv = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.appendSlice(arena, "; const __a: isize = @intCast(");
+        if (mc.args.len >= 2) {
+            try emitExpr(mc.args[1], w, arena);
+        } else {
+            try w.appendSlice(arena, "@as(isize, 0)");
+        }
+        try w.appendSlice(arena, "); const __b: isize = ");
+        if (mc.args.len == 3) {
+            try w.appendSlice(arena, "@intCast(");
+            try emitExpr(mc.args[2], w, arena);
+            try w.appendSlice(arena, ")");
+        } else {
+            try w.appendSlice(arena, "__len");
+        }
+        try w.appendSlice(arena, "; const __cs0: isize = if (__a < 0) __len + __a else __a; const __cs: isize = if (__cs0 < 0) 0 else if (__cs0 > __len) __len else __cs0; ");
+        try w.appendSlice(arena, "const __ce0: isize = if (__b < 0) __len + __b else __b; const __ce: isize = if (__ce0 < 0) 0 else if (__ce0 > __len) __len else __ce0; ");
+        try w.print(arena, "const __r = __sa().alloc({s}, __arr.len) catch unreachable; @memcpy(__r, __arr); ", .{elem_zig});
+        try w.appendSlice(arena, "var __k: usize = @intCast(__cs); const __kend: usize = @intCast(if (__ce < __cs) __cs else __ce); while (__k < __kend) : (__k += 1) { __r[__k] = __fv; } ");
+        try w.print(arena, "break :{s} @as([]const {s}, __r); }})", .{ lbl, elem_zig });
+        return;
+    }
+
     if (eq(u8, name, "with")) {
         try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
         try emitExpr(mc.obj, w, arena);

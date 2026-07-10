@@ -218,6 +218,28 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // fill(value: T, start?: int, end?: int): T[]  — a copy with [start, end)
+    // set to value (immutable; returns a new array). JS range semantics.
+    if (eq(u8, name, "fill")) {
+        if (mc.args.len < 1 or mc.args.len > 3) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        self.ensureAssignable(program, elem, mc.args[0], line, col) catch {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        };
+        for (mc.args[1..]) |arg| {
+            const at = self.exprType(program, arg, line, col) orelse return null;
+            if (!types.isInteger(at)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+        }
+        mc.array_result_type = obj_type;
+        return obj_type;
+    }
+
     // with(i: int, value: T): T[]  — a copy with index i replaced (immutable
     // update). Negative i counts from the end; out of range leaves the copy
     // unchanged (rather than trapping).
