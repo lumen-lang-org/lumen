@@ -262,11 +262,17 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             .continue_stmt => |control| .{ .line = control.line, .col = control.col },
             .defer_stmt => |d| .{ .line = d.line, .col = d.col },
             .expr_stmt => |expr_stmt| .{ .line = expr_stmt.line, .col = expr_stmt.col },
+            .block_stmt => |b| .{ .line = b.line, .col = b.col },
         };
         try body.print(arena, "    __lumen_line = {d}; __lumen_col = {d};\n", .{ line_col.line, line_col.col });
     }
 
     switch (stmt.*) {
+        .block_stmt => |b| {
+            try body.appendSlice(arena, "    {\n");
+            for (b.body) |*inner| try emitStmtWithThrow(inner, decls, body, arena, throw_target, switch_break_target, options);
+            try body.appendSlice(arena, "    }\n");
+        },
         .type_decl => |decl| {
             if (decl.string_literals != null) return;
             if (decl.int_literals != null) return;

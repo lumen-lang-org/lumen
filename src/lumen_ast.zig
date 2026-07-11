@@ -425,6 +425,14 @@ pub const Stmt = union(enum) {
     continue_stmt: ControlStmt,
     defer_stmt: DeferStmt,
     expr_stmt: ExprStmt,
+    block_stmt: BlockStmt, // a bare `{ ... }` block — a nested lexical scope
+};
+
+/// A bare block statement `{ ... }` — introduces a nested lexical scope.
+pub const BlockStmt = struct {
+    body: []Stmt,
+    line: u32,
+    col: u32,
 };
 
 pub const Program = struct {

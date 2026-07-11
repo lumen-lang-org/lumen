@@ -234,6 +234,7 @@ pub fn blockReturns(body: []ast.Stmt) bool {
 pub fn stmtReturns(stmt: ast.Stmt) bool {
     return switch (stmt) {
         .return_stmt => true,
+        .block_stmt => |b| blockReturns(b.body),
         .if_stmt => |branch| branch.else_body != null and blockReturns(branch.then_body) and blockReturns(branch.else_body.?),
         .throw_stmt => true,
         // A switch returns on all paths when it has a `default` that returns and
@@ -270,6 +271,11 @@ pub fn checkVarDecl(self: *Checker, program: *ast.Program, decl: *ast.VarDecl) C
 
 pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) CompileError!void {
     switch (stmt.*) {
+        .block_stmt => |*b| {
+            try self.pushScope();
+            defer self.popScope();
+            try self.checkBlock(program, b.body);
+        },
         .type_decl => |*decl| {
             for (decl.fields) |*field| {
                 field.checked_type = try self.typeFromAnnotation(field.annotation, decl.line, decl.col);

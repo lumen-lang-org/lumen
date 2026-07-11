@@ -51,6 +51,7 @@ pub fn stmtCanThrow(stmt: *const Stmt) bool {
             break :blk false;
         },
         .defer_stmt => |d| bodyCanThrow(d.body),
+        .block_stmt => |b| bodyCanThrow(b.body),
         .using_decl => |u| if (u.defer_body) |b| bodyCanThrow(b) else false,
         // A nested try swallows throws from its own try body via its own slot;
         // it propagates to the outer slot only if its catch or finally throws.

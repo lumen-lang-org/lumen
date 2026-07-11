@@ -73,6 +73,7 @@ fn collectReturnsStmt(s: *const Stmt, list: *std.ArrayListUnmanaged(*const Expr)
             if (t.finally_body) |fb| try collectReturns(fb, list, arena);
         },
         .defer_stmt => |d| try collectReturns(d.body, list, arena),
+        .block_stmt => |b| try collectReturns(b.body, list, arena),
         else => {},
     }
 }
@@ -125,6 +126,7 @@ pub fn collectDestPassable(stmts: []Stmt, map: *std.StringHashMapUnmanaged([]con
             try collectDestPassable(b.then_body, map, arena);
             if (b.else_body) |eb| try collectDestPassable(eb, map, arena);
         },
+        .block_stmt => |*b| try collectDestPassable(b.body, map, arena),
         else => {},
     };
 }
@@ -172,6 +174,7 @@ fn markBuilderPartsStmt(s: *Stmt, map: *const std.StringHashMapUnmanaged([]const
             if (t.finally_body) |fb| try markBuilderParts(fb, map, arena);
         },
         .defer_stmt => |*d| try markBuilderParts(d.body, map, arena),
+        .block_stmt => |*b| try markBuilderParts(b.body, map, arena),
         .function_decl => |*fd| try markBuilderParts(fd.body, map, arena),
         .class_decl => |*cd| for (cd.methods) |*m| try markBuilderParts(m.body, map, arena),
         else => {},
@@ -325,6 +328,7 @@ fn accDisqStmt(stmt: *const Stmt, name: []const u8, arena: std.mem.Allocator) Co
             return accBadRef(u.init, name);
         },
         .function_decl => |fd| return bodyUsesName(fd.body, name),
+        .block_stmt => |b| return accDisqBody(b.body, name, arena),
         else => return false,
     }
 }
@@ -351,6 +355,7 @@ fn accCountDeclsStmt(stmt: *const Stmt, name: []const u8) usize {
         },
         .try_stmt => |t| accCountDecls(t.try_body, name) + accCountDecls(t.catch_body, name) + (if (t.finally_body) |fb| accCountDecls(fb, name) else 0),
         .defer_stmt => |d| accCountDecls(d.body, name),
+        .block_stmt => |b| accCountDecls(b.body, name),
         else => 0,
     };
 }
@@ -416,6 +421,7 @@ fn markAccStmt(stmt: *Stmt, name: []const u8) void {
             if (t.finally_body) |fb| markAccBody(fb, name);
         },
         .defer_stmt => |*d| markAccBody(d.body, name),
+        .block_stmt => |*b| markAccBody(b.body, name),
         .using_decl => |*u| {
             if (u.defer_body) |b| markAccBody(b, name);
             if (u.dispose_call) |dc| markAccExpr(dc, name);
@@ -526,6 +532,7 @@ fn accRecurseFns(stmt: *Stmt, arena: std.mem.Allocator) CompileError!void {
             if (t.finally_body) |fb| for (fb) |*x| try accRecurseFns(x, arena);
         },
         .defer_stmt => |*d| for (d.body) |*b| try accRecurseFns(b, arena),
+        .block_stmt => |*b| for (b.body) |*x| try accRecurseFns(x, arena),
         else => {},
     }
 }
@@ -629,6 +636,7 @@ fn stmtUsesName(stmt: *const Stmt, name: []const u8) bool {
             break :blk false;
         },
         .try_stmt => |t| bodyUsesName(t.try_body, name) or bodyUsesName(t.catch_body, name) or (t.finally_body != null and bodyUsesName(t.finally_body.?, name)),
+        .block_stmt => |b| bodyUsesName(b.body, name),
         .defer_stmt => |d| bodyUsesName(d.body, name),
         .using_decl => |u| blk: {
             if (u.defer_body) |b| if (bodyUsesName(b, name)) break :blk true;

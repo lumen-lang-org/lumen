@@ -219,6 +219,12 @@ pub const Parser = struct {
         // e.g. a method call on an array/string literal or a parenthesized
         // expression (`[1,2].forEach(...)`, `"x".repeat(3)`, `(e).m()`).
         if (self.cur != .ident) {
+            // A bare `{ ... }` at statement position is a block (a nested scope),
+            // never an object literal (JS/TS statement-position rule).
+            if (self.isOp('{')) {
+                const inner = try self.parseBlock();
+                return .{ .block_stmt = .{ .body = inner, .line = line, .col = col } };
+            }
             if (self.isOp('[') or self.isOp('(') or self.cur == .str or self.cur == .num or self.cur == .flt or self.cur == .template) {
                 const value = try self.parseExpr();
                 try self.expectOp(';');
