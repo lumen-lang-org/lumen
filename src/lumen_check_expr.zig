@@ -1017,12 +1017,25 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             const cls = obj_type.class_type;
             const rm = self.resolveMethod(cls, mc.name) orelse {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                // Collect the class's (and ancestors') instance method names
+                // for a did-you-mean.
+                var known: std.ArrayListUnmanaged([]const u8) = .empty;
+                var cur: ?[]const u8 = cls;
+                while (cur) |cname| {
+                    const info = self.classes.get(cname) orelse break;
+                    for (info.methods) |m| {
+                        if (!m.is_static and m.accessor == .none) known.append(self.arena, m.name) catch {};
+                    }
+                    cur = info.parent;
+                }
+                _ = self.failUnknownMethod(line, col, cls, mc.name, known.items) catch {};
                 return null;
             };
             if (!self.visibilityOk(rm.method.visibility, rm.owner, line, col)) return null;
             if (mc.args.len != rm.method.params.len) {
-                _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                const callee_disp = std.fmt.allocPrint(self.arena, "'{s}.{s}'", .{ cls, mc.name }) catch "method";
+                const msg = std.fmt.allocPrint(self.arena, "{s} expects {d} argument{s}, got {d}", .{ callee_disp, rm.method.params.len, if (rm.method.params.len == 1) "" else "s", mc.args.len }) catch "E_ARG_COUNT";
+                _ = self.fail(line, col, msg) catch {};
                 return null;
             }
             for (mc.args, rm.method.params) |arg, p| {

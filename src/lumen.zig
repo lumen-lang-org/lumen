@@ -459,12 +459,21 @@ fn validateNamedImport(
         .namespace => return,
     };
     const source = if (is_url)
-        fetchUrl(arena, io, path) catch return error.ImportReadFailed
+        fetchUrl(arena, io, path) catch {
+            setImportDetail(arena, "cannot find module '{s}'", .{displayPath(path)});
+            return error.ImportReadFailed;
+        }
     else
-        std.Io.Dir.cwd().readFileAlloc(io, key, arena, .limited(16 * 1024 * 1024)) catch return error.ImportReadFailed;
+        std.Io.Dir.cwd().readFileAlloc(io, key, arena, .limited(16 * 1024 * 1024)) catch {
+            setImportDetail(arena, "cannot find module '{s}'", .{displayPath(path)});
+            return error.ImportReadFailed;
+        };
     var exports: std.StringHashMapUnmanaged(void) = .empty;
     try collectExports(arena, io, if (is_url) path else key, is_url, source, &exports, 0);
-    for (binds) |b| if (exports.get(b.name) == null) return error.MissingExport;
+    for (binds) |b| if (exports.get(b.name) == null) {
+        setImportDetail(arena, "'{s}' is not exported by {s} ({s})", .{ b.name, displayPath(path), exportNames(arena, &exports) });
+        return error.MissingExport;
+    };
 }
 
 fn isIdentCh(c: u8) bool {
@@ -534,6 +543,34 @@ fn appendTransformed(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
 
 const LineOrigin = compiler.LineOrigin;
 
+/// Human detail for the most recent import-expansion failure (module path,
+/// missing name, export list), rendered by compileFile with the error code.
+var g_import_detail: ?[]const u8 = null;
+
+fn setImportDetail(arena: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
+    g_import_detail = std.fmt.allocPrint(arena, fmt, args) catch null;
+}
+
+/// Display form of a module path: no `././` stacking.
+fn displayPath(path: []const u8) []const u8 {
+    var p = path;
+    while (std.mem.startsWith(u8, p, "./")) p = p[2..];
+    return p;
+}
+
+fn exportNames(arena: std.mem.Allocator, exports: *std.StringHashMapUnmanaged(void)) []const u8 {
+    var names: std.ArrayListUnmanaged(u8) = .empty;
+    var it = exports.keyIterator();
+    var first = true;
+    while (it.next()) |k| {
+        if (!first) names.appendSlice(arena, ", ") catch {};
+        names.appendSlice(arena, k.*) catch {};
+        first = false;
+    }
+    if (names.items.len == 0) return "nothing is exported";
+    return std.fmt.allocPrint(arena, "exports: {s}", .{names.items}) catch "";
+}
+
 fn appendExpandedSource(
     arena: std.mem.Allocator,
     io: std.Io,
@@ -549,7 +586,10 @@ fn appendExpandedSource(
     const is_url = std.mem.startsWith(u8, path, "https://");
     // Cycle/dedup key: the URL itself for remote modules, the resolved path otherwise.
     const key = if (is_url) path else try std.fs.path.resolve(arena, &.{path});
-    if (visiting.get(key) != null) return error.ImportCycle;
+    if (visiting.get(key) != null) {
+        setImportDetail(arena, "import cycle through '{s}'", .{displayPath(path)});
+        return error.ImportCycle;
+    }
     if (emitted.get(key) != null) {
         // The module is already inlined, but a fresh importer may still request
         // named bindings: validate them against what the module exports.
@@ -560,9 +600,16 @@ fn appendExpandedSource(
     defer _ = visiting.remove(key);
 
     const source = if (is_url)
-        fetchUrl(arena, io, path) catch return error.ImportReadFailed
+        fetchUrl(arena, io, path) catch {
+            setImportDetail(arena, "cannot find module '{s}'", .{displayPath(path)});
+            return error.ImportReadFailed;
+        }
     else
-        std.Io.Dir.cwd().readFileAlloc(io, key, arena, .limited(16 * 1024 * 1024)) catch return error.ImportReadFailed;
+        std.Io.Dir.cwd().readFileAlloc(io, key, arena, .limited(16 * 1024 * 1024)) catch {
+            if (depth == 0) return error.EntryReadFailed;
+            setImportDetail(arena, "cannot find module '{s}'", .{displayPath(path)});
+            return error.ImportReadFailed;
+        };
 
     // Named imports must name real exports. Default import of the module's
     // default export needs no name check (the rename happens during emit).
@@ -570,7 +617,10 @@ fn appendExpandedSource(
         .named => |binds| {
             var exports: std.StringHashMapUnmanaged(void) = .empty;
             try collectExports(arena, io, if (is_url) path else key, is_url, source, &exports, 0);
-            for (binds) |b| if (exports.get(b.name) == null) return error.MissingExport;
+            for (binds) |b| if (exports.get(b.name) == null) {
+                setImportDetail(arena, "'{s}' is not exported by {s} ({s})", .{ b.name, displayPath(path), exportNames(arena, &exports) });
+                return error.MissingExport;
+            };
         },
         .default => {},
         .namespace => {}, // binds all exports; nothing to validate
@@ -619,7 +669,10 @@ fn appendExpandedSource(
             continue;
         }
         if (try parseImportSpec(arena, line)) |import_spec| {
-            if (local_imports.get(import_spec.spec) != null) return error.DuplicateImport;
+            if (local_imports.get(import_spec.spec) != null) {
+                setImportDetail(arena, "duplicate import of '{s}'", .{import_spec.spec});
+                return error.DuplicateImport;
+            }
             try local_imports.put(arena, import_spec.spec, {});
             if (import_spec.kind == .namespace) try file_namespaces.append(arena, import_spec.kind.namespace);
             const child_is_url = std.mem.startsWith(u8, import_spec.spec, "https://");
@@ -1203,12 +1256,13 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     }
 
     const expanded = readSourceWithImports(arena, io, path) catch |e| {
+        const detail = g_import_detail;
         switch (e) {
-            error.InvalidImport => try err.print("{s}:1:1: error: E_UNSUPPORTED_IMPORT\n", .{path}),
-            error.ImportReadFailed => try err.print("{s}:1:1: error: E_IMPORT_NOT_FOUND\n", .{path}),
-            error.ImportCycle => try err.print("{s}:1:1: error: E_IMPORT_CYCLE\n", .{path}),
-            error.DuplicateImport => try err.print("{s}:1:1: error: E_DUPLICATE_IMPORT\n", .{path}),
-            error.MissingExport => try err.print("{s}:1:1: error: E_MISSING_EXPORT\n", .{path}),
+            error.InvalidImport => try err.print("{s}:1:1: error: {s} [E_UNSUPPORTED_IMPORT]\n", .{ path, detail orelse "unsupported import syntax" }),
+            error.ImportReadFailed => try err.print("{s}:1:1: error: {s} [E_IMPORT_NOT_FOUND]\n", .{ path, detail orelse "imported module not found" }),
+            error.ImportCycle => try err.print("{s}:1:1: error: {s} [E_IMPORT_CYCLE]\n", .{ path, detail orelse "import cycle detected" }),
+            error.DuplicateImport => try err.print("{s}:1:1: error: {s} [E_DUPLICATE_IMPORT]\n", .{ path, detail orelse "module imported twice" }),
+            error.MissingExport => try err.print("{s}:1:1: error: {s} [E_MISSING_EXPORT]\n", .{ path, detail orelse "imported name is not exported" }),
             else => try err.print("error: cannot read file {s}\n", .{path}),
         }
         return 2;
