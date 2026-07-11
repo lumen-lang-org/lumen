@@ -376,6 +376,17 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     };
                 }
                 self.current_return_type = saved_ret;
+            } else if (arrow.return_annotation.len > 0) {
+                // A typed-return arrow (`(x): P => ({...})`): check the body
+                // against the annotated return type, which lets an object
+                // literal / empty array body infer from that type (the plain
+                // `exprType` can't type an object literal on its own).
+                const ret_ann = self.typeFromAnnotation(arrow.return_annotation, line, col) catch return null;
+                if (self.ensureAssignable(program, ret_ann, arrow.body_expr.?, line, col)) |_| {
+                    body_type = ret_ann;
+                } else |_| {
+                    body_type = null;
+                }
             } else {
                 body_type = self.exprType(program, arrow.body_expr.?, line, col);
             }
