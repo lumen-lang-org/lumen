@@ -220,8 +220,14 @@ pub fn parseFunctionDecl(self: *Parser, line: u32, col: u32, is_async: bool) Com
     try self.advance();
     const type_params = try self.parseTypeParams();
     const params = try self.parseParamList();
-    try self.expectOp(':');
-    const return_annotation = try self.parseTypeAnnotation();
+    // A missing return type annotation defaults to `void` (the common
+    // side-effecting function `function log(msg: string) { ... }`). A
+    // value-returning function still needs an explicit `: T` annotation.
+    var return_annotation: []const u8 = "void";
+    if (self.isOp(':')) {
+        try self.advance();
+        return_annotation = try self.parseTypeAnnotation();
+    }
     const body = try self.parseBlock();
     return .{ .function_decl = .{
         .name = name,
