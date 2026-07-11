@@ -734,7 +734,22 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
 /// string literal: quotes/backslashes escaped, braces doubled, control chars
 /// turned into escape sequences.
 pub fn emitTemplateText(text: []const u8, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
-    for (text) |ch| {
+    var i: usize = 0;
+    while (i < text.len) : (i += 1) {
+        var ch = text[i];
+        // Template text is stored raw (escapes verbatim); decode escape
+        // sequences the same way a regular string literal does, so `\n`/`\t`
+        // in a template mean a newline/tab, not a literal backslash.
+        if (ch == '\\' and i + 1 < text.len) {
+            i += 1;
+            ch = switch (text[i]) {
+                'n' => '\n',
+                't' => '\t',
+                'r' => '\r',
+                '0' => 0,
+                else => text[i], // \\ \" \' \` and any other: the literal char
+            };
+        }
         switch (ch) {
             '"' => try w.appendSlice(arena, "\\\""),
             '\\' => try w.appendSlice(arena, "\\\\"),
@@ -743,7 +758,7 @@ pub fn emitTemplateText(text: []const u8, w: *std.ArrayListUnmanaged(u8), arena:
             '\n' => try w.appendSlice(arena, "\\n"),
             '\r' => try w.appendSlice(arena, "\\r"),
             '\t' => try w.appendSlice(arena, "\\t"),
-            else => try w.append(arena, ch),
+            else => if (ch < 0x20) try w.print(arena, "\\x{x:0>2}", .{ch}) else try w.append(arena, ch),
         }
     }
 }
