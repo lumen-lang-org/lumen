@@ -810,17 +810,11 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
             }
             if (has_ctor) {
-                if (ne.args.len != ctor_params.len) {
-                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
-                    return null;
-                }
-                for (ne.args, ctor_params) |arg, p| {
-                    const pt = p.checked_type orelse return null;
-                    self.ensureAssignable(program, pt, arg, line, col) catch {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                        return null;
-                    };
-                }
+                // Route through the shared call-argument checker so a constructor
+                // honors default and optional (`x?`) parameters, filling omitted
+                // trailing arguments with their default / null.
+                const normalized = self.checkCallArgs(program, ctor_params, ne.args, line, col) orelse return null;
+                ne.args = normalized;
             } else if (ne.args.len != 0) {
                 _ = self.fail(line, col, "E_ARG_COUNT") catch {};
                 return null;
