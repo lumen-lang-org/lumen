@@ -101,10 +101,21 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         if (i > 0) try decls.appendSlice(arena, ", ");
         try decls.print(arena, "{s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
     }
-    try decls.print(arena, ") *{s} {{\n", .{c.name});
+    // A throwing constructor chain returns an error union (spec 248).
+    const ctor_throws = analysis.g_method_arena != null and analysis.ctorThrows(analysis.g_method_arena.?, c.name);
+    if (ctor_throws) {
+        try decls.print(arena, ") error{{LumenThrow}}!*{s} {{\n", .{c.name});
+    } else {
+        try decls.print(arena, ") *{s} {{\n", .{c.name});
+    }
     try decls.print(arena, "    const self = __sa().create({s}) catch unreachable;\n", .{c.name});
-    try emitUnusedParamDiscards(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
-    for (ctor_owner.ctor_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+    {
+        const saved_can_error = emit_mod.g_fn_can_error;
+        emit_mod.g_fn_can_error = ctor_throws;
+        defer emit_mod.g_fn_can_error = saved_can_error;
+        try emitUnusedParamDiscards(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
+        for (ctor_owner.ctor_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+    }
     try decls.appendSlice(arena, "    return self;\n    }\n");
 
     // Instance methods, getters, setters: most-derived definition wins. Walk the
@@ -140,14 +151,20 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     for (chain) |cc| {
         if (std.mem.eql(u8, cc.name, c.name)) continue; // not the class itself
         if (!cc.has_ctor) continue;
+        const h_throws = analysis.g_method_arena != null and analysis.ctorThrows(analysis.g_method_arena.?, cc.name);
         try decls.print(arena, "    fn __superctor_{s}(self: *{s}", .{ cc.name, c.name });
         for (cc.ctor_params) |param| {
             try decls.print(arena, ", {s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
         }
-        try decls.appendSlice(arena, ") void {\n");
+        try decls.appendSlice(arena, if (h_throws) ") error{LumenThrow}!void {\n" else ") void {\n");
         if (!bodyUsesThis(cc.ctor_body)) try decls.appendSlice(arena, "    _ = self;\n");
-        try emitUnusedParamDiscards(cc.ctor_params, cc.ctor_body, decls, arena);
-        for (cc.ctor_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+        {
+            const saved_can_error = emit_mod.g_fn_can_error;
+            emit_mod.g_fn_can_error = h_throws;
+            defer emit_mod.g_fn_can_error = saved_can_error;
+            try emitUnusedParamDiscards(cc.ctor_params, cc.ctor_body, decls, arena);
+            for (cc.ctor_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+        }
         try decls.appendSlice(arena, "    }\n");
     }
 

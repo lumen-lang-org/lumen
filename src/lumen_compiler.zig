@@ -96,6 +96,13 @@ pub const CompileError = diag_mod.CompileError;
 pub const Diag = diag_mod.Diag;
 pub const LineOrigin = diag_mod.LineOrigin;
 
+fn findClassDecl(program: *const ast.Program, name: []const u8) ?*const ast.ClassDecl {
+    for (program.stmts) |*stmt| {
+        if (stmt.* == .class_decl and std.mem.eql(u8, stmt.class_decl.name, name)) return &stmt.class_decl;
+    }
+    return null;
+}
+
 const Lexer = lexer.Lexer;
 
 /// Builtins that lower to a Zig std wrapper (need __io/__alloc threaded in).
@@ -244,14 +251,38 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
                     },
                     // Methods key by name across classes ("m:<name>") so call
                     // sites, inherited copies, and super copies stay consistent.
-                    .class_decl => |*c| for (c.methods) |*m| {
-                        if (m.accessor != .none) continue;
-                        if (m.is_async) continue;
-                        const key = try std.fmt.allocPrint(arena, "m:{s}", .{m.name});
-                        if (throwing_fns.get(key) != null) continue;
-                        if (emit_analysis.bodyCanThrow(m.body)) {
-                            try throwing_fns.put(arena, key, {});
-                            changed = true;
+                    // Constructors key per class ("c:<class>"): the class's
+                    // resolved ctor chain (own body, or the inherited one).
+                    .class_decl => |*c| {
+                        for (c.methods) |*m| {
+                            if (m.accessor != .none) continue;
+                            if (m.is_async) continue;
+                            const key = try std.fmt.allocPrint(arena, "m:{s}", .{m.name});
+                            if (throwing_fns.get(key) != null) continue;
+                            if (emit_analysis.bodyCanThrow(m.body)) {
+                                try throwing_fns.put(arena, key, {});
+                                changed = true;
+                            }
+                        }
+                        const ckey = try std.fmt.allocPrint(arena, "c:{s}", .{c.name});
+                        if (throwing_fns.get(ckey) == null) {
+                            // Resolve the effective ctor: own, else nearest ancestor's.
+                            var owner: *const ast.ClassDecl = c;
+                            while (!owner.has_ctor) {
+                                const pname = owner.parent orelse break;
+                                owner = findClassDecl(&program, pname) orelse break;
+                            }
+                            const throws = if (owner.has_ctor)
+                                (if (std.mem.eql(u8, owner.name, c.name))
+                                    emit_analysis.bodyCanThrow(owner.ctor_body)
+                                else
+                                    throwing_fns.get(std.fmt.allocPrint(arena, "c:{s}", .{owner.name}) catch unreachable) != null)
+                            else
+                                false;
+                            if (throws) {
+                                try throwing_fns.put(arena, ckey, {});
+                                changed = true;
+                            }
                         }
                     },
                     else => {},

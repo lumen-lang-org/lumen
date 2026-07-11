@@ -51,6 +51,14 @@ pub fn fnThrows(name: []const u8) bool {
     return set.get(name) != null;
 }
 
+/// Whether a class's resolved constructor chain can raise a Lumen exception
+/// (key "c:<class>", filled by the compiler's fixpoint pass).
+pub fn ctorThrows(arena: std.mem.Allocator, class_name: []const u8) bool {
+    const set = g_throwing_fns orelse return false;
+    const key = std.fmt.allocPrint(arena, "c:{s}", .{class_name}) catch return false;
+    return set.get(key) != null;
+}
+
 /// Whether calling a class method with this name can raise a Lumen exception.
 /// Method keys are name-based ("m:<name>") across all classes so emission and
 /// call sites agree even through inheritance and super copies; a same-named
@@ -94,6 +102,7 @@ pub fn exprCanThrow(e: *const Expr) bool {
             break :blk false;
         },
         .new_expr => |ne| blk: {
+            if (g_method_arena) |ma| if (ctorThrows(ma, ne.class_name)) break :blk true;
             for (ne.args) |a| if (exprCanThrow(a)) break :blk true;
             break :blk false;
         },
@@ -160,6 +169,12 @@ pub fn stmtCanThrow(stmt: *const Stmt) bool {
             break :blk false;
         },
         .destructure_decl => |d| exprCanThrow(d.source),
+        .super_ctor => |sc| blk: {
+            // super(...) forwards to the parent's constructor body.
+            if (g_method_arena) |ma| if (sc.parent) |parent| if (ctorThrows(ma, parent)) break :blk true;
+            for (sc.args) |a| if (exprCanThrow(a)) break :blk true;
+            break :blk false;
+        },
         .assign => |a| exprCanThrow(a.value),
         .member_assign => |ma| exprCanThrow(ma.value),
         .console_log => |log| blk: {

@@ -331,12 +331,17 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         .super_ctor => |sc| {
             // super(args) -> self.__superctor_<Parent>(args);
             const parent = sc.parent orelse return;
-            try body.print(arena, "    self.__superctor_{s}(", .{parent});
+            const throws = analysis.g_method_arena != null and analysis.ctorThrows(analysis.g_method_arena.?, parent);
+            try body.appendSlice(arena, "    ");
+            if (throws) try emit_mod.emitThrowingCallPrefix(body, arena);
+            try body.print(arena, "self.__superctor_{s}(", .{parent});
             for (sc.args, 0..) |arg, i| {
                 if (i > 0) try body.appendSlice(arena, ", ");
                 try emitExpr(arg, body, arena);
             }
-            try body.appendSlice(arena, ");\n");
+            try body.append(arena, ')');
+            if (throws) try emit_mod.emitThrowingCallSuffix(body, arena);
+            try body.appendSlice(arena, ";\n");
         },
         .member_assign => |ma| {
             // Resolve the receiver expression: `self.` (this), `Class.` (static),

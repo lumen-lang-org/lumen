@@ -1615,12 +1615,15 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, "{s}.__init()", .{tname});
                 return;
             }
+            const ctor_throws = analysis.g_method_arena != null and analysis.ctorThrows(analysis.g_method_arena.?, ne.class_name);
+            if (ctor_throws) try emitThrowingCallPrefix(w, arena);
             try w.print(arena, "{s}.__init(", .{ne.class_name});
             for (ne.args, 0..) |arg, i| {
                 if (i > 0) try w.appendSlice(arena, ", ");
                 try emitExpr(arg, w, arena);
             }
             try w.append(arena, ')');
+            if (ctor_throws) try emitThrowingCallSuffix(w, arena);
         },
         .method_call => |mc| {
             if (mc.sized_fill) {
