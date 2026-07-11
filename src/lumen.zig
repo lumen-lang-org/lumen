@@ -227,24 +227,30 @@ fn parseImportSpec(arena: std.mem.Allocator, line: []const u8) !?ImportSpec {
     const is_url = std.mem.startsWith(u8, spec, "https://");
     // Local relative or https URL only; reject http://, bare, and others.
     if (!is_local and !is_url) return error.InvalidImport;
-    if (!std.mem.endsWith(u8, spec, ".ts")) return error.InvalidImport;
+    // Extensionless local imports (`./util`, the common TS style) resolve by
+    // appending `.ts`; URLs must spell the extension.
+    var spec_resolved = spec;
+    if (!std.mem.endsWith(u8, spec_resolved, ".ts")) {
+        if (!is_local) return error.InvalidImport;
+        spec_resolved = try std.fmt.allocPrint(arena, "{s}.ts", .{spec});
+    }
 
     if (std.mem.startsWith(u8, clause, "{")) {
         if (!std.mem.endsWith(u8, clause, "}")) return error.InvalidImport;
         const inner = clause[1 .. clause.len - 1];
         const names = try parseNamedBindings(arena, inner);
-        return .{ .kind = .{ .named = names }, .spec = spec };
+        return .{ .kind = .{ .named = names }, .spec = spec_resolved };
     }
 
     // `import * as ns from "..."` — namespace import.
     if (std.mem.startsWith(u8, clause, "* as ")) {
         const ns = std.mem.trim(u8, clause["* as ".len..], " \t");
         if (ns.len == 0 or std.mem.indexOfAny(u8, ns, " \t{},.*") != null) return error.InvalidImport;
-        return .{ .kind = .{ .namespace = ns }, .spec = spec };
+        return .{ .kind = .{ .namespace = ns }, .spec = spec_resolved };
     }
 
     if (clause.len == 0 or std.mem.indexOfAny(u8, clause, " \t{},*") != null) return error.InvalidImport;
-    return .{ .kind = .{ .default = clause }, .spec = spec };
+    return .{ .kind = .{ .default = clause }, .spec = spec_resolved };
 }
 
 fn appendExportDefaultFunction(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), trimmed: []const u8, default_name: ?[]const u8) !bool {
