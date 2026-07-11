@@ -190,6 +190,9 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // into an i64 slot, matching every other integer width here.
             if (value.* == .num) return;
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
+            // Lossless widening (spec 258): an i32 value flows into an i64
+            // slot as-is (the emitted Zig coerces smaller ints implicitly).
+            if (actual_type == .i32) return;
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .f64 => {

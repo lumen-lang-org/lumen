@@ -570,9 +570,12 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                         }
                     } else {
                         // f64 slot accepts an integer RHS via numeric
-                        // promotion (spec 256): `total += n`.
+                        // promotion (spec 256): `total += n`; an i64 slot
+                        // accepts an i32 RHS by lossless widening (spec 258).
                         if (expected_type == .f64 and types.isInteger(actual_type)) {
                             assignment.value = self.wrapFloat(assignment.value) catch return error.OutOfMemory;
+                        } else if (expected_type == .i64 and actual_type == .i32) {
+                            // Zig widens implicitly; nothing to rewrite.
                         } else if (!types.isNumeric(expected_type) or !types.same(expected_type, actual_type)) {
                             return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
                         }

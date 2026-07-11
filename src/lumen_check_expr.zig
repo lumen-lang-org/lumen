@@ -199,6 +199,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 bin.checked_type = left_type;
                 return left_type;
             }
+            // Lossless integer widening (spec 258): i32 meets i64 as i64
+            // (the emitted Zig coerces the narrower side implicitly).
+            if ((left_type == .i64 and right_type == .i32) or (left_type == .i32 and right_type == .i64)) {
+                bin.checked_type = .i64;
+                return .i64;
+            }
             // JS-style numeric promotion: mixing an integer with a float
             // promotes the integer side to f64 (`Math.round(x) / 10.0`).
             if (types.isNumeric(left_type) and types.isNumeric(right_type) and !types.same(left_type, right_type)) {
@@ -302,6 +308,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             if (right_type == .f64 and left_type == .i32 and cmp.l.* == .num) {
                 cmp.checked_operand_type = .f64;
+                return .bool;
+            }
+            // Lossless integer widening (spec 258): i32 compares against i64
+            // directly (Zig coerces).
+            if ((left_type == .i64 and right_type == .i32) or (left_type == .i32 and right_type == .i64)) {
+                cmp.checked_operand_type = .i64;
                 return .bool;
             }
             // JS-style numeric promotion (spec 256): comparing an integer
