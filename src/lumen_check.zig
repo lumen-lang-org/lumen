@@ -475,6 +475,31 @@ pub const Checker = struct {
         return null;
     }
 
+    /// Structural width check (spec 278): if every field of record type
+    /// `target_name` exists on record type `source_name` with the same type,
+    /// returns the target's field names (for building the coercion literal).
+    pub fn structuralFields(self: *Checker, target_name: []const u8, source_name: []const u8) ?[]const []const u8 {
+        const target = self.type_decls.get(target_name) orelse return null;
+        const source = self.type_decls.get(source_name) orelse return null;
+        if (target.fields.len == 0) return null;
+        const names = self.arena.alloc([]const u8, target.fields.len) catch return null;
+        for (target.fields, 0..) |tf, i| {
+            const tt = tf.checked_type orelse return null;
+            var found = false;
+            for (source.fields) |sf| {
+                if (std.mem.eql(u8, sf.name, tf.name)) {
+                    const st = sf.checked_type orelse return null;
+                    if (!types.same(tt, st)) return null;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return null;
+            names[i] = tf.name;
+        }
+        return names;
+    }
+
     pub fn variantForValue(self: *Checker, union_name: []const u8, value: []const u8) ?[]const u8 {
         const uinfo = self.unions.get(union_name) orelse return null;
         for (uinfo.variants) |v| {

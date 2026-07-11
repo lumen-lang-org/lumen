@@ -45,7 +45,29 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
         .named => |type_name| {
             if (value.* != .obj) {
                 const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
-                if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
+                if (!types.same(expected, actual_type)) {
+                    // Structural width subtyping (spec 278): a record value
+                    // whose type declares (at least) every field of the target
+                    // — same names, same types — coerces by building the
+                    // narrower record from field reads. Only cheap,
+                    // re-emittable sources (a variable or a field path)
+                    // qualify, since each target field re-reads the source.
+                    if (actual_type == .named and (value.* == .var_ref or value.* == .field)) {
+                        if (self.structuralFields(type_name, actual_type.named)) |target_fields| {
+                            const inits = self.arena.alloc(ast.FieldInit, target_fields.len) catch return error.OutOfMemory;
+                            const src = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                            src.* = value.*;
+                            for (target_fields, 0..) |fname, i| {
+                                const fread = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                                fread.* = .{ .field = .{ .obj = src, .name = fname } };
+                                inits[i] = .{ .name = fname, .value = fread };
+                            }
+                            value.* = .{ .obj = inits };
+                            return self.ensureAssignable(program, expected, value, line, col);
+                        }
+                    }
+                    return self.failTypeMismatch(line, col, expected, actual_type);
+                }
                 return;
             }
             const decl = self.type_decls.get(type_name) orelse return self.fail(line, col, "unknown type name");
