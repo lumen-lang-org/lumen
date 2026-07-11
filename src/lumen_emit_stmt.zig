@@ -374,6 +374,12 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try decls.append(arena, ch);
             }
             try decls.appendSlice(arena, "\" {\n");
+            // In a test build there is no `main` to fill the hoisted I/O
+            // globals; wire them to the test runner's Io so console.log and
+            // other I/O builtins work inside tests.
+            if (emit_mod.g_program) |prog| if (prog.uses_io) {
+                try decls.appendSlice(arena, "    __io = std.testing.io;\n");
+            };
             for (t.body) |*test_stmt| try emitStmtWithThrow(test_stmt, decls, decls, arena, throw_target, switch_break_target, options);
             try decls.appendSlice(arena, "}\n");
         },

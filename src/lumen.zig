@@ -1390,38 +1390,23 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         try collectLinkLibs(arena, source, &argv);
         for (cli_libs) |lib| try appendLink(arena, &argv, lib);
     }
-    // Test mode: show the backend's output live (test results). Build mode:
-    // capture the backend's stderr so a failure can be mapped back to the .ts
-    // source instead of a black-box "failed to build" line.
-    const show_backend = action == .run_test;
-    if (show_backend) {
-        var child = std.process.spawn(io, .{
-            .argv = argv.items,
-            .stdin = .ignore,
-            .stdout = .inherit,
-            .stderr = .inherit,
-        }) catch {
+    // Test mode: capture the backend's output and re-render it as concise
+    // per-test results (Zig runner internals and generated-file paths stay
+    // hidden). Build mode: capture stderr so a failure can be mapped back to
+    // the .ts source instead of a black-box "failed to build" line.
+    if (action == .run_test) {
+        const result = std.process.run(arena, io, .{ .argv = argv.items }) catch {
             try err.print("error: could not run the native backend\n", .{});
             return 2;
         };
-        const term = child.wait(io) catch {
-            try err.print("error: native build was interrupted\n", .{});
-            return 2;
-        };
-        switch (term) {
-            .exited => |code| {
-                if (code == 0) {
-                    try err.print("tests passed: {s}\n", .{path});
-                    return 0;
-                }
-                try err.print("tests failed: {s}\n", .{path});
-                return 1;
-            },
-            else => {
-                try err.print("error: native build terminated abnormally\n", .{});
-                return 1;
-            },
+        // Pass the test program's own stdout (console.log output) through.
+        if (result.stdout.len > 0) {
+            var ob: [4096]u8 = undefined;
+            var ow: std.Io.File.Writer = .init(.stdout(), io, &ob);
+            ow.interface.writeAll(result.stdout) catch {};
+            ow.interface.flush() catch {};
         }
+        return try renderTestResults(err, source, path, zig_src, gen_path, result.stderr, result.term);
     }
     const result = std.process.run(arena, io, .{ .argv = argv.items }) catch {
         try err.print("error: could not run the native backend\n", .{});
@@ -1500,6 +1485,125 @@ fn reportBackendFailure(err: *std.Io.Writer, ts_source: []const u8, ts_path: []c
         shown += 1;
         if (shown >= 4) break;
     }
+}
+
+/// Map a line of the generated Zig back to the .ts line via the
+/// `__lumen_line = N;` markers the codegen writes before every statement.
+fn tsLineForGenLine(zig_src: []const u8, zline: u32) u32 {
+    var ts_line: u32 = 0;
+    var zit = std.mem.splitScalar(u8, zig_src, '\n');
+    var n: u32 = 1;
+    while (zit.next()) |zl| : (n += 1) {
+        if (n > zline) break;
+        if (std.mem.indexOf(u8, zl, "__lumen_line = ")) |mark0| {
+            var q = mark0 + "__lumen_line = ".len;
+            var lv: u32 = 0;
+            while (q < zl.len and zl[q] >= '0' and zl[q] <= '9') : (q += 1) lv = lv * 10 + (zl[q] - '0');
+            ts_line = lv;
+        }
+    }
+    return ts_line;
+}
+
+/// Re-renders `zig test` runner output as concise per-test results:
+///
+///   ✓ adds
+///   ✗ fails — expected 4, found 3
+///       at main.ts:6
+///   1 passed, 1 failed
+///
+/// Failing expects map to the .ts line through the generated-code position
+/// markers. If the output has no test results at all the generated code
+/// failed to build — fall back to the backend-failure report.
+fn renderTestResults(err: *std.Io.Writer, ts_source: []const u8, ts_path: []const u8, zig_src: []const u8, gen_path: []const u8, stderr_text: []const u8, term: std.process.Child.Term) !u8 {
+    const gen_base = std.fs.path.basename(gen_path);
+    var saw_result = false;
+    var awaiting_location = false; // last test failed; show its first user frame
+    var passed: u32 = 0;
+    var failed: u32 = 0;
+    var it = std.mem.splitScalar(u8, stderr_text, '\n');
+    while (it.next()) |raw| {
+        const line = std.mem.trimEnd(u8, raw, "\r");
+        // "1/2 <gen>.test.<name>...<status>" — one line per test.
+        if (std.mem.indexOf(u8, line, ".test.")) |tpos| {
+            if (line.len > 0 and line[0] >= '0' and line[0] <= '9') {
+                const after = line[tpos + ".test.".len ..];
+                const dots = std.mem.indexOf(u8, after, "...") orelse continue;
+                const name = after[0..dots];
+                const status = after[dots + 3 ..];
+                saw_result = true;
+                if (std.mem.eql(u8, status, "OK")) {
+                    passed += 1;
+                    awaiting_location = false;
+                    if (g_color) {
+                        try err.print(C_GREEN ++ "✓" ++ C_RESET ++ " {s}\n", .{name});
+                    } else {
+                        try err.print("ok {s}\n", .{name});
+                    }
+                } else if (std.mem.eql(u8, status, "SKIP")) {
+                    awaiting_location = false;
+                } else {
+                    failed += 1;
+                    awaiting_location = true;
+                    if (g_color) {
+                        try err.print(C_BOLD_RED ++ "✗" ++ C_RESET ++ " {s} — " ++ C_BOLD ++ "{s}" ++ C_RESET ++ "\n", .{ name, status });
+                    } else {
+                        try err.print("FAIL {s} — {s}\n", .{ name, status });
+                    }
+                }
+                continue;
+            }
+        }
+        // First stack frame inside the generated file after a failure: map it
+        // to the .ts line the failing statement came from.
+        if (awaiting_location) {
+            if (std.mem.indexOf(u8, line, gen_base)) |gpos| {
+                const rest = line[gpos + gen_base.len ..];
+                if (rest.len > 1 and rest[0] == ':' and std.mem.indexOf(u8, line, "lib/std") == null) {
+                    var p: usize = 1;
+                    var zline: u32 = 0;
+                    while (p < rest.len and rest[p] >= '0' and rest[p] <= '9') : (p += 1) zline = zline * 10 + (rest[p] - '0');
+                    const ts_line = tsLineForGenLine(zig_src, zline);
+                    if (ts_line > 0) {
+                        const origin = diagOrigin(ts_path, ts_line);
+                        awaiting_location = false;
+                        if (g_color) {
+                            try err.print(C_DIM ++ "    at " ++ C_RESET ++ C_CYAN ++ "{s}:{d}" ++ C_RESET ++ "\n", .{ origin.file, origin.line });
+                        } else {
+                            try err.print("    at {s}:{d}\n", .{ origin.file, origin.line });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (!saw_result) {
+        // No tests ran: either the file declares none (exit 0) or the
+        // generated code failed to build.
+        switch (term) {
+            .exited => |code| if (code == 0) {
+                try err.print("{s}: no tests\n", .{ts_path});
+                return 0;
+            },
+            else => {},
+        }
+        try reportBackendFailure(err, ts_source, ts_path, zig_src, gen_path, stderr_text);
+        return 1;
+    }
+    if (failed == 0) {
+        if (g_color) {
+            try err.print(C_GREEN ++ "{d} passed" ++ C_RESET ++ "\n", .{passed});
+        } else {
+            try err.print("{d} passed\n", .{passed});
+        }
+        return 0;
+    }
+    if (g_color) {
+        try err.print("{d} passed, " ++ C_BOLD_RED ++ "{d} failed" ++ C_RESET ++ "\n", .{ passed, failed });
+    } else {
+        try err.print("{d} passed, {d} failed\n", .{ passed, failed });
+    }
+    return 1;
 }
 
 pub fn main(init: std.process.Init) !void {

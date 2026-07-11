@@ -2002,7 +2002,7 @@ pub const CompileOptions = struct {
 };
 
 /// Collect the inheritance chain from a root ancestor down to `c` (inclusive).
-var g_program: ?*const Program = null;
+pub var g_program: ?*const Program = null;
 
 /// Compile options captured at program-emit time so nested emitters (a
 /// statement-body arrow) can reach them without threading them through every
