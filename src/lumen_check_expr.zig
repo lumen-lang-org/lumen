@@ -106,7 +106,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 };
                 if (!b.mutable) {
-                    _ = self.fail(line, col, "E_CONST_ASSIGNMENT") catch {};
+                    const msg = std.fmt.allocPrint(self.arena, "cannot modify '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable", .{ id.target.var_ref.name, id.target.var_ref.name }) catch "E_CONST_ASSIGNMENT";
+                    _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
                 if (b.decl) |d| d.reassigned = true;
@@ -298,7 +299,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         .ternary => |ternary| {
             const cond_type = self.exprType(program, ternary.cond, line, col) orelse return null;
             if (!types.same(.bool, cond_type)) {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                _ = self.failCondition(line, col, "`?:`", cond_type) catch {};
                 return null;
             }
             // An empty array literal `[]` has no self-inferable type, but in a

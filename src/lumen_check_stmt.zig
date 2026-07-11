@@ -436,7 +436,8 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             const found_binding = self.bindingPtr(assignment.name) orelse
                 return self.undefined_(assignment.name, assignment.line, assignment.col);
             if (!found_binding.mutable) {
-                return self.fail(assignment.line, assignment.col, "E_CONST_ASSIGNMENT");
+                const msg = std.fmt.allocPrint(self.arena, "cannot assign to '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable", .{ assignment.name, assignment.name }) catch "E_CONST_ASSIGNMENT";
+                return self.fail(assignment.line, assignment.col, msg);
             }
             // A statement-body arrow captures outer bindings by value, so it
             // cannot mutate them (Zig would reject the cross-scope write). Reject
@@ -531,7 +532,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
         .while_stmt => |*loop| {
             const cond_type = self.exprType(program, loop.cond, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer while condition type");
-            if (!types.same(.bool, cond_type)) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+            if (!types.same(.bool, cond_type)) return self.failCondition(loop.line, loop.col, "`while`", cond_type);
             self.loop_depth += 1;
             defer self.loop_depth -= 1;
             try self.checkBlock(program, loop.body);
@@ -542,7 +543,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             try self.checkBlock(program, loop.body);
             const cond_type = self.exprType(program, loop.cond, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer do-while condition type");
-            if (!types.same(.bool, cond_type)) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+            if (!types.same(.bool, cond_type)) return self.failCondition(loop.line, loop.col, "`do-while`", cond_type);
         },
         .for_stmt => |*loop| {
             try self.pushScope();
@@ -555,7 +556,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             if (loop.cond) |cond| {
                 const cond_type = self.exprType(program, cond, loop.line, loop.col) orelse
                     return self.inferenceFail(loop.line, loop.col, "cannot infer for condition type");
-                if (!types.same(.bool, cond_type)) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+                if (!types.same(.bool, cond_type)) return self.failCondition(loop.line, loop.col, "`for`", cond_type);
             }
             self.loop_depth += 1;
             defer self.loop_depth -= 1;
@@ -684,7 +685,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
         .if_stmt => |*branch| {
             const cond_type = self.exprType(program, branch.cond, branch.line, branch.col) orelse
                 return self.inferenceFail(branch.line, branch.col, "cannot infer if condition type");
-            if (!types.same(.bool, cond_type)) return self.fail(branch.line, branch.col, "E_TYPE_MISMATCH");
+            if (!types.same(.bool, cond_type)) return self.failCondition(branch.line, branch.col, "`if`", cond_type);
             const narrow = Checker.narrowTarget(branch.cond);
             // Discriminant narrowing: `if (s.kind === "circle")` narrows `s` to
             // the matching variant in the then-branch.

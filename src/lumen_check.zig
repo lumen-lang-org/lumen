@@ -818,6 +818,21 @@ pub const Checker = struct {
         return if (n == 1) "" else "s";
     }
 
+    /// A non-boolean condition (`if (n)`, `while (s)`, ...): truthiness is not
+    /// part of the language, so name the construct and suggest the explicit
+    /// comparison matching the value's type.
+    pub fn failCondition(self: *Checker, line: u32, col: u32, construct: []const u8, cond_type: types.Type) CompileError {
+        const tn = types.tsName(self.arena, cond_type) catch return self.fail(line, col, "E_TYPE_MISMATCH");
+        const hint: []const u8 = switch (cond_type) {
+            .optional => "`x != null`",
+            .string, .string_literal_union => "`s != \"\"` or `s.length > 0`",
+            else => if (types.isNumeric(cond_type)) "`x != 0`" else if (types.isArray(cond_type)) "`a.length > 0`" else "an explicit comparison",
+        };
+        const msg = std.fmt.allocPrint(self.arena, "{s} condition must be `boolean`, got `{s}` — truthiness is not supported; write {s}", .{ construct, tn, hint }) catch
+            return self.fail(line, col, "E_TYPE_MISMATCH");
+        return self.fail(line, col, msg);
+    }
+
     pub fn checkCallArgs(self: *Checker, program: *ast.Program, callee: []const u8, params: []const ast.FunctionParam, args: []const *ast.Expr, line: u32, col: u32) ?[]*ast.Expr {
         const has_rest = params.len > 0 and params[params.len - 1].is_rest;
         const fixed_count = if (has_rest) params.len - 1 else params.len;
