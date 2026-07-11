@@ -1971,6 +1971,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try emitExpr(fa.obj, w, arena);
                 try w.appendSlice(arena, ".");
                 try emitFieldName(w, arena, fa.name);
+                if (fa.unwrap) try w.appendSlice(arena, ".?"); // narrowed optional field (spec 261)
             }
         },
         .index => |idx| {

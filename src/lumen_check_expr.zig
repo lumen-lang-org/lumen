@@ -231,6 +231,19 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         },
         .bool_bin => |bin| {
             const left_type = self.exprType(program, bin.l, line, col) orelse return null;
+            // `x != null && <uses x>` narrows x on the right of && (and the
+            // symmetric `x == null || <uses x>` on the right of ||).
+            var short_narrowed = false;
+            if (self.narrowTarget(bin.l)) |nt| {
+                const wants_then = std.mem.eql(u8, bin.op, "&&");
+                if (nt.in_then == wants_then) {
+                    self.narrowed.append(self.arena, nt.name) catch return null;
+                    short_narrowed = true;
+                }
+            }
+            defer if (short_narrowed) {
+                self.narrowed.items.len -= 1;
+            };
             const right_type = self.exprType(program, bin.r, line, col) orelse return null;
             if (!types.same(.bool, left_type) or !types.same(.bool, right_type)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
@@ -375,7 +388,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // `x !== null ? A : B` narrows `x` to non-null in the branch the
             // check guards (the then-branch for `!== null`, else for `=== null`),
             // matching the if-statement narrowing.
-            const narrow = Checker.narrowTarget(ternary.cond);
+            const narrow = self.narrowTarget(ternary.cond);
             const narrow_then = narrow != null and narrow.?.in_then;
             const narrow_else = narrow != null and !narrow.?.in_then;
             if (narrow_then) self.narrowed.append(self.arena, narrow.?.name) catch return null;
@@ -702,7 +715,21 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return null;
             }
             return switch (obj_type) {
-                .named => |type_name| self.fieldType(type_name, field.name, line, col),
+                .named => |type_name| blk_named: {
+                    const ft = self.fieldType(type_name, field.name, line, col) orelse break :blk_named null;
+                    // A narrowed optional field path (`if (u.email != null)`)
+                    // reads as its inner type, unwrapped at emit (spec 261).
+                    if (ft == .optional) {
+                        if (self.narrowPath(e)) |path| {
+                            if (self.isNarrowed(path)) {
+                                field.unwrap = true;
+                                break :blk_named ft.optional.*;
+                            }
+                        }
+                    }
+                    field.unwrap = false;
+                    break :blk_named ft;
+                },
                 .union_type => |union_name| blk2: {
                     // If the union binding is narrowed to a variant, read that
                     // variant's fields; otherwise only the discriminant field.

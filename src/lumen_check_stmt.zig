@@ -778,7 +778,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             const cond_type = self.exprType(program, branch.cond, branch.line, branch.col) orelse
                 return self.inferenceFail(branch.line, branch.col, "cannot infer if condition type");
             if (!types.same(.bool, cond_type)) return self.failCondition(branch.line, branch.col, "`if`", cond_type);
-            const narrow = Checker.narrowTarget(branch.cond);
+            const narrow = self.narrowTarget(branch.cond);
             // Discriminant narrowing: `if (s.kind === "circle")` narrows `s` to
             // the matching variant in the then-branch.
             var var_narrowed = false;

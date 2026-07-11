@@ -415,15 +415,25 @@ pub const Checker = struct {
     /// If `cond` is `x != null` / `x !== null` (or undefined) returns the binding
     /// narrowed in the then-branch; `x == null` returns it for the else-branch.
     /// `in_then` says which branch the non-optional narrowing applies to.
-    pub fn narrowTarget(cond: *ast.Expr) ?struct { name: []const u8, in_then: bool } {
+    /// The narrowable path of an expression: a plain variable (`x`) or a
+    /// single-level field read on one (`x.f`, keyed as "x.f").
+    pub fn narrowPath(self: *Checker, e: *ast.Expr) ?[]const u8 {
+        if (e.* == .var_ref) return e.var_ref.name;
+        if (e.* == .field and e.field.obj.* == .var_ref) {
+            return std.fmt.allocPrint(self.arena, "{s}.{s}", .{ e.field.obj.var_ref.name, e.field.name }) catch null;
+        }
+        return null;
+    }
+
+    pub fn narrowTarget(self: *Checker, cond: *ast.Expr) ?struct { name: []const u8, in_then: bool } {
         if (cond.* != .cmp) return null;
         const c = cond.cmp;
         const is_ne = std.mem.eql(u8, c.op, "!=");
         const is_eq = std.mem.eql(u8, c.op, "==");
         if (!is_ne and !is_eq) return null;
         var name: ?[]const u8 = null;
-        if (c.l.* == .var_ref and c.r.* == .null_lit) name = c.l.var_ref.name;
-        if (c.r.* == .var_ref and c.l.* == .null_lit) name = c.r.var_ref.name;
+        if (c.r.* == .null_lit) name = self.narrowPath(c.l);
+        if (c.l.* == .null_lit) name = self.narrowPath(c.r);
         const n = name orelse return null;
         return .{ .name = n, .in_then = is_ne };
     }
