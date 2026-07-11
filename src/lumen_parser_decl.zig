@@ -388,6 +388,9 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     var has_ctor = false;
     var ctor_params: []ast.FunctionParam = &.{};
     var ctor_body: []Stmt = &.{};
+    // `x: T = expr;` field initializers desugar to `this.x = expr;` prepended to
+    // the constructor body (a constructor is synthesized if the class has none).
+    var field_inits: std.ArrayListUnmanaged(Stmt) = .empty;
     while (!self.isOp('}')) {
         // Optional member modifiers, in any order.
         var visibility: ast.Visibility = .public;
@@ -457,7 +460,7 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 .col = m_col,
             });
         } else {
-            // field: name: T ;
+            // field: name: T [= expr] ;
             const annotation = try self.parseOptionalMember();
             try fields.append(self.arena, .{
                 .name = member,
@@ -466,11 +469,29 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 .is_static = is_static,
                 .is_readonly = is_readonly,
             });
+            // A field initializer `= expr` runs at construction (instance fields
+            // only; a static field initializer is not supported here).
+            if (self.isOp('=')) {
+                try self.advance();
+                const fline = self.cur_line;
+                const fcol = self.cur_col;
+                const init_expr = try self.parseExpr();
+                if (!is_static) {
+                    try field_inits.append(self.arena, .{ .member_assign = .{ .field = member, .value = init_expr, .line = fline, .col = fcol } });
+                }
+            }
             if (self.isOp(';') or self.isOp(',')) try self.advance();
         }
     }
     try self.expectOp('}');
     if (self.isOp(';')) try self.advance();
+    // Prepend field initializers to the constructor body (synthesizing an empty
+    // constructor when the class declares none), so every instance gets them.
+    if (field_inits.items.len > 0) {
+        try field_inits.appendSlice(self.arena, ctor_body);
+        ctor_body = try field_inits.toOwnedSlice(self.arena);
+        has_ctor = true;
+    }
     return .{ .class_decl = .{
         .name = name,
         .fields = try fields.toOwnedSlice(self.arena),
