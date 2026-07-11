@@ -248,7 +248,11 @@ pub const Checker = struct {
     }
 
     pub fn inferenceFail(self: *Checker, line: u32, col: u32, msg: []const u8) CompileError {
-        if (self.last_line == line and self.last_col == col and !std.mem.eql(u8, self.last_err, "syntax error")) {
+        // Keep an existing, more specific diagnostic when it points at this
+        // position or somewhere inside it (checking is top-down, so an error
+        // recorded at a same-or-later line came from this statement's own
+        // subexpressions — e.g. E_CAPTURED_MUTATION inside a callback).
+        if (self.last_line >= line and !std.mem.eql(u8, self.last_err, "syntax error")) {
             return error.ParseError;
         }
         return self.fail(line, col, msg);

@@ -49,7 +49,7 @@ fn humanizeDiag(code: []const u8) []const u8 {
     if (eq(u8, code, "E_REST_NOT_LAST")) return "a rest parameter must be last [E_REST_NOT_LAST]";
     if (eq(u8, code, "E_REST_NOT_ARRAY")) return "a rest parameter must have an array type [E_REST_NOT_ARRAY]";
     if (eq(u8, code, "E_REQUIRED_AFTER_OPTIONAL")) return "a required parameter cannot follow an optional one [E_REQUIRED_AFTER_OPTIONAL]";
-    if (eq(u8, code, "E_CAPTURED_MUTATION")) return "cannot mutate a variable captured by an arrow function [E_CAPTURED_MUTATION]";
+    if (eq(u8, code, "E_CAPTURED_MUTATION")) return "cannot mutate a variable captured by an arrow function — use a `for...of` loop or `reduce` instead [E_CAPTURED_MUTATION]";
     if (eq(u8, code, "E_DYNAMIC_PROPERTY_WRITE")) return "record fields are immutable; build a new object instead [E_DYNAMIC_PROPERTY_WRITE]";
     if (eq(u8, code, "E_AWAIT_OUTSIDE_ASYNC")) return "'await' outside an async function [E_AWAIT_OUTSIDE_ASYNC]";
     if (eq(u8, code, "E_AWAIT_NOT_PROMISE")) return "'await' operand is not a Promise [E_AWAIT_NOT_PROMISE]";
