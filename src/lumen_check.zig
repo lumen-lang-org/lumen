@@ -246,10 +246,75 @@ pub const Checker = struct {
     }
 
     pub fn undefined_(self: *Checker, name: []const u8, line: u32, col: u32) CompileError {
-        self.last_err = std.fmt.allocPrint(self.arena, "undefined variable '{s}'", .{name}) catch "undefined variable";
+        if (self.suggestName(name)) |hint| {
+            self.last_err = std.fmt.allocPrint(self.arena, "undefined variable '{s}' — did you mean '{s}'?", .{ name, hint }) catch "undefined variable";
+        } else {
+            self.last_err = std.fmt.allocPrint(self.arena, "undefined variable '{s}'", .{name}) catch "undefined variable";
+        }
         self.last_line = line;
         self.last_col = col;
         return error.ParseError;
+    }
+
+    /// Bounded edit distance between two names (insert/delete/substitute cost 1),
+    /// giving up early when it must exceed `limit`.
+    fn editDistance(a: []const u8, b: []const u8, limit: usize) usize {
+        if (a.len > b.len) return editDistance(b, a, limit);
+        if (b.len - a.len > limit) return limit + 1;
+        var row: [64]usize = undefined;
+        if (b.len >= row.len) return limit + 1;
+        for (0..a.len + 1) |j| row[j] = j;
+        for (b, 0..) |bc, i| {
+            var prev = row[0];
+            row[0] = i + 1;
+            var best = row[0];
+            for (a, 0..) |ac, j| {
+                const cost: usize = if (ac == bc) 0 else 1;
+                const val = @min(@min(row[j + 1] + 1, row[j] + 1), prev + cost);
+                prev = row[j + 1];
+                row[j + 1] = val;
+                if (val < best) best = val;
+            }
+            if (best > limit) return limit + 1;
+        }
+        return row[a.len];
+    }
+
+    /// The closest known name to `name` (in-scope bindings, declared functions,
+    /// common globals), or null when nothing is close enough to be helpful.
+    fn suggestName(self: *Checker, name: []const u8) ?[]const u8 {
+        if (name.len < 2) return null;
+        // Allow ~1 typo for short names, 2 for longer ones.
+        const limit: usize = if (name.len <= 4) 1 else 2;
+        var best: ?[]const u8 = null;
+        var best_d: usize = limit + 1;
+        for (self.scopes.items) |*scope| {
+            var it = scope.keyIterator();
+            while (it.next()) |k| {
+                const d = editDistance(name, k.*, limit);
+                if (d < best_d) {
+                    best_d = d;
+                    best = k.*;
+                }
+            }
+        }
+        var fit = self.funcs.keyIterator();
+        while (fit.next()) |k| {
+            const d = editDistance(name, k.*, limit);
+            if (d < best_d) {
+                best_d = d;
+                best = k.*;
+            }
+        }
+        const globals = [_][]const u8{ "console", "Math", "JSON", "String", "Number", "Boolean", "Array", "Map", "Set", "parseInt", "parseFloat", "isNaN", "isFinite", "true", "false", "null" };
+        for (globals) |g| {
+            const d = editDistance(name, g, limit);
+            if (d < best_d) {
+                best_d = d;
+                best = g;
+            }
+        }
+        return if (best_d <= limit) best else null;
     }
 
     pub fn currentScope(self: *Checker) *Scope {

@@ -1377,7 +1377,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         return sig.ret.*;
                     }
                 }
-                _ = self.fail(line, col, "unknown function") catch {};
+                _ = self.undefined_(call.name, line, col) catch {};
                 return null;
             };
             // A by-reference (`Ref<T>`) parameter requires an addressable
