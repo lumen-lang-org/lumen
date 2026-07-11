@@ -472,6 +472,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // `a ?? b` where `b` is also `T | null` (a chained `a ?? b ?? d`)
             // keeps the result optional; `b` flows through unwrapped only when it
             // is the non-optional inner type.
+            // `a ?? null` is a no-op normalization (common JS idiom): the
+            // result keeps the left's `T | null` type.
+            if (c.r.* == .null_lit) {
+                c.result_type = left_type;
+                return left_type;
+            }
             const right_type = self.exprType(program, c.r, line, col) orelse return null;
             if (right_type == .optional and types.same(right_type.optional.*, inner)) {
                 c.result_type = left_type;

@@ -166,7 +166,8 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
             if (self.resolveField(c.name, req.name) != null) continue;
             if (self.resolveMethod(c.name, req.name) != null) continue;
             if (self.resolveAccessor(c.name, req.name, .getter) != null) continue;
-            return self.fail(c.line, c.col, "E_MISSING_MEMBER");
+            const msg = std.fmt.allocPrint(self.arena, "class '{s}' is missing member '{s}' required by interface `{s}`", .{ c.name, req.name, iface }) catch "E_MISSING_MEMBER";
+            return self.fail(c.line, c.col, msg);
         }
     }
 

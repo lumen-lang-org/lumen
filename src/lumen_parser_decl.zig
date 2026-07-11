@@ -166,6 +166,27 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
         if (self.cur != .ident) return error.ParseError;
         const fname = self.cur.ident;
         try self.advance();
+        // Method signature shorthand `name(params): R` — recorded as a
+        // function-typed member `(T,...)=>R` (spec 254).
+        if (self.isOp('(')) {
+            const params = try self.parseParamList();
+            var ret_ann: []const u8 = "void";
+            if (self.isOp(':')) {
+                try self.advance();
+                ret_ann = try self.parseTypeAnnotation();
+            }
+            var ann: std.ArrayListUnmanaged(u8) = .empty;
+            try ann.append(self.arena, '(');
+            for (params, 0..) |param, i| {
+                if (i > 0) try ann.append(self.arena, ',');
+                try ann.appendSlice(self.arena, param.annotation);
+            }
+            try ann.appendSlice(self.arena, ")=>");
+            try ann.appendSlice(self.arena, ret_ann);
+            try fields.append(self.arena, .{ .name = fname, .annotation = ann.items });
+            if (self.isOp(',') or self.isOp(';')) try self.advance();
+            continue;
+        }
         const annotation = try self.parseOptionalMember();
         try fields.append(self.arena, .{ .name = fname, .annotation = annotation });
         if (self.isOp(',') or self.isOp(';')) try self.advance();
