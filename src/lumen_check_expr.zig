@@ -529,7 +529,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         .coalesce => |*c| {
             const left_type = self.exprType(program, c.l, line, col) orelse return null;
             if (left_type != .optional) {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                const tn = types.tsName(self.arena, left_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "left side of `??` is `{s}`, which can never be null — remove the `??`", .{tn}) catch "E_TYPE_MISMATCH";
+                _ = self.fail(line, col, msg) catch {};
                 return null;
             }
             const inner = left_type.optional.*;

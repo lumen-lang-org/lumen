@@ -632,6 +632,13 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             const cond_type = self.exprType(program, loop.cond, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer while condition type");
             if (!types.same(.bool, cond_type)) return self.failCondition(loop.line, loop.col, "`while`", cond_type);
+            // `while (x != null)` narrows x inside the body (spec 265).
+            const loop_narrow = self.narrowTarget(loop.cond);
+            const narrow_active = loop_narrow != null and loop_narrow.?.in_then;
+            if (narrow_active) self.narrowed.append(self.arena, loop_narrow.?.name) catch return error.OutOfMemory;
+            defer if (narrow_active) {
+                self.narrowed.items.len -= 1;
+            };
             self.loop_depth += 1;
             defer self.loop_depth -= 1;
             try self.checkBlock(program, loop.body);
