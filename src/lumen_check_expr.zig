@@ -442,10 +442,10 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 if (item.* == .spread) {
                     has_spread = true;
                     const src_type = self.exprType(program, item.spread, line, col) orelse return null;
-                    // `[...set]`: rewrite the spread source to `Array.from(set)`
-                    // so it flows through the array-spread path (which emits the
-                    // set's values slice).
-                    if (src_type == .set_type) {
+                    // `[...set]` / `[...str]`: rewrite the spread source to
+                    // `Array.from(x)` so it flows through the array-spread path
+                    // (a set's values slice / a string's single-char strings).
+                    if (src_type == .set_type or types.isStringLike(src_type)) {
                         const from_call = self.arena.create(ast.Expr) catch return null;
                         const from_args = self.arena.alloc(*ast.Expr, 1) catch return null;
                         from_args[0] = item.spread;
