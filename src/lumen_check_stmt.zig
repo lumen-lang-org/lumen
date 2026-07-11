@@ -95,6 +95,8 @@ pub fn checkBlock(self: *Checker, program: *ast.Program, body: []ast.Stmt) Compi
     // end of the enclosing block; restore the list on exit.
     const nv_len = self.narrowed_variants.items.len;
     defer self.narrowed_variants.items.len = nv_len;
+    const n_len = self.narrowed.items.len;
+    defer self.narrowed.items.len = n_len;
     self.nested_stmt_depth += 1;
     defer self.nested_stmt_depth -= 1;
     warnUnreachable(self, body);
@@ -834,11 +836,19 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     self.narrowed_variants.items.len -= 1;
                 };
                 try self.checkBlock(program, else_body);
-            } else if (other_narrow != null and blockReturns(branch.then_body)) {
-                // `if (s.kind == "circle") { return ... }` — after the if, s
-                // can only be the other variant; the entry is cleared at the
-                // enclosing block's exit (checkBlock restores the list).
-                self.narrowed_variants.append(self.arena, .{ .name = other_narrow.?.name, .variant = other_narrow.?.variant }) catch return error.OutOfMemory;
+            } else if (blockReturns(branch.then_body)) {
+                // Guard clause: the then-branch always exits, so its negative
+                // narrowing holds for the rest of the enclosing block
+                // (checkBlock restores the lists at block exit).
+                if (other_narrow) |on| {
+                    // `if (s.kind == "circle") { return ... }` — s can only be
+                    // the other variant below.
+                    self.narrowed_variants.append(self.arena, .{ .name = on.name, .variant = on.variant }) catch return error.OutOfMemory;
+                }
+                if (narrow != null and !narrow.?.in_then) {
+                    // `if (s == null) return ...` — s is non-null below.
+                    self.narrowed.append(self.arena, narrow.?.name) catch return error.OutOfMemory;
+                }
             }
         },
         .switch_stmt => |*switch_stmt| {
