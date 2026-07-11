@@ -560,6 +560,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 c.result_type = left_type;
                 return left_type;
             }
+            // An empty-array fallback (`map.get(k) ?? []`) borrows the left's
+            // inner array type, like the ternary empty-array case (spec 283).
+            if (c.r.* == .array and c.r.array.items.len == 0 and types.isArray(inner)) {
+                self.ensureAssignable(program, inner, c.r, line, col) catch return null;
+                c.result_type = inner;
+                return inner;
+            }
             const right_type = self.exprType(program, c.r, line, col) orelse return null;
             if (right_type == .optional and types.same(right_type.optional.*, inner)) {
                 c.result_type = left_type;
