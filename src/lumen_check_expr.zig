@@ -321,8 +321,24 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 };
                 return typed_type;
             }
-            const then_type = self.exprType(program, ternary.then_expr, line, col) orelse return null;
-            const else_type = self.exprType(program, ternary.else_expr, line, col) orelse return null;
+            // `x !== null ? A : B` narrows `x` to non-null in the branch the
+            // check guards (the then-branch for `!== null`, else for `=== null`),
+            // matching the if-statement narrowing.
+            const narrow = Checker.narrowTarget(ternary.cond);
+            const narrow_then = narrow != null and narrow.?.in_then;
+            const narrow_else = narrow != null and !narrow.?.in_then;
+            if (narrow_then) self.narrowed.append(self.arena, narrow.?.name) catch return null;
+            const then_type = self.exprType(program, ternary.then_expr, line, col) orelse {
+                if (narrow_then) self.narrowed.items.len -= 1;
+                return null;
+            };
+            if (narrow_then) self.narrowed.items.len -= 1;
+            if (narrow_else) self.narrowed.append(self.arena, narrow.?.name) catch return null;
+            const else_type = self.exprType(program, ternary.else_expr, line, col) orelse {
+                if (narrow_else) self.narrowed.items.len -= 1;
+                return null;
+            };
+            if (narrow_else) self.narrowed.items.len -= 1;
             if (!types.same(then_type, else_type)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
