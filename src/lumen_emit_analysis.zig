@@ -41,10 +41,24 @@ pub fn zigZeroValue(arena: std.mem.Allocator, t: types.Type) CompileError![]cons
 /// call-aware throw analysis (e.g. release-fast builds keep panic semantics).
 pub var g_throwing_fns: ?*const std.StringHashMapUnmanaged(void) = null;
 
+/// Arena for building method lookup keys inside `exprCanThrow` (set alongside
+/// g_throwing_fns by the compiler's fixpoint pass).
+pub var g_method_arena: ?std.mem.Allocator = null;
+
 /// Whether calling the named function can raise a Lumen exception.
 pub fn fnThrows(name: []const u8) bool {
     const set = g_throwing_fns orelse return false;
     return set.get(name) != null;
+}
+
+/// Whether calling a class method with this name can raise a Lumen exception.
+/// Method keys are name-based ("m:<name>") across all classes so emission and
+/// call sites agree even through inheritance and super copies; a same-named
+/// non-throwing method just carries an error union that never errors.
+pub fn methodThrows(arena: std.mem.Allocator, name: []const u8) bool {
+    const set = g_throwing_fns orelse return false;
+    const key = std.fmt.allocPrint(arena, "m:{s}", .{name}) catch return false;
+    return set.get(key) != null;
 }
 
 /// Whether evaluating this expression can raise a Lumen exception — i.e. it
@@ -75,6 +89,7 @@ pub fn exprCanThrow(e: *const Expr) bool {
         .coalesce => |c| exprCanThrow(c.l) or exprCanThrow(c.r),
         .ternary => |t| exprCanThrow(t.cond) or exprCanThrow(t.then_expr) or exprCanThrow(t.else_expr),
         .super_call => |sc| blk: {
+            if (g_method_arena) |ma| if (methodThrows(ma, sc.name)) break :blk true;
             for (sc.args) |a| if (exprCanThrow(a)) break :blk true;
             break :blk false;
         },
@@ -83,6 +98,9 @@ pub fn exprCanThrow(e: *const Expr) bool {
             break :blk false;
         },
         .method_call => |mc| blk: {
+            if (mc.class_name != null and !mc.is_console) {
+                if (g_method_arena) |ma| if (methodThrows(ma, mc.name)) break :blk true;
+            }
             if (exprCanThrow(mc.obj)) break :blk true;
             for (mc.args) |a| if (exprCanThrow(a)) break :blk true;
             break :blk false;

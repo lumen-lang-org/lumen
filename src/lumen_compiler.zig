@@ -226,24 +226,43 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     var throwing_fns: std.StringHashMapUnmanaged(void) = .empty;
     if (options.runtime_locations) {
         emit_analysis.g_throwing_fns = &throwing_fns;
+        emit_analysis.g_method_arena = arena;
         var changed = true;
         while (changed) {
             changed = false;
             for (program.stmts) |*fs| {
-                if (fs.* != .function_decl) continue;
-                const f = &fs.function_decl;
-                if (f.is_async) continue;
-                if (f.type_params.len > 0) continue; // generic template: only specializations emit
-                if (dest_map.get(f.name) != null) continue; // builder __into twins keep panic semantics
-                if (throwing_fns.get(f.name) != null) continue;
-                if (emit_analysis.bodyCanThrow(f.body)) {
-                    try throwing_fns.put(arena, f.name, {});
-                    changed = true;
+                switch (fs.*) {
+                    .function_decl => |*f| {
+                        if (f.is_async) continue;
+                        if (f.type_params.len > 0) continue; // generic template: only specializations emit
+                        if (dest_map.get(f.name) != null) continue; // builder __into twins keep panic semantics
+                        if (throwing_fns.get(f.name) != null) continue;
+                        if (emit_analysis.bodyCanThrow(f.body)) {
+                            try throwing_fns.put(arena, f.name, {});
+                            changed = true;
+                        }
+                    },
+                    // Methods key by name across classes ("m:<name>") so call
+                    // sites, inherited copies, and super copies stay consistent.
+                    .class_decl => |*c| for (c.methods) |*m| {
+                        if (m.accessor != .none) continue;
+                        if (m.is_async) continue;
+                        const key = try std.fmt.allocPrint(arena, "m:{s}", .{m.name});
+                        if (throwing_fns.get(key) != null) continue;
+                        if (emit_analysis.bodyCanThrow(m.body)) {
+                            try throwing_fns.put(arena, key, {});
+                            changed = true;
+                        }
+                    },
+                    else => {},
                 }
             }
         }
     }
-    defer emit_analysis.g_throwing_fns = null;
+    defer {
+        emit_analysis.g_throwing_fns = null;
+        emit_analysis.g_method_arena = null;
+    }
 
     var decls: std.ArrayListUnmanaged(u8) = .empty; // top-level struct type definitions
     var body: std.ArrayListUnmanaged(u8) = .empty;

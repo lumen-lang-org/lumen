@@ -1760,6 +1760,8 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             } else if (mc.array_result_type != null) {
                 try emitArrayMethod(mc, w, arena);
             } else if (mc.is_static) {
+                const throws = analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, mc.name);
+                if (throws) try emitThrowingCallPrefix(w, arena);
                 // Class.staticMethod(args) -> Class.__static_m_name(args)
                 try w.print(arena, "{s}.__static_m_{s}(", .{ mc.class_name orelse "", mc.name });
                 for (mc.args, 0..) |arg, i| {
@@ -1767,7 +1769,10 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try emitExpr(arg, w, arena);
                 }
                 try w.append(arena, ')');
+                if (throws) try emitThrowingCallSuffix(w, arena);
             } else {
+                const throws = mc.class_name != null and analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, mc.name);
+                if (throws) try emitThrowingCallPrefix(w, arena);
                 try emitExpr(mc.obj, w, arena);
                 try w.print(arena, ".{s}(", .{mc.name});
                 for (mc.args, 0..) |arg, i| {
@@ -1775,9 +1780,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try emitExpr(arg, w, arena);
                 }
                 try w.append(arena, ')');
+                if (throws) try emitThrowingCallSuffix(w, arena);
             }
         },
         .super_call => |sc| {
+            const throws = analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, sc.name);
+            if (throws) try emitThrowingCallPrefix(w, arena);
             // super.method(args) -> self.__super_<owner>_method(args)
             try w.print(arena, "self.__super_{s}_{s}(", .{ sc.parent orelse "", sc.name });
             for (sc.args, 0..) |arg, i| {
@@ -1785,6 +1793,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try emitExpr(arg, w, arena);
             }
             try w.append(arena, ')');
+            if (throws) try emitThrowingCallSuffix(w, arena);
         },
         .arrow => |arrow| {
             // An arrow body is its own (non-error-union) function: calls to
@@ -2078,6 +2087,30 @@ pub var g_cur_into_acc: ?[]const u8 = null;
 // with `try`). Saved/restored around nested statement and arrow emission.
 pub var g_throw_target: ?[]const u8 = null;
 pub var g_fn_can_error: bool = false;
+
+/// Opens a throwing-call wrapper by context (spec 245): a plain paren inside
+/// a try body or at an uncaught site, `(try ` when forwarding from another
+/// throwing function. Closed by `emitThrowingCallSuffix`.
+pub fn emitThrowingCallPrefix(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    if (g_throw_target == null and g_fn_can_error) {
+        try w.appendSlice(arena, "(try ");
+    } else {
+        try w.appendSlice(arena, "(");
+    }
+}
+
+/// Closes a throwing-call wrapper: route to the enclosing try's catch slot,
+/// nothing extra when `try`-forwarded, else panic with the thrown message.
+pub fn emitThrowingCallSuffix(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    if (g_throw_target) |slot| {
+        const label = try std.mem.replaceOwned(u8, arena, slot, "__lumen_throw_", "__lumen_try_");
+        try w.print(arena, " catch {{ {s} = __lumen_err_msg; break :{s}; }})", .{ slot, label });
+    } else if (g_fn_can_error) {
+        try w.appendSlice(arena, ")");
+    } else {
+        try w.appendSlice(arena, " catch @panic(__lumen_err_msg))");
+    }
+}
 
 /// A user function whose name collides with a generated-code global (`main`,
 /// `std`, `xev`, `builtin`) emits under a prefixed name; stack-trace frames

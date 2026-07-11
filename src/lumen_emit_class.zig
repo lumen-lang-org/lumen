@@ -157,12 +157,20 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         const cc = c;
         for (cc.methods) |m| {
             if (!m.is_static) continue;
+            const m_throws = m.accessor == .none and analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, m.name);
             try decls.print(arena, "    fn __static_m_{s}(", .{m.name});
             for (m.params, 0..) |param, i| {
                 if (i > 0) try decls.appendSlice(arena, ", ");
                 try decls.print(arena, "{s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
             }
-            try decls.print(arena, ") {s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
+            if (m_throws) {
+                try decls.print(arena, ") error{{LumenThrow}}!{s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
+            } else {
+                try decls.print(arena, ") {s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
+            }
+            const saved_can_error = emit_mod.g_fn_can_error;
+            emit_mod.g_fn_can_error = m_throws;
+            defer emit_mod.g_fn_can_error = saved_can_error;
             try emitUnusedParamDiscards(m.params, m.body, decls, arena);
             for (m.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
             try decls.appendSlice(arena, "    }\n");
@@ -178,17 +186,38 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
         .getter => try std.fmt.allocPrint(arena, "__get_{s}", .{m.name}),
         .setter => try std.fmt.allocPrint(arena, "__set_{s}", .{m.name}),
     };
+    // Exception propagation (spec 245/247): a throwing method returns an error
+    // union. Super copies are renamed `__super_<owner>_<name>`; strip the
+    // prefix back to the source name for the throwing-set lookup and the
+    // stack-trace frame.
+    var src_name = m.name;
+    var frame_owner = self_type;
+    if (std.mem.startsWith(u8, src_name, "__super_")) {
+        const rest = src_name["__super_".len..];
+        if (std.mem.lastIndexOfScalar(u8, rest, '_')) |us| {
+            frame_owner = rest[0..us]; // trace the copy as `Owner.method`
+            src_name = rest[us + 1 ..];
+        }
+    }
+    const m_throws = m.accessor == .none and analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, src_name);
     try decls.print(arena, "    fn {s}(self: *{s}", .{ fn_name, self_type });
     for (m.params) |param| {
         const pt = param.checked_type orelse return error.ParseError;
         const ztype = if (param.is_ref) try types.refZigName(arena, pt) else try types.zigName(arena, pt);
         try decls.print(arena, ", {s}: {s}", .{ param.name, ztype });
     }
-    try decls.print(arena, ") {s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
+    if (m_throws) {
+        try decls.print(arena, ") error{{LumenThrow}}!{s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
+    } else {
+        try decls.print(arena, ") {s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
+    }
+    const saved_can_error = emit_mod.g_fn_can_error;
+    emit_mod.g_fn_can_error = m_throws;
+    defer emit_mod.g_fn_can_error = saved_can_error;
     if (!bodyUsesThis(m.body)) try decls.appendSlice(arena, "    _ = self;\n");
     // Stack-trace frame for the method (shown as `Class.method`).
     if (options.runtime_locations) {
-        try decls.print(arena, "    __lumenPush(\"{s}.{s}\"); defer __lumenPop();\n", .{ self_type, m.name });
+        try decls.print(arena, "    __lumenPush(\"{s}.{s}\"); defer __lumenPop();\n", .{ frame_owner, src_name });
     }
     try emitUnusedParamDiscards(m.params, m.body, decls, arena);
     for (m.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
