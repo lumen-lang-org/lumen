@@ -263,6 +263,15 @@ pub const Checker = struct {
     pub fn failTypeMismatch(self: *Checker, line: u32, col: u32, expected: types.Type, actual: types.Type) CompileError {
         const en = types.tsName(self.arena, expected) catch return self.fail(line, col, "E_TYPE_MISMATCH");
         const an = types.tsName(self.arena, actual) catch return self.fail(line, col, "E_TYPE_MISMATCH");
+        // An enum value in a `Name`/`Name[]` slot: the annotation resolved to
+        // an unknown named type of the same name — the real gap is that enum
+        // arrays/containers aren't supported yet; say so instead of the
+        // absurd-looking "expected `Status`, got `Status`".
+        if (actual == .enum_type and expected == .named and std.mem.eql(u8, expected.named, actual.enum_type.name)) {
+            const msg2 = std.fmt.allocPrint(self.arena, "enum containers are not supported yet — `{s}[]` can be modeled as a string-literal union type (`type {s}2 = \"a\" | \"b\"`) or the backing `i32[]`", .{ actual.enum_type.name, actual.enum_type.name }) catch
+                return self.fail(line, col, "E_TYPE_MISMATCH");
+            return self.fail(line, col, msg2);
+        }
         // A subclass value in a superclass slot: no vtables in V1, so class
         // values are not polymorphic — explain rather than a bare mismatch.
         if (expected == .class_type and actual == .class_type and self.isSubclassOf(actual.class_type, expected.class_type)) {
