@@ -711,15 +711,32 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             const label = try std.fmt.allocPrint(arena, "__lumen_switch_{d}_{d}", .{ switch_stmt.line, switch_stmt.col });
             const label_target: ?[]const u8 = if (needs_label) label else null;
             if (needs_label) try body.print(arena, "    {s}: {{\n", .{label}) else try body.appendSlice(arena, "    {\n");
-            for (switch_stmt.cases, 0..) |case, i| {
-                try body.appendSlice(arena, if (i == 0) "    if (" else "    else if (");
+            // A case with an empty body falls through to the next clause. Lowering
+            // to if/else, gather consecutive empty-body case values and OR their
+            // match conditions onto the next non-empty case (`if (v==0 or v==1)`).
+            // Trailing empty cases with no following non-empty case fall to the
+            // `else` (default) automatically, so they need no branch.
+            var pending: std.ArrayListUnmanaged(*Expr) = .empty;
+            var emitted_branch = false;
+            for (switch_stmt.cases) |case| {
+                if (case.body.len == 0) {
+                    try pending.append(arena, case.value);
+                    continue;
+                }
+                try body.appendSlice(arena, if (!emitted_branch) "    if (" else "    else if (");
+                emitted_branch = true;
+                for (pending.items) |pv| {
+                    try emitSwitchCaseMatch(switch_type, switch_stmt.value, pv, body, arena);
+                    try body.appendSlice(arena, " or ");
+                }
+                pending.clearRetainingCapacity();
                 try emitSwitchCaseMatch(switch_type, switch_stmt.value, case.value, body, arena);
                 try body.appendSlice(arena, ") {\n");
                 for (case.body) |*case_stmt| try emitStmtWithThrow(case_stmt, decls, body, arena, throw_target, label_target, options);
                 try body.appendSlice(arena, "    }\n");
             }
             if (switch_stmt.default_body) |default_body| {
-                try body.appendSlice(arena, if (switch_stmt.cases.len == 0) "    {\n" else "    else {\n");
+                try body.appendSlice(arena, if (!emitted_branch) "    {\n" else "    else {\n");
                 for (default_body) |*default_stmt| try emitStmtWithThrow(default_stmt, decls, body, arena, throw_target, label_target, options);
                 try body.appendSlice(arena, "    }\n");
             }
