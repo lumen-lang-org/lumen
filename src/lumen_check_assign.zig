@@ -25,7 +25,16 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 for (literals) |literal| {
                     if (std.mem.eql(u8, literal, value.str)) return;
                 }
-                return self.fail(line, col, "E_TYPE_MISMATCH");
+                // Name the union's members (spec 281).
+                var opts: std.ArrayListUnmanaged(u8) = .empty;
+                for (literals, 0..) |literal, i| {
+                    if (i > 0) opts.appendSlice(self.arena, " | ") catch {};
+                    opts.append(self.arena, '"') catch {};
+                    opts.appendSlice(self.arena, literal) catch {};
+                    opts.append(self.arena, '"') catch {};
+                }
+                const msg = std.fmt.allocPrint(self.arena, "\"{s}\" is not a valid `{s}` — expected {s}", .{ value.str, type_name, opts.items }) catch "E_TYPE_MISMATCH";
+                return self.fail(line, col, msg);
             }
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
