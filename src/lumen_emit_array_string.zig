@@ -451,10 +451,18 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         }
     };
 
-    // replace(/re/, repl): route through the regex runtime. The regex literal's
-    // own `g` flag decides first-match-only vs all-matches, so `replaceAll` and
-    // `replace` share this path once the first arg is a regex.
+    // A string method whose pattern is a regex routes through the regex runtime.
+    // The regex literal's own `g` flag decides first-match-only vs all-matches
+    // for replace, so `replaceAll` and `replace` share this path.
     if (mc.regex_arg) {
+        if (eq(u8, name, "split")) {
+            try w.print(arena, "break :{s} @as([]const []const u8, __lumen_regex.splitRegex(__sa(), (", .{lbl});
+            try emitExpr(mc.args[0], w, arena);
+            try w.appendSlice(arena, ").source, (");
+            try emitExpr(mc.args[0], w, arena);
+            try w.appendSlice(arena, ").flags, __s)); })");
+            return;
+        }
         try w.print(arena, "break :{s} @as([]const u8, __lumen_regex.replaceRegex(__sa(), (", .{lbl});
         try emitExpr(mc.args[0], w, arena);
         try w.appendSlice(arena, ").source, (");

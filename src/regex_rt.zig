@@ -522,6 +522,33 @@ pub const __lumen_regex = struct {
         const c = __reCompilePattern(a, pattern, flags) orelse return input;
         return __reReplaceCompiled(a, c, input, repl);
     }
+
+    /// Splits `input` at each regex match, returning the pieces (JS
+    /// `String.prototype.split` with a RegExp separator). Zero-width matches are
+    /// skipped to avoid looping, so an empty pattern yields the whole string as
+    /// one piece. On a bad pattern the whole input is returned as one piece.
+    pub fn splitRegex(a: __re_std.mem.Allocator, pattern: []const u8, flags: []const u8, input: []const u8) []const []const u8 {
+        var parts: __re_std.ArrayListUnmanaged([]const u8) = .empty;
+        const c = __reCompilePattern(a, pattern, flags) orelse {
+            parts.append(a, input) catch return &.{};
+            return parts.items;
+        };
+        var last: usize = 0;
+        var i: usize = 0;
+        while (i <= input.len) {
+            const m = __reFind(c, input, i) orelse break;
+            if (m.end == m.start) {
+                // Zero-width match: cannot delimit a piece; step past it.
+                i = m.start + 1;
+                continue;
+            }
+            parts.append(a, input[last..m.start]) catch return parts.items;
+            last = m.end;
+            i = m.end;
+        }
+        parts.append(a, input[last..]) catch return parts.items;
+        return parts.items;
+    }
 };
 
 test "regex engine: literals, anchors, quantifiers, classes, alternation, flags" {

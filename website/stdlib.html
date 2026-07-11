@@ -143,7 +143,7 @@
   <table>
     <tr><th>API</th><th>Type</th></tr>
     <tr><td><code>s.length</code> · <code>s + t</code> · <code>s.concat(t, …)</code></td><td>int · concatenation · string (variadic)</td></tr>
-    <tr><td><code>s.split(sep, limit?)</code></td><td>(string, int) → string[] (at most <code>limit</code> parts)</td></tr>
+    <tr><td><code>s.split(sep, limit?)</code></td><td>(string | regex, int) → string[] (splits on a string or a regex separator; at most <code>limit</code> parts for the string form)</td></tr>
     <tr><td><code>s.slice(start, end?)</code> · <code>s.substring(start, end)</code></td><td>→ string</td></tr>
     <tr><td><code>s.indexOf(sub, from?)</code> · <code>s.lastIndexOf(sub)</code> · <code>s.includes(sub, from?)</code></td><td>→ int · int · bool</td></tr>
     <tr><td><code>s.startsWith(prefix, pos?)</code> · <code>s.endsWith(suffix, end?)</code></td><td>→ bool</td></tr>

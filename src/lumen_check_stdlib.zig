@@ -859,6 +859,19 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         }
     }
 
+    // split(separator: RegExp): string[] -- the regex form. The string-separator
+    // form is handled by the fixed-arity spec table below.
+    if (eq(u8, name, "split") and mc.args.len == 1) {
+        const p0 = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (p0 == .regexp) {
+            mc.regex_arg = true;
+            program.uses_regex = true;
+            const rt = types.arrayOf(.string).?;
+            mc.array_result_type = rt;
+            return rt;
+        }
+    }
+
     // concat(...strings): string -- variadic, doesn't fit the fixed-arity spec
     // table below, so validate it directly.
     if (eq(u8, name, "concat")) {
