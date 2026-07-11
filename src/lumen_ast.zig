@@ -72,6 +72,11 @@ pub const FunctionParam = struct {
     is_rest: bool = false,
     // `x: T = expr` — default value used when the call omits this trailing arg.
     default: ?*Expr = null,
+    // `x?: T` — an optional parameter: it may be omitted at the call site (filled
+    // with `null`), distinct from a required parameter of an optional type
+    // (`x: T | null`, which must be passed). The annotation carries the `?`
+    // suffix either way, so this flag records the omittable-at-call-site form.
+    is_optional: bool = false,
     // `x: Ref<T>` — a by-reference parameter. `checked_type` holds the inner `T`
     // (the body type-checks as `T`); the param lowers to a single Zig pointer
     // `*T`. Scalar inner types additionally deref reads/writes in the body.

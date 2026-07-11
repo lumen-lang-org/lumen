@@ -669,7 +669,7 @@ pub const Checker = struct {
                 if (!types.isArray(pt)) return self.fail(0, 0, "E_REST_NOT_ARRAY");
                 continue;
             }
-            if (param.default != null) {
+            if (param.default != null or param.is_optional) {
                 seen_default = true;
             } else if (seen_default) {
                 // A required parameter after an optional one is not allowed.
@@ -688,10 +688,11 @@ pub const Checker = struct {
         const has_rest = params.len > 0 and params[params.len - 1].is_rest;
         const fixed_count = if (has_rest) params.len - 1 else params.len;
 
-        // Minimum required positional args: fixed params without a default.
+        // Minimum required positional args: fixed params without a default that
+        // are not optional (`x?: T`, which may be omitted and filled with null).
         var required: usize = 0;
         for (params[0..fixed_count]) |p| {
-            if (p.default == null) required += 1;
+            if (p.default == null and !p.is_optional) required += 1;
         }
 
         // A spread argument is only valid when it lands in the rest slot.
@@ -721,8 +722,14 @@ pub const Checker = struct {
                     return null;
                 };
                 out.append(self.arena, args[i]) catch return null;
+            } else if (p.default) |d| {
+                out.append(self.arena, d) catch return null;
             } else {
-                out.append(self.arena, p.default.?) catch return null;
+                // An omitted optional parameter (`x?: T`) is filled with null;
+                // its checked type is the optional `T | null`.
+                const null_expr = self.arena.create(ast.Expr) catch return null;
+                null_expr.* = .{ .null_lit = {} };
+                out.append(self.arena, null_expr) catch return null;
             }
         }
 

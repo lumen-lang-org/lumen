@@ -251,6 +251,9 @@ pub fn parseParamList(self: *Parser) CompileError![]ast.FunctionParam {
         if (self.cur != .ident) return error.ParseError;
         const param_name = self.cur.ident;
         try self.advance();
+        // `name?: T` — an optional (omittable) parameter. Detected before
+        // `parseOptionalMember` consumes the `?`.
+        const is_optional = self.isOp('?');
         const annotation = try self.parseOptionalMember();
         // Optional default value `= expr`. Not allowed on a rest parameter.
         var default_value: ?*Expr = null;
@@ -259,7 +262,7 @@ pub fn parseParamList(self: *Parser) CompileError![]ast.FunctionParam {
             try self.advance();
             default_value = try self.parseExpr();
         }
-        try params.append(self.arena, .{ .name = param_name, .annotation = annotation, .is_rest = is_rest, .default = default_value });
+        try params.append(self.arena, .{ .name = param_name, .annotation = annotation, .is_rest = is_rest, .default = default_value, .is_optional = is_optional });
         if (self.isOp(',')) try self.advance() else break;
     }
     // A rest parameter must be the final parameter.
