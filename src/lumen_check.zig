@@ -751,6 +751,17 @@ pub const Checker = struct {
             for (rest_args, 0..) |a, i| {
                 if (a.* == .spread) {
                     has_spread = true;
+                    // `f(...set)` / `f(...str)`: rewrite the spread source to
+                    // `Array.from(x)` so a Set's values / a string's chars feed
+                    // the rest parameter like any array.
+                    const sp_type = self.exprType(program, a.spread, line, col) orelse return null;
+                    if (sp_type == .set_type or types.isStringLike(sp_type)) {
+                        const from_call = self.arena.create(ast.Expr) catch return null;
+                        const from_args = self.arena.alloc(*ast.Expr, 1) catch return null;
+                        from_args[0] = a.spread;
+                        from_call.* = .{ .static_call = .{ .namespace = "Array", .name = "from", .args = from_args } };
+                        a.spread = from_call;
+                    }
                     self.ensureAssignable(program, rest_type, a.spread, line, col) catch {
                         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
