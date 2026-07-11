@@ -506,6 +506,35 @@ pub const Parser = struct {
                 const body = try self.parseBlockOrStmt();
                 return .{ .for_of_stmt = .{ .mutable = !is_const, .binding = kname, .is_pair = true, .value_binding = vname, .iterable = iterable, .body = body, .line = line, .col = col } };
             }
+            // `for (const { a, b } of records)` — object-pattern for-of. Desugared
+            // to a plain for-of over a fresh temp with an object destructuring
+            // prepended to the body, reusing the existing object-destructure path.
+            if (self.isOp('{')) {
+                try self.advance();
+                var fields: std.ArrayListUnmanaged([]const u8) = .empty;
+                while (!self.isOp('}')) {
+                    if (self.cur != .ident) return error.ParseError;
+                    try fields.append(self.arena, self.cur.ident);
+                    try self.advance();
+                    if (self.isOp(',')) try self.advance() else break;
+                }
+                try self.expectOp('}');
+                if (!self.isKw("of")) return error.ParseError;
+                try self.advance();
+                const iterable = try self.parseExpr();
+                try self.expectOp(')');
+                const inner_body = try self.parseBlockOrStmt();
+                const tmp = try std.fmt.allocPrint(self.arena, "__lumen_fo_{d}_{d}", .{ line, col });
+                const src_expr = try self.arena.create(Expr);
+                src_expr.* = .{ .var_ref = .{ .name = tmp, .emit_name = tmp } };
+                const binds = try self.arena.alloc(ast.DestructBinding, fields.items.len);
+                for (fields.items, 0..) |f, i| binds[i] = .{ .name = f };
+                const ds_stmt: Stmt = .{ .destructure_decl = .{ .mutable = !is_const, .is_object = true, .bindings = binds, .source = src_expr, .line = line, .col = col } };
+                const new_body = try self.arena.alloc(Stmt, inner_body.len + 1);
+                new_body[0] = ds_stmt;
+                @memcpy(new_body[1..], inner_body);
+                return .{ .for_of_stmt = .{ .mutable = false, .binding = tmp, .iterable = iterable, .body = new_body, .line = line, .col = col } };
+            }
             if (self.cur != .ident) return error.ParseError;
             const init_name = self.cur.ident;
             const init_line = self.cur_line;
