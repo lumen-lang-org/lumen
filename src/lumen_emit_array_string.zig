@@ -584,7 +584,12 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
     if (eq(u8, name, "slice") or eq(u8, name, "substring")) {
         const is_sub = eq(u8, name, "substring");
         try w.appendSlice(arena, "const __len: isize = @intCast(__s.len); ");
-        try A.idx("__a", mc.args[0], w, arena);
+        if (mc.args.len >= 1) {
+            try A.idx("__a", mc.args[0], w, arena);
+        } else {
+            // No start argument: slice()/substring() copies the whole string.
+            try w.appendSlice(arena, "const __a: isize = 0; ");
+        }
         if (mc.args.len == 2) {
             try A.idx("__b", mc.args[1], w, arena);
         } else {
