@@ -456,6 +456,9 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.print(arena, "    const {s}: {s} = ", .{ bname, try types.zigName(arena, bty) });
                 if (d.is_object) {
                     try body.print(arena, "{s}.{s};\n", .{ src, b.name });
+                } else if (d.is_tuple) {
+                    // A tuple lowers to a positional struct: read field `.@"i"`.
+                    try body.print(arena, "{s}.@\"{d}\";\n", .{ src, i });
                 } else if (b.is_rest) {
                     // The remaining elements as a slice.
                     try body.print(arena, "{s}[{d}..];\n", .{ src, i });

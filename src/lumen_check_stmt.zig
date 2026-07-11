@@ -363,6 +363,22 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     b.emit_name = emit_name;
                     scope.put(self.arena, b.name, .{ .ty = field_type, .mutable = d.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
                 }
+            } else if (src_type == .tuple_type) {
+                // `const [a, b] = tupleValue`: each binding takes the matching
+                // positional element type; no rest binding on a fixed tuple.
+                const elems = src_type.tuple_type;
+                if (d.bindings.len != elems.len) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
+                d.is_tuple = true;
+                for (d.bindings, 0..) |*b, i| {
+                    if (b.is_rest) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
+                    const bt = elems[i];
+                    b.checked_type = bt;
+                    const scope = self.currentScope();
+                    if (scope.get(b.name) != null) return self.fail(d.line, d.col, "E_DUPLICATE_BINDING");
+                    const emit_name = try self.freshEmitName(b.name);
+                    b.emit_name = emit_name;
+                    scope.put(self.arena, b.name, .{ .ty = bt, .mutable = d.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
+                }
             } else {
                 if (!types.isArray(src_type)) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
                 const elem = types.arrayElem(src_type) orelse return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
