@@ -257,8 +257,14 @@ pub const Checker = struct {
     pub fn failTypeMismatch(self: *Checker, line: u32, col: u32, expected: types.Type, actual: types.Type) CompileError {
         const en = types.tsName(self.arena, expected) catch return self.fail(line, col, "E_TYPE_MISMATCH");
         const an = types.tsName(self.arena, actual) catch return self.fail(line, col, "E_TYPE_MISMATCH");
-        const msg = std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}`", .{ en, an }) catch
-            return self.fail(line, col, "E_TYPE_MISMATCH");
+        // A Promise<T> where T was expected is almost always a missing await.
+        const forgot_await = actual == .promise_type and types.same(expected, actual.promise_type.*);
+        const msg = if (forgot_await)
+            std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}` — did you forget `await`?", .{ en, an }) catch
+                return self.fail(line, col, "E_TYPE_MISMATCH")
+        else
+            std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}`", .{ en, an }) catch
+                return self.fail(line, col, "E_TYPE_MISMATCH");
         return self.fail(line, col, msg);
     }
 

@@ -403,7 +403,23 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 // `const [a, b] = tupleValue`: each binding takes the matching
                 // positional element type; no rest binding on a fixed tuple.
                 const elems = src_type.tuple_type;
-                if (d.bindings.len != elems.len) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
+                if (d.bindings.len != elems.len) {
+                    const tn = types.tsName(self.arena, src_type) catch "tuple";
+                    const msg = std.fmt.allocPrint(self.arena, "destructuring pattern has {d} name{s} but `{s}` has {d} element{s}", .{ d.bindings.len, if (d.bindings.len == 1) "" else "s", tn, elems.len, if (elems.len == 1) "" else "s" }) catch "E_TYPE_MISMATCH";
+                    // Error recovery: still bind what lines up so later uses
+                    // don't cascade into undefined-variable noise.
+                    for (d.bindings, 0..) |*b, i| {
+                        if (i >= elems.len) break;
+                        b.checked_type = elems[i];
+                        const scope = self.currentScope();
+                        if (scope.get(b.name) == null) {
+                            const emit_name = try self.freshEmitName(b.name);
+                            b.emit_name = emit_name;
+                            scope.put(self.arena, b.name, .{ .ty = elems[i], .mutable = d.mutable, .emit_name = emit_name }) catch {};
+                        }
+                    }
+                    return self.fail(d.line, d.col, msg);
+                }
                 d.is_tuple = true;
                 for (d.bindings, 0..) |*b, i| {
                     if (b.is_rest) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
@@ -416,7 +432,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     scope.put(self.arena, b.name, .{ .ty = bt, .mutable = d.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
                 }
             } else {
-                if (!types.isArray(src_type)) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
+                if (!types.isArray(src_type)) {
+                    const tn = types.tsName(self.arena, src_type) catch "?";
+                    const msg = std.fmt.allocPrint(self.arena, "array destructuring needs an array or tuple, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                    return self.fail(d.line, d.col, msg);
+                }
                 const elem = types.arrayElem(src_type) orelse return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
                 for (d.bindings, 0..) |*b, i| {
                     // A rest binding `...rest` (only valid as the last element)
@@ -641,8 +661,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 (types.arrayElem(iter_type) orelse return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH"))
             else if (types.isStringLike(iter_type))
                 .string
-            else
-                return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+            else {
+                const tn = types.tsName(self.arena, iter_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "`for...of` needs an array, string, or Map — got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                return self.fail(loop.line, loop.col, msg);
+            };
             loop.elem_type = elem_type;
             try self.pushScope();
             defer self.popScope();
@@ -670,7 +693,9 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 loop.key_names = null; // runtime indices
                 program.uses_io = true; // the index->string uses __alloc
             } else {
-                return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+                const tn = types.tsName(self.arena, iter_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "`for...in` needs a record or array, got `{s}` — to iterate values use `for...of`", .{tn}) catch "E_TYPE_MISMATCH";
+                return self.fail(loop.line, loop.col, msg);
             }
             try self.pushScope();
             defer self.popScope();
