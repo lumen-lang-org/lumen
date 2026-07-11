@@ -330,7 +330,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // `[*:0]const u8`; copy it once into an owned Lumen string so the
                 // value outlives the C buffer.
                 if (cl.ffi_string_return) try w.appendSlice(arena, "(__alloc.dupe(u8, std.mem.span(");
-                try w.print(arena, "{s}(", .{cl.emit_name orelse cl.name});
+                try w.print(arena, "{s}(", .{try safeGlobalName(arena, cl.emit_name orelse cl.name)});
                 for (cl.args, 0..) |arg, i| {
                     if (i > 0) try w.appendSlice(arena, ", ");
                     // A `string` argument crosses as a NUL-terminated C string.
@@ -1345,7 +1345,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 const sname = try types.funcStructName(arena, sig.*);
                 try w.print(arena, "{s}{{ .ctx = undefined, .call = struct {{ fn __t(__ctx: *const anyopaque", .{sname});
                 for (sig.params, 0..) |p, i| try w.print(arena, ", __p{d}: {s}", .{ i, try types.zigName(arena, p) });
-                try w.print(arena, ") {s} {{ _ = __ctx; return {s}(", .{ try types.zigName(arena, sig.ret.*), ref.emit_name orelse ref.name });
+                try w.print(arena, ") {s} {{ _ = __ctx; return {s}(", .{ try types.zigName(arena, sig.ret.*), try safeGlobalName(arena, ref.emit_name orelse ref.name) });
                 for (sig.params, 0..) |_, i| {
                     if (i > 0) try w.appendSlice(arena, ", ");
                     try w.print(arena, "__p{d}", .{i});
@@ -2078,6 +2078,17 @@ pub var g_cur_into_acc: ?[]const u8 = null;
 // with `try`). Saved/restored around nested statement and arrow emission.
 pub var g_throw_target: ?[]const u8 = null;
 pub var g_fn_can_error: bool = false;
+
+/// A user function whose name collides with a generated-code global (`main`,
+/// `std`, `xev`, `builtin`) emits under a prefixed name; stack-trace frames
+/// and diagnostics keep the source name (spec 246).
+pub fn safeGlobalName(arena: std.mem.Allocator, name: []const u8) CompileError![]const u8 {
+    const eq = std.mem.eql;
+    if (eq(u8, name, "main") or eq(u8, name, "std") or eq(u8, name, "xev") or eq(u8, name, "builtin")) {
+        return std.fmt.allocPrint(arena, "__lumen_user_{s}", .{name});
+    }
+    return name;
+}
 
 pub fn findClass(name: []const u8) ?*const ast.ClassDecl {
     const prog = g_program orelse return null;

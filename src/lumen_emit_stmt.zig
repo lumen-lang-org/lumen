@@ -392,7 +392,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         .function_decl => |decl| {
             if (decl.type_params.len > 0) return; // generic template: only specializations emit
             const return_type = decl.checked_return_type orelse types.fromAnnotation(decl.return_annotation);
-            try decls.print(arena, "fn {s}(", .{decl.name});
+            try decls.print(arena, "fn {s}(", .{try emit_mod.safeGlobalName(arena, decl.name)});
             for (decl.params, 0..) |param, i| {
                 if (i > 0) try decls.appendSlice(arena, ", ");
                 const param_type = param.checked_type orelse types.fromAnnotation(param.annotation);
