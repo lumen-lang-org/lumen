@@ -280,6 +280,27 @@ pub const Checker = struct {
         return row[a.len];
     }
 
+    /// Unknown-method diagnostic with a did-you-mean over the receiver's known
+    /// method names: "`string` has no method 'toUperCase' — did you mean
+    /// 'toUpperCase'?".
+    pub fn failUnknownMethod(self: *Checker, line: u32, col: u32, recv: []const u8, name: []const u8, known: []const []const u8) CompileError {
+        const limit: usize = if (name.len <= 4) 1 else 2;
+        var best: ?[]const u8 = null;
+        var best_d: usize = limit + 1;
+        for (known) |k| {
+            const d = editDistance(name, k, limit);
+            if (d < best_d) {
+                best_d = d;
+                best = k;
+            }
+        }
+        const msg = if (best_d <= limit)
+            std.fmt.allocPrint(self.arena, "`{s}` has no method '{s}' — did you mean '{s}'?", .{ recv, name, best.? }) catch "unknown method"
+        else
+            std.fmt.allocPrint(self.arena, "`{s}` has no method '{s}'", .{ recv, name }) catch "unknown method";
+        return self.fail(line, col, msg);
+    }
+
     /// The closest known name to `name` (in-scope bindings, declared functions,
     /// common globals), or null when nothing is close enough to be helpful.
     fn suggestName(self: *Checker, name: []const u8) ?[]const u8 {

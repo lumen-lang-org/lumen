@@ -404,7 +404,22 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return .string;
     }
 
-    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    // The classic JS mutators are excluded by design (arrays are immutable);
+    // point at the immutable alternative instead of a generic unknown-method.
+    const mutator_hint: ?[]const u8 = blk: {
+        if (eq(u8, mc.name, "push")) break :blk "arrays are immutable — use `a = [...a, x]` or `a.concat([x])`";
+        if (eq(u8, mc.name, "pop")) break :blk "arrays are immutable — use `a[a.length - 1]` then `a.slice(0, -1)`";
+        if (eq(u8, mc.name, "shift")) break :blk "arrays are immutable — use `a[0]` then `a.slice(1)`";
+        if (eq(u8, mc.name, "unshift")) break :blk "arrays are immutable — use `a = [x, ...a]`";
+        if (eq(u8, mc.name, "splice")) break :blk "arrays are immutable — use `slice`/`concat`/`with` to build a new array";
+        break :blk null;
+    };
+    if (mutator_hint) |hint| {
+        const msg = std.fmt.allocPrint(self.arena, "`array.{s}` is not supported: {s}", .{ mc.name, hint }) catch "unsupported array mutator";
+        _ = self.fail(line, col, msg) catch {};
+        return null;
+    }
+    _ = self.failUnknownMethod(line, col, "array", mc.name, &.{ "map", "filter", "find", "findIndex", "findLast", "findLastIndex", "forEach", "some", "every", "reduce", "reduceRight", "flatMap", "includes", "indexOf", "lastIndexOf", "join", "toString", "slice", "concat", "reverse", "sort", "toSorted", "at", "fill", "with", "copyWithin", "entries", "keys", "values" }) catch {};
     return null;
 }
 
@@ -946,7 +961,7 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         if (eq(u8, name, "trimStart")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "trimEnd")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "split")) break :blk .{ .min = 0, .max = 2, .kinds = &.{ .string, .int }, .result = types.arrayOf(.string).? };
-        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+        _ = self.failUnknownMethod(line, col, "string", name, &.{ "charAt", "at", "charCodeAt", "codePointAt", "indexOf", "lastIndexOf", "localeCompare", "includes", "startsWith", "endsWith", "slice", "substring", "repeat", "padStart", "padEnd", "replace", "replaceAll", "toUpperCase", "toLowerCase", "trim", "trimStart", "trimEnd", "split", "concat", "search", "toString" }) catch {};
         return null;
     };
 
