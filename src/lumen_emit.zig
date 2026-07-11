@@ -1694,7 +1694,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
 
             const Local = struct {
                 fn emitCallFn(a: std.mem.Allocator, ww: *std.ArrayListUnmanaged(u8), ar: *const ast.ArrowExpr, rz: []const u8, capturing: bool) CompileError!void {
-                    try ww.appendSlice(a, "struct { fn __a(__ctx: *const anyopaque");
+                    try ww.appendSlice(a, "struct { fn __afn(__ctx: *const anyopaque");
                     for (ar.params) |p| try ww.print(a, ", {s}: {s}", .{ p.name, try types.zigName(a, p.checked_type.?) });
                     try ww.print(a, ") {s} {{ ", .{rz});
                     if (capturing) {
@@ -1714,11 +1714,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                         // body is not part of this subset).
                         try ww.appendSlice(a, "\n");
                         for (block) |*stmt| try emit_stmt.emitStmtWithThrow(stmt, ww, ww, a, null, null, g_options.?);
-                        try ww.appendSlice(a, "} }.__a");
+                        try ww.appendSlice(a, "} }.__afn");
                     } else {
                         try ww.appendSlice(a, "return ");
                         try emitExpr(ar.body_expr.?, ww, a);
-                        try ww.appendSlice(a, "; } }.__a");
+                        try ww.appendSlice(a, "; } }.__afn");
                     }
                 }
             };
