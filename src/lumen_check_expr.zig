@@ -785,6 +785,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 ne.container_type = .error_obj;
                 return .error_obj;
             }
+            // `new Promise((resolve) => ...)` needs the executor-callback
+            // machinery; point at the supported alternatives instead of a
+            // generic error.
+            if (std.mem.eql(u8, ne.class_name, "Promise") and self.classes.get("Promise") == null) {
+                _ = self.fail(line, col, "constructing a Promise with an executor is not supported yet — use an `async function` (with `await`/`setTimeout`) or `Promise.resolve(v)`") catch {};
+                return null;
+            }
             // Built-in container instantiation `new Map<K,V>()` / `new Set<T>()`.
             if (std.mem.eql(u8, ne.class_name, "Map") and self.classes.get("Map") == null) {
                 const k = self.arena.create(types.Type) catch return null;

@@ -3220,7 +3220,8 @@ pub fn promiseCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
         program.needs_async = true;
         return result;
     }
-    _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    const msg = std.fmt.allocPrint(self.arena, "Promise.{s} is not supported yet — only Promise.resolve(v); use `async`/`await` for composition", .{call.name}) catch "E_UNSUPPORTED_STD";
+    _ = self.fail(line, col, msg) catch {};
     return null;
 }
 

@@ -136,6 +136,10 @@ pub fn parseTupleType(self: *Parser) CompileError![]const u8 {
     try self.expectOp(']');
     if (first) return error.ParseError; // `[]` is not a tuple
     try buf.append(self.arena, ']');
+    if (self.isOp('[')) {
+        self.last_err = "arrays of tuples are not supported yet — use an array of a named record type instead";
+        return error.ParseError;
+    }
     return buf.items;
 }
 
