@@ -220,6 +220,18 @@ pub const Checker = struct {
     last_line: u32 = 1,
     last_col: u32 = 1,
     last_err: []const u8 = "syntax error",
+    // Diagnostics collected while continuing past failed statements (multi-error
+    // reporting). The first is the primary; the rest render as `extra`.
+    all_diags: std.ArrayListUnmanaged(Diag) = .empty,
+
+    /// Record the last failure into the multi-error list (deduplicating exact
+    /// repeats at the same position) so checking can continue.
+    fn recordDiag(self: *Checker) void {
+        for (self.all_diags.items) |d| {
+            if (d.line == self.last_line and d.col == self.last_col) return;
+        }
+        self.all_diags.append(self.arena, .{ .line = self.last_line, .col = self.last_col, .msg = self.last_err }) catch {};
+    }
 
     pub fn fail(self: *Checker, line: u32, col: u32, msg: []const u8) CompileError {
         self.last_line = line;
@@ -969,8 +981,14 @@ pub const Checker = struct {
         }
         for (program.stmts) |*stmt| {
             if (self.isGenericTemplateStmt(stmt)) continue;
-            try self.checkStmt(program, stmt);
+            self.checkStmt(program, stmt) catch |e| {
+                if (e == error.OutOfMemory) return e;
+                self.recordDiag();
+                // Stop collecting past the cap; later errors are likely cascades.
+                if (self.all_diags.items.len >= 5) break;
+            };
         }
+        if (self.all_diags.items.len > 0) return error.ParseError;
         // Specializations discovered while checking may themselves reference more
         // generics, so drain the worklist until it stops growing. Each entry is a
         // stable heap pointer, so appending more during a check is safe.
@@ -1059,7 +1077,12 @@ pub fn findField(fields: []ast.FieldInit, name: []const u8) ?ast.FieldInit {
 pub fn checkProgram(arena: std.mem.Allocator, program: *ast.Program, diag: *Diag) CompileError!void {
     var checker = Checker{ .arena = arena };
     checker.checkProgram(program) catch |e| {
-        diag.* = .{ .line = checker.last_line, .col = checker.last_col, .msg = checker.last_err };
+        if (checker.all_diags.items.len > 0) {
+            const first = checker.all_diags.items[0];
+            diag.* = .{ .line = first.line, .col = first.col, .msg = first.msg, .extra = checker.all_diags.items[1..] };
+        } else {
+            diag.* = .{ .line = checker.last_line, .col = checker.last_col, .msg = checker.last_err };
+        }
         return e;
     };
 }

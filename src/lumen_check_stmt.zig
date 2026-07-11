@@ -274,7 +274,16 @@ pub fn checkVarDecl(self: *Checker, program: *ast.Program, decl: *ast.VarDecl) C
 
     // A `let x: T;` declaration has no initializer to check; it binds the
     // annotated type directly (mutable, so it can be assigned before use).
-    if (!decl.no_init) try self.ensureAssignable(program, final_type, decl.init, decl.line, decl.col);
+    if (!decl.no_init) {
+        self.ensureAssignable(program, final_type, decl.init, decl.line, decl.col) catch |e| {
+            // Error recovery for multi-error reporting: still bind the name with
+            // its declared type so later statements don't cascade into
+            // "undefined variable" noise.
+            decl.checked_type = final_type;
+            self.declare(decl.name, decl, final_type, decl.line, decl.col) catch {};
+            return e;
+        };
+    }
     decl.checked_type = final_type;
     try self.declare(decl.name, decl, final_type, decl.line, decl.col);
 }

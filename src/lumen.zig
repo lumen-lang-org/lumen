@@ -70,7 +70,7 @@ fn humanizeDiag(code: []const u8) []const u8 {
     return code;
 }
 
-fn printDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: compiler.Diag) !void {
+fn printOneDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: compiler.Diag) !void {
     try err.print("{s}:{d}:{d}: error: {s}\n", .{ file, diag.line, diag.col, humanizeDiag(diag.msg) });
     var it = std.mem.splitScalar(u8, source, '\n');
     var n: u32 = 1;
@@ -83,6 +83,17 @@ fn printDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: co
             try err.writeAll("^\n");
             break;
         }
+    }
+}
+
+fn printDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: compiler.Diag) !void {
+    try printOneDiag(err, source, file, diag);
+    for (diag.extra) |d| {
+        try err.writeAll("\n");
+        try printOneDiag(err, source, file, d);
+    }
+    if (diag.extra.len > 0) {
+        try err.print("\n{d} errors\n", .{diag.extra.len + 1});
     }
 }
 
