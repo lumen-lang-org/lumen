@@ -22,6 +22,8 @@ const CompileMode = enum {
     }
 };
 
+const lumen_version = "0.1.0-dev";
+
 /// Human-readable message for a raw `E_*` diagnostic code. Diagnostics that
 /// already carry a formatted message pass through unchanged.
 fn humanizeDiag(code: []const u8) []const u8 {
@@ -1787,8 +1789,19 @@ pub fn main(init: std.process.Init) !void {
             try err.writeAll(usage);
             break :blk 2;
         }, mode, .build_exe, libs.items, wasm, reactor, err);
-    } else blk: {
+    } else if (std.mem.eql(u8, args[1], "version") or std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v")) blk: {
+        try err.print("lumen {s}\n", .{lumen_version});
+        break :blk 0;
+    } else if (std.mem.eql(u8, args[1], "help") or std.mem.eql(u8, args[1], "--help") or std.mem.eql(u8, args[1], "-h")) blk: {
+        try err.writeAll(usage);
+        break :blk 0;
+    } else if (std.mem.endsWith(u8, args[1], ".ts")) blk: {
+        // `lumen file.ts` is shorthand for `lumen compile file.ts`.
         break :blk try compileFile(arena, io, args[1], .release_safe, .build_exe, &.{}, false, false, err);
+    } else blk: {
+        try err.print("error: unknown command '{s}'\n\n", .{args[1]});
+        try err.writeAll(usage);
+        break :blk 2;
     };
 
     try err.flush();

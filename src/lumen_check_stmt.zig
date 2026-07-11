@@ -810,7 +810,13 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
         .throw_stmt => |throw_stmt| {
             const thrown_type = self.exprType(program, throw_stmt.value, throw_stmt.line, throw_stmt.col) orelse
                 return self.inferenceFail(throw_stmt.line, throw_stmt.col, "cannot infer throw type");
-            if (!types.same(.error_obj, thrown_type)) return self.fail(throw_stmt.line, throw_stmt.col, "E_THROW_TYPE");
+            // `throw new Error("x")` and JS-style `throw "x"` both carry a
+            // string message at runtime; anything else names its type.
+            if (!types.same(.error_obj, thrown_type) and !types.isStringLike(thrown_type)) {
+                const tn = types.tsName(self.arena, thrown_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "can only throw an Error or a string, got `{s}` — write `throw new Error(...)`", .{tn}) catch "E_THROW_TYPE";
+                return self.fail(throw_stmt.line, throw_stmt.col, msg);
+            }
         },
         .try_stmt => |*try_stmt| {
             try self.checkBlock(program, try_stmt.try_body);
