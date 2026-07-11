@@ -820,6 +820,36 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 mc.class_name = rm.owner;
                 return rm.method.checked_return_type orelse return null;
             }
+            // `new Array(n).fill(v)` / `Array(n).fill(v)`: a fused sized-array
+            // initializer. `new Array(n)` alone has no representation (JS holes),
+            // but with an immediate `.fill(v)` the element type comes from `v`
+            // and the length from `n`, yielding an n-length `v[]`.
+            if (std.mem.eql(u8, mc.name, "fill") and mc.args.len == 1) {
+                const n_expr: ?*ast.Expr = blk: {
+                    if (mc.obj.* == .new_expr and std.mem.eql(u8, mc.obj.new_expr.class_name, "Array") and
+                        self.classes.get("Array") == null and mc.obj.new_expr.type_args.len == 0 and
+                        mc.obj.new_expr.args.len == 1) break :blk mc.obj.new_expr.args[0];
+                    if (mc.obj.* == .call and std.mem.eql(u8, mc.obj.call.name, "Array") and
+                        self.bindingPtr("Array") == null and mc.obj.call.args.len == 1) break :blk mc.obj.call.args[0];
+                    break :blk null;
+                };
+                if (n_expr) |ne| {
+                    const nt = self.exprType(program, ne, line, col) orelse return null;
+                    if (!types.isInteger(nt)) {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
+                    const vt = self.exprType(program, mc.args[0], line, col) orelse return null;
+                    const res = types.arrayOf(vt) orelse {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    };
+                    mc.sized_fill = true;
+                    mc.array_elem_type = vt;
+                    mc.array_result_type = res;
+                    return res;
+                }
+            }
             const obj_type = self.exprType(program, mc.obj, line, col) orelse return null;
             if (obj_type == .regexp) {
                 // `re.test(s)` -> bool. (Other regex methods arrive in later cycles.)

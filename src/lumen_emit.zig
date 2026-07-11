@@ -1569,6 +1569,25 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.append(arena, ')');
         },
         .method_call => |mc| {
+            if (mc.sized_fill) {
+                // `new Array(n).fill(v)` / `Array(n).fill(v)`: allocate an
+                // n-length slice and memset every element to v.
+                const et = mc.array_elem_type orelse return error.ParseError;
+                const ez = try types.zigName(arena, et);
+                const n_expr = switch (mc.obj.*) {
+                    .new_expr => |ne| ne.args[0],
+                    .call => |c| c.args[0],
+                    else => return error.ParseError,
+                };
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__sf{d}: {{ const __n: usize = @intCast(", .{s});
+                try emitExpr(n_expr, w, arena);
+                try w.print(arena, "); const __r = __sa().alloc({s}, __n) catch unreachable; @memset(__r, ", .{ez});
+                try emitExpr(mc.args[0], w, arena);
+                try w.print(arena, "); break :__sf{d} @as([]const {s}, __r); }})", .{ s, ez });
+                return;
+            }
             if (mc.is_console) {
                 // console.log/... as a void expression: print, then yield {}.
                 // Every argument was wrapped to a string by the checker, so each
