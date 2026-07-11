@@ -339,6 +339,30 @@ pub const Parser = struct {
                 const mc = try self.node(.{ .method_call = .{ .obj = this_e, .name = member, .args = try args.toOwnedSlice(self.arena) } });
                 return .{ .expr_stmt = .{ .value = mc, .line = line, .col = col } };
             }
+            // A deeper chain off the field — `this.items.set(k, v);`,
+            // `this.a.b.c = v;`, `this.arr[i] = v;` (spec 277). Build the
+            // `this.member` field node and continue with postfix parsing.
+            if (self.isOp('.') or self.isOp('[') or self.isOp2("?.")) {
+                const this_e = try self.node(.this_expr);
+                const base = try self.node(.{ .field = .{ .obj = this_e, .name = member } });
+                const full = try self.parsePostfixFrom(base);
+                // Trailing assignment onto a nested field: obj.field = value.
+                if (self.isOp('=') or self.isCompoundAssignOp()) {
+                    var aop: []const u8 = "=";
+                    if (self.isOp('=')) {
+                        try self.advance();
+                    } else {
+                        aop = self.cur.op2;
+                        try self.advance();
+                    }
+                    const value = try self.parseExpr();
+                    try self.expectSemi();
+                    if (full.* != .field) return error.ParseError;
+                    return .{ .member_assign = .{ .field = full.field.name, .op = aop, .value = value, .obj = full.field.obj, .line = line, .col = col } };
+                }
+                try self.expectSemi();
+                return .{ .expr_stmt = .{ .value = full, .line = line, .col = col } };
+            }
             // `this.x++;` / `this.x--;` as a statement — the postfix value is
             // discarded here, so lower to `this.x += 1` / `this.x -= 1`.
             if (self.cur == .op2 and (eq(u8, self.cur.op2, "++") or eq(u8, self.cur.op2, "--"))) {

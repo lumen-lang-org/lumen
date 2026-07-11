@@ -385,7 +385,11 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
         .new_expr => |ne| blk: {
             const c = self.arena.alloc(*ast.Expr, ne.args.len) catch return error.OutOfMemory;
             for (ne.args, 0..) |it, i| c[i] = try self.cloneExpr(it);
-            break :blk .{ .new_expr = .{ .class_name = ne.class_name, .args = c, .type_args = ne.type_args } };
+            // Substitute the class's type parameters inside explicit type
+            // arguments (`new Map<string, T>()` inside a generic class body).
+            const targs = self.arena.alloc([]const u8, ne.type_args.len) catch return error.OutOfMemory;
+            for (ne.type_args, 0..) |ta, i| targs[i] = try self.substCur(ta);
+            break :blk .{ .new_expr = .{ .class_name = ne.class_name, .args = c, .type_args = targs } };
         },
         .method_call => |mc| blk: {
             const c = self.arena.alloc(*ast.Expr, mc.args.len) catch return error.OutOfMemory;
