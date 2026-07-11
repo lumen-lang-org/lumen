@@ -99,7 +99,28 @@ fn printOneDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag:
             }
             var col: u32 = 1;
             while (col < diag.col) : (col += 1) try err.writeByte(' ');
-            if (g_color) try err.writeAll(C_GREEN ++ "^" ++ C_RESET ++ "\n") else try err.writeAll("^\n");
+            // Underline the whole token at the caret (identifier characters, or
+            // a quoted string), not just its first character.
+            var span: usize = 1;
+            if (diag.col >= 1 and diag.col - 1 < trimmed.len) {
+                const start: usize = diag.col - 1;
+                const c0 = trimmed[start];
+                if (std.ascii.isAlphanumeric(c0) or c0 == '_') {
+                    var e2 = start + 1;
+                    while (e2 < trimmed.len and (std.ascii.isAlphanumeric(trimmed[e2]) or trimmed[e2] == '_')) : (e2 += 1) {}
+                    span = e2 - start;
+                } else if (c0 == '"') {
+                    var e2 = start + 1;
+                    while (e2 < trimmed.len and trimmed[e2] != '"') : (e2 += 1) {}
+                    span = @min(e2 + 1, trimmed.len) - start;
+                }
+            }
+            if (g_color) try err.writeAll(C_GREEN);
+            try err.writeByte('^');
+            var k: usize = 1;
+            while (k < span) : (k += 1) try err.writeByte('~');
+            if (g_color) try err.writeAll(C_RESET);
+            try err.writeByte('\n');
             break;
         }
     }
@@ -118,8 +139,18 @@ fn printDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: co
 
 const C_BOLD_YELLOW = "\x1b[1;33m";
 
-fn printWarnings(err: *std.Io.Writer, source: []const u8, file: []const u8, warnings: []const compiler.Diag) !void {
+fn printWarnings(err: *std.Io.Writer, source: []const u8, file: []const u8, warnings: []const compiler.Diag, errors: ?compiler.Diag) !void {
     for (warnings) |w| {
+        // Suppress warnings on a line that already reported an error (e.g. the
+        // recovery binding of a failed declaration) — pure noise there.
+        if (errors) |e0| {
+            if (w.line == e0.line) continue;
+            var skip = false;
+            for (e0.extra) |d| {
+                if (w.line == d.line) skip = true;
+            }
+            if (skip) continue;
+        }
         if (g_color) {
             try err.print(C_CYAN ++ "{s}:{d}:{d}:" ++ C_RESET ++ " " ++ C_BOLD_YELLOW ++ "warning:" ++ C_RESET ++ " {s}\n", .{ file, w.line, w.col, w.msg });
         } else {
@@ -1150,10 +1181,10 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .warnings = &warnings,
     }) catch {
         try printDiag(err, source, path, diag);
-        try printWarnings(err, source, path, warnings.items);
+        try printWarnings(err, source, path, warnings.items, diag);
         return 1;
     };
-    try printWarnings(err, source, path, warnings.items);
+    try printWarnings(err, source, path, warnings.items, null);
 
     // `lumen check`: diagnostics only — stop before writing or building anything.
     if (action == .check_only) {
