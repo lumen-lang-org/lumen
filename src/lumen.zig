@@ -1199,43 +1199,114 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         try collectLinkLibs(arena, source, &argv);
         for (cli_libs) |lib| try appendLink(arena, &argv, lib);
     }
-    // Build mode: hide the backend's output entirely (a backend failure on valid
-    // Lumen is an internal error). Test mode: show test results.
+    // Test mode: show the backend's output live (test results). Build mode:
+    // capture the backend's stderr so a failure can be mapped back to the .ts
+    // source instead of a black-box "failed to build" line.
     const show_backend = action == .run_test;
-    var child = std.process.spawn(io, .{
-        .argv = argv.items,
-        .stdin = .ignore,
-        .stdout = if (show_backend) .inherit else .ignore,
-        .stderr = if (show_backend) .inherit else .ignore,
-    }) catch {
+    if (show_backend) {
+        var child = std.process.spawn(io, .{
+            .argv = argv.items,
+            .stdin = .ignore,
+            .stdout = .inherit,
+            .stderr = .inherit,
+        }) catch {
+            try err.print("error: could not run the native backend\n", .{});
+            return 2;
+        };
+        const term = child.wait(io) catch {
+            try err.print("error: native build was interrupted\n", .{});
+            return 2;
+        };
+        switch (term) {
+            .exited => |code| {
+                if (code == 0) {
+                    try err.print("tests passed: {s}\n", .{path});
+                    return 0;
+                }
+                try err.print("tests failed: {s}\n", .{path});
+                return 1;
+            },
+            else => {
+                try err.print("error: native build terminated abnormally\n", .{});
+                return 1;
+            },
+        }
+    }
+    const result = std.process.run(arena, io, .{ .argv = argv.items }) catch {
         try err.print("error: could not run the native backend\n", .{});
         return 2;
     };
-
-    const term = child.wait(io) catch {
-        try err.print("error: native build was interrupted\n", .{});
-        return 2;
-    };
-
-    switch (term) {
+    switch (result.term) {
         .exited => |code| {
             if (code == 0) {
-                switch (action) {
-                    .build_exe => try err.print("compiled {s} -> {s}\n", .{ path, exe_name }),
-                    .run_test => try err.print("tests passed: {s}\n", .{path}),
-                }
+                try err.print("compiled {s} -> {s}\n", .{ path, exe_name });
                 return 0;
             }
-            switch (action) {
-                .build_exe => try err.print("error: failed to build native binary for {s}\n", .{path}),
-                .run_test => try err.print("tests failed: {s}\n", .{path}),
-            }
+            try reportBackendFailure(err, source, path, zig_src, gen_path, result.stderr);
             return 1;
         },
         else => {
             try err.print("error: native build terminated abnormally\n", .{});
             return 1;
         },
+    }
+}
+
+/// The native backend rejected the generated Zig. Map the first Zig error back
+/// to the .ts statement that produced it (via the `__lumen_line = N;` position
+/// markers the codegen writes before every statement) and report it as a
+/// located diagnostic; fall back to the raw backend message otherwise. Either
+/// way this is a compiler bug on valid input, so say so.
+fn reportBackendFailure(err: *std.Io.Writer, ts_source: []const u8, ts_path: []const u8, zig_src: []const u8, gen_path: []const u8, stderr_text: []const u8) !void {
+    var it = std.mem.splitScalar(u8, stderr_text, '\n');
+    while (it.next()) |line| {
+        // Match "<gen_path>:LINE:COL: error: MSG".
+        if (!std.mem.startsWith(u8, line, gen_path)) continue;
+        const rest = line[gen_path.len..];
+        if (rest.len < 2 or rest[0] != ':') continue;
+        var p: usize = 1;
+        var zline: u32 = 0;
+        while (p < rest.len and rest[p] >= '0' and rest[p] <= '9') : (p += 1) zline = zline * 10 + (rest[p] - '0');
+        const emark = std.mem.indexOf(u8, rest, " error: ") orelse continue;
+        const msg = rest[emark + " error: ".len ..];
+        // Last position marker at or before the failing generated line.
+        var ts_line: u32 = 0;
+        var ts_col: u32 = 1;
+        var zit = std.mem.splitScalar(u8, zig_src, '\n');
+        var n: u32 = 1;
+        while (zit.next()) |zl| : (n += 1) {
+            if (n > zline) break;
+            if (std.mem.indexOf(u8, zl, "__lumen_line = ")) |mark0| {
+                var q = mark0 + "__lumen_line = ".len;
+                var lv: u32 = 0;
+                while (q < zl.len and zl[q] >= '0' and zl[q] <= '9') : (q += 1) lv = lv * 10 + (zl[q] - '0');
+                var cv: u32 = 1;
+                if (std.mem.indexOf(u8, zl, "__lumen_col = ")) |mark1| {
+                    var r = mark1 + "__lumen_col = ".len;
+                    cv = 0;
+                    while (r < zl.len and zl[r] >= '0' and zl[r] <= '9') : (r += 1) cv = cv * 10 + (zl[r] - '0');
+                }
+                ts_line = lv;
+                ts_col = cv;
+            }
+        }
+        if (ts_line > 0) {
+            try printDiag(err, ts_source, ts_path, .{ .line = ts_line, .col = ts_col, .msg = msg });
+        } else {
+            try err.print("{s}: error: {s}\n", .{ ts_path, msg });
+        }
+        try err.print("note: the native backend rejected this statement's generated code — likely a Lumen compiler bug; please report it\n", .{});
+        return;
+    }
+    try err.print("error: failed to build native binary for {s}\n", .{ts_path});
+    // Surface the first few backend lines so the failure is at least diagnosable.
+    var shown: u32 = 0;
+    var it2 = std.mem.splitScalar(u8, stderr_text, '\n');
+    while (it2.next()) |line| {
+        if (line.len == 0) continue;
+        try err.print("  backend: {s}\n", .{line});
+        shown += 1;
+        if (shown >= 4) break;
     }
 }
 
