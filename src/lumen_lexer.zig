@@ -299,6 +299,18 @@ pub const Lexer = struct {
             if (self.i < self.src.len) self.i += 1;
             return .{ .str = s };
         }
+        // Single-quoted string, same shape as double-quoted (spec 274).
+        if (c == '\'') {
+            self.i += 1;
+            const start = self.i;
+            while (self.i < self.src.len and self.src[self.i] != '\'') {
+                if (self.src[self.i] == '\\' and self.i + 1 < self.src.len) self.i += 1;
+                self.i += 1;
+            }
+            const s = self.src[start..self.i];
+            if (self.i < self.src.len) self.i += 1;
+            return .{ .str = s };
+        }
         if (c == '`') {
             self.i += 1;
             const start = self.i;

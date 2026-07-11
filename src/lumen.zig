@@ -236,11 +236,14 @@ fn parseNamedBindings(arena: std.mem.Allocator, inner: []const u8) ![]const Name
 fn parseImportSpec(arena: std.mem.Allocator, line: []const u8) !?ImportSpec {
     const trimmed = std.mem.trim(u8, line, " \t\r");
     if (!std.mem.startsWith(u8, trimmed, "import ")) return null;
-    const marker = " from \"";
-    const marker_pos = std.mem.indexOf(u8, trimmed, marker) orelse return error.InvalidImport;
+    // Either quote style: `from "./x"` or `from './x'` (spec 274).
+    const dq = std.mem.indexOf(u8, trimmed, " from \"");
+    const sq = std.mem.indexOf(u8, trimmed, " from '");
+    const quote: u8 = if (dq != null) '"' else '\'';
+    const marker_pos = dq orelse (sq orelse return error.InvalidImport);
     const clause = std.mem.trim(u8, trimmed["import ".len..marker_pos], " \t");
-    const spec_start = marker_pos + marker.len;
-    const spec_end = std.mem.indexOfScalarPos(u8, trimmed, spec_start, '"') orelse return error.InvalidImport;
+    const spec_start = marker_pos + " from \"".len;
+    const spec_end = std.mem.indexOfScalarPos(u8, trimmed, spec_start, quote) orelse return error.InvalidImport;
     const spec = trimmed[spec_start..spec_end];
     const is_local = std.mem.startsWith(u8, spec, "./") or std.mem.startsWith(u8, spec, "../");
     const is_url = std.mem.startsWith(u8, spec, "https://");
@@ -331,11 +334,13 @@ const ReExport = struct { binds: ?[]const NamedBinding, spec: []const u8 };
 /// re-export *of local symbols* and stays with `parseExportList`).
 fn parseReExport(arena: std.mem.Allocator, trimmed: []const u8) !?ReExport {
     if (!std.mem.startsWith(u8, trimmed, "export ")) return null;
-    const marker = " from \"";
-    const marker_pos = std.mem.indexOf(u8, trimmed, marker) orelse return null;
+    const dq = std.mem.indexOf(u8, trimmed, " from \"");
+    const sq = std.mem.indexOf(u8, trimmed, " from '");
+    const quote: u8 = if (dq != null) '"' else '\'';
+    const marker_pos = dq orelse (sq orelse return null);
     const clause = std.mem.trim(u8, trimmed["export ".len..marker_pos], " \t");
-    const spec_start = marker_pos + marker.len;
-    const spec_end = std.mem.indexOfScalarPos(u8, trimmed, spec_start, '"') orelse return error.InvalidImport;
+    const spec_start = marker_pos + " from \"".len;
+    const spec_end = std.mem.indexOfScalarPos(u8, trimmed, spec_start, quote) orelse return error.InvalidImport;
     const spec = trimmed[spec_start..spec_end];
     const is_local = std.mem.startsWith(u8, spec, "./") or std.mem.startsWith(u8, spec, "../");
     const is_url = std.mem.startsWith(u8, spec, "https://");
