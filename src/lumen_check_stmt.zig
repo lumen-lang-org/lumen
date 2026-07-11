@@ -37,11 +37,63 @@ pub fn declareExtern(self: *Checker, decl: *ast.ExternDecl) CompileError!void {
     self.funcs.put(self.arena, decl.name, .{ .params = decl.params, .return_type = ret, .is_extern = true }) catch return error.OutOfMemory;
 }
 
+/// Statement position for diagnostics (first carried line/col).
+fn stmtPos(stmt: *const ast.Stmt) struct { line: u32, col: u32 } {
+    return switch (stmt.*) {
+        .type_decl => |d| .{ .line = d.line, .col = d.col },
+        .enum_decl => |d| .{ .line = d.line, .col = d.col },
+        .test_decl => |d| .{ .line = d.line, .col = d.col },
+        .extern_decl => |d| .{ .line = d.line, .col = d.col },
+        .class_decl => |d| .{ .line = d.line, .col = d.col },
+        .function_decl => |d| .{ .line = d.line, .col = d.col },
+        .var_decl => |d| .{ .line = d.line, .col = d.col },
+        .var_decl_group => |g| .{ .line = g[0].line, .col = g[0].col },
+        .using_decl => |d| .{ .line = d.line, .col = d.col },
+        .destructure_decl => |d| .{ .line = d.line, .col = d.col },
+        .member_assign => |d| .{ .line = d.line, .col = d.col },
+        .super_ctor => |d| .{ .line = d.line, .col = d.col },
+        .assign => |d| .{ .line = d.line, .col = d.col },
+        .console_log => |d| .{ .line = d.line, .col = d.col },
+        .while_stmt => |d| .{ .line = d.line, .col = d.col },
+        .do_while_stmt => |d| .{ .line = d.line, .col = d.col },
+        .for_stmt => |d| .{ .line = d.line, .col = d.col },
+        .for_of_stmt => |d| .{ .line = d.line, .col = d.col },
+        .for_in_stmt => |d| .{ .line = d.line, .col = d.col },
+        .if_stmt => |d| .{ .line = d.line, .col = d.col },
+        .switch_stmt => |d| .{ .line = d.line, .col = d.col },
+        .return_stmt => |d| .{ .line = d.line, .col = d.col },
+        .throw_stmt => |d| .{ .line = d.line, .col = d.col },
+        .try_stmt => |d| .{ .line = d.line, .col = d.col },
+        .break_stmt => |d| .{ .line = d.line, .col = d.col },
+        .continue_stmt => |d| .{ .line = d.line, .col = d.col },
+        .defer_stmt => |d| .{ .line = d.line, .col = d.col },
+        .expr_stmt => |d| .{ .line = d.line, .col = d.col },
+        .block_stmt => |d| .{ .line = d.line, .col = d.col },
+    };
+}
+
+/// Warn once for statements that can never run: anything after an
+/// unconditional `return`/`throw`/`break`/`continue` in the same block.
+fn warnUnreachable(self: *Checker, body: []ast.Stmt) void {
+    for (body, 0..) |*stmt, i| {
+        const diverges = switch (stmt.*) {
+            .return_stmt, .throw_stmt, .break_stmt, .continue_stmt => true,
+            else => false,
+        };
+        if (diverges and i + 1 < body.len) {
+            const pos = stmtPos(&body[i + 1]);
+            self.warnings.append(self.arena, .{ .line = pos.line, .col = pos.col, .msg = "unreachable code" }) catch {};
+            return;
+        }
+    }
+}
+
 pub fn checkBlock(self: *Checker, program: *ast.Program, body: []ast.Stmt) CompileError!void {
     try self.pushScope();
     defer self.popScope();
     self.nested_stmt_depth += 1;
     defer self.nested_stmt_depth -= 1;
+    warnUnreachable(self, body);
     for (body) |*body_stmt| try self.checkStmt(program, body_stmt);
 }
 
@@ -80,6 +132,7 @@ pub fn checkFunctionBody(self: *Checker, program: *ast.Program, decl: *ast.Funct
     for (decl.params) |param| try self.declareParam(param, decl.line, decl.col);
     self.nested_stmt_depth += 1;
     defer self.nested_stmt_depth -= 1;
+    warnUnreachable(self, decl.body);
     for (decl.body) |*body_stmt| try self.checkStmt(program, body_stmt);
 
     // The effective return type: for an async function this is the promise's

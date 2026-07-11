@@ -15,6 +15,7 @@ const types = @import("lumen_types.zig");
 const diag_mod = @import("lumen_diag.zig");
 const emit_mod = @import("lumen_emit.zig");
 const analysis = @import("lumen_emit_analysis.zig");
+const emit_stmt = @import("lumen_emit_stmt.zig");
 
 const CompileError = diag_mod.CompileError;
 const Expr = ast.Expr;
@@ -114,7 +115,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         emit_mod.g_fn_can_error = ctor_throws;
         defer emit_mod.g_fn_can_error = saved_can_error;
         try emitUnusedParamDiscards(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
-        for (ctor_owner.ctor_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+        try emit_stmt.emitBody(ctor_owner.ctor_body, decls, decls, arena, throw_target, switch_break_target, options);
     }
     try decls.appendSlice(arena, "    return self;\n    }\n");
 
@@ -163,7 +164,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
             emit_mod.g_fn_can_error = h_throws;
             defer emit_mod.g_fn_can_error = saved_can_error;
             try emitUnusedParamDiscards(cc.ctor_params, cc.ctor_body, decls, arena);
-            for (cc.ctor_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+            try emit_stmt.emitBody(cc.ctor_body, decls, decls, arena, throw_target, switch_break_target, options);
         }
         try decls.appendSlice(arena, "    }\n");
     }
@@ -189,7 +190,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
             emit_mod.g_fn_can_error = m_throws;
             defer emit_mod.g_fn_can_error = saved_can_error;
             try emitUnusedParamDiscards(m.params, m.body, decls, arena);
-            for (m.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+            try emit_stmt.emitBody(m.body, decls, decls, arena, throw_target, switch_break_target, options);
             try decls.appendSlice(arena, "    }\n");
         }
     }
@@ -237,7 +238,7 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
         try decls.print(arena, "    __lumenPush(\"{s}.{s}\"); defer __lumenPop();\n", .{ frame_owner, src_name });
     }
     try emitUnusedParamDiscards(m.params, m.body, decls, arena);
-    for (m.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+    try emit_stmt.emitBody(m.body, decls, decls, arena, throw_target, switch_break_target, options);
     try decls.appendSlice(arena, "    }\n");
 }
 

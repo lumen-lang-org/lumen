@@ -238,6 +238,25 @@ pub fn emitSwitchCaseMatch(switch_type: types.Type, switch_value: *const Expr, c
     }
 }
 
+/// Whether control never continues past this statement (an unconditional
+/// `return`/`throw`/`break`/`continue`): later statements in the same block
+/// are dead code, which Zig rejects, so body emission stops there.
+pub fn stmtDiverges(stmt: *const Stmt) bool {
+    return switch (stmt.*) {
+        .return_stmt, .throw_stmt, .break_stmt, .continue_stmt => true,
+        else => false,
+    };
+}
+
+/// Emit a statement list, dropping unreachable statements after an
+/// unconditional diverge (the checker warns about them).
+pub fn emitBody(stmts: []const Stmt, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, throw_target: ?[]const u8, switch_break_target: ?[]const u8, options: CompileOptions) CompileError!void {
+    for (stmts) |*stmt| {
+        try emitStmtWithThrow(stmt, decls, body, arena, throw_target, switch_break_target, options);
+        if (stmtDiverges(stmt)) break;
+    }
+}
+
 pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, throw_target: ?[]const u8, switch_break_target: ?[]const u8, options: CompileOptions) CompileError!void {
     // Expressions don't see the threaded throw_target parameter; mirror it in
     // a module global so throwing-call sites inside this statement's
@@ -283,7 +302,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
     switch (stmt.*) {
         .block_stmt => |b| {
             try body.appendSlice(arena, "    {\n");
-            for (b.body) |*inner| try emitStmtWithThrow(inner, decls, body, arena, throw_target, switch_break_target, options);
+            try emitBody(b.body, decls, body, arena, throw_target, switch_break_target, options);
             try body.appendSlice(arena, "    }\n");
         },
         .type_decl => |decl| {
@@ -391,7 +410,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             if (emit_mod.g_program) |prog| if (prog.uses_io) {
                 try decls.appendSlice(arena, "    __io = std.testing.io;\n");
             };
-            for (t.body) |*test_stmt| try emitStmtWithThrow(test_stmt, decls, decls, arena, throw_target, switch_break_target, options);
+            try emitBody(t.body, decls, decls, arena, throw_target, switch_break_target, options);
             try decls.appendSlice(arena, "}\n");
         },
         .function_decl => |decl| {
@@ -430,7 +449,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try decls.print(arena, "    __lumenPush(\"{s}\"); defer __lumenPop();\n", .{decl.name});
             }
             try analysis.emitUnusedParamDiscards(decl.params, decl.body, decls, arena);
-            for (decl.body) |*body_stmt| try emitStmt(body_stmt, decls, decls, arena, options);
+            try emitBody(decl.body, decls, decls, arena, null, null, options);
             // An async `Promise<void>` body may legally fall through without a
             // `return`; emit a trailing resolved promise so the Promise-returning
             // function still returns a value. Skip it when the body already
@@ -451,7 +470,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 const prev = emit_mod.g_cur_into_acc;
                 emit_mod.g_cur_into_acc = accname;
                 try analysis.emitUnusedParamDiscards(decl.params, decl.body, decls, arena);
-                for (decl.body) |*body_stmt| try emitStmt(body_stmt, decls, decls, arena, options);
+                try emitBody(decl.body, decls, decls, arena, null, null, options);
                 emit_mod.g_cur_into_acc = prev;
                 try decls.appendSlice(arena, "}\n");
             };
@@ -464,7 +483,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             if (decl.defer_body) |defer_body| {
                 // `using x = defer(() => BODY);` — run BODY at scope exit.
                 try body.appendSlice(arena, "    defer {\n");
-                for (defer_body) |*defer_stmt| try emitStmtWithThrow(defer_stmt, decls, body, arena, throw_target, switch_break_target, options);
+                try emitBody(defer_body, decls, body, arena, throw_target, switch_break_target, options);
                 try body.appendSlice(arena, "    }\n");
             } else {
                 // `using r = EXPR;` — bind the value, then `defer r.dispose();`.
@@ -583,14 +602,14 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try body.print(arena, "    {s}while (", .{try labelPrefix(arena, loop.label, loop.body)});
             try emitExpr(loop.cond, body, arena);
             try body.appendSlice(arena, ") {\n");
-            for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+            try emitBody(loop.body, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
         },
         .do_while_stmt => |loop| {
             try body.print(arena, "    {s}while (true) : ({{ if (!(", .{try labelPrefix(arena, loop.label, loop.body)});
             try emitExpr(loop.cond, body, arena);
             try body.appendSlice(arena, ")) break; }) {\n");
-            for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+            try emitBody(loop.body, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
         },
         .for_stmt => |loop| {
@@ -626,7 +645,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.appendSlice(arena, ")");
             }
             try body.appendSlice(arena, " {\n");
-            for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+            try emitBody(loop.body, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
             try body.appendSlice(arena, "    }\n");
         },
@@ -641,7 +660,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try emitExpr(loop.iterable, body, arena);
                 try body.print(arena, ";\n    for (__pm.keys(), __pm.values()) |{s}, {s}| {{\n", .{ kn, vn });
                 try body.print(arena, "    _ = &{s}; _ = &{s};\n", .{ kn, vn });
-                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try emitBody(loop.body, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n    }\n");
                 return;
             }
@@ -664,7 +683,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.print(arena, "    const {s}: {s} = {s}[{s}];\n", .{ vn, et_zig, seq, idx });
                 if (!std.mem.eql(u8, kn, "_")) try body.print(arena, "    _ = &{s};\n", .{kn});
                 if (!std.mem.eql(u8, vn, "_")) try body.print(arena, "    _ = &{s};\n", .{vn});
-                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try emitBody(loop.body, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n    }\n");
                 return;
             }
@@ -696,7 +715,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             // JS allows an unused loop variable; Zig does not. Mark it used so a
             // body that ignores the element still compiles.
             if (!std.mem.eql(u8, binding, "_")) try body.print(arena, "    _ = &{s};\n", .{binding});
-            for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+            try emitBody(loop.body, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
             try body.appendSlice(arena, "    }\n");
         },
@@ -718,7 +737,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.appendSlice(arena, "};\n");
                 try body.print(arena, "    {s}for (__forin_keys) |__forin_k| {{\n    const {s}: []const u8 = __forin_k;\n", .{ try labelPrefix(arena, loop.label, loop.body), binding });
                 if (!std.mem.eql(u8, binding, "_")) try body.print(arena, "    _ = &{s};\n", .{binding});
-                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try emitBody(loop.body, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n");
             } else {
                 // Array: iterate indices 0..len as strings.
@@ -731,7 +750,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.print(arena, "    {s}while ({s} < {s}.len) : ({s} += 1) {{\n", .{ try labelPrefix(arena, loop.label, loop.body), idx, seq, idx });
                 try body.print(arena, "    const {s}: []const u8 = std.fmt.allocPrint(__alloc, \"{{d}}\", .{{{s}}}) catch unreachable;\n", .{ binding, idx });
                 if (!std.mem.eql(u8, binding, "_")) try body.print(arena, "    _ = &{s};\n", .{binding});
-                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try emitBody(loop.body, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n");
             }
             try body.appendSlice(arena, "    }\n");
@@ -740,11 +759,11 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try body.appendSlice(arena, "    if (");
             try emitExpr(branch.cond, body, arena);
             try body.appendSlice(arena, ") {\n");
-            for (branch.then_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, switch_break_target, options);
+            try emitBody(branch.then_body, decls, body, arena, throw_target, switch_break_target, options);
             try body.appendSlice(arena, "    }");
             if (branch.else_body) |else_body| {
                 try body.appendSlice(arena, " else {\n");
-                for (else_body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, switch_break_target, options);
+                try emitBody(else_body, decls, body, arena, throw_target, switch_break_target, options);
                 try body.appendSlice(arena, "    }");
             }
             try body.appendSlice(arena, "\n");
@@ -785,12 +804,12 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 pending.clearRetainingCapacity();
                 try emitSwitchCaseMatch(switch_type, switch_stmt.value, case.value, body, arena);
                 try body.appendSlice(arena, ") {\n");
-                for (case.body) |*case_stmt| try emitStmtWithThrow(case_stmt, decls, body, arena, throw_target, label_target, options);
+                try emitBody(case.body, decls, body, arena, throw_target, label_target, options);
                 try body.appendSlice(arena, "    }\n");
             }
             if (switch_stmt.default_body) |default_body| {
                 try body.appendSlice(arena, if (!emitted_branch) "    {\n" else "    else {\n");
-                for (default_body) |*default_stmt| try emitStmtWithThrow(default_stmt, decls, body, arena, throw_target, label_target, options);
+                try emitBody(default_body, decls, body, arena, throw_target, label_target, options);
                 try body.appendSlice(arena, "    }\n");
             }
             try body.appendSlice(arena, "    }\n");
@@ -873,7 +892,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try body.appendSlice(arena, "    {\n");
             if (try_stmt.finally_body) |finally_body| {
                 try body.appendSlice(arena, "    defer {\n");
-                for (finally_body) |*finally_stmt| try emitStmtWithThrow(finally_stmt, decls, body, arena, throw_target, switch_break_target, options);
+                try emitBody(finally_body, decls, body, arena, throw_target, switch_break_target, options);
                 try body.appendSlice(arena, "    }\n");
             }
             // The try body runs in a single block so its locals share one scope.
@@ -950,7 +969,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         },
         .defer_stmt => |d| {
             try body.appendSlice(arena, "    defer {\n");
-            for (d.body) |*defer_stmt| try emitStmtWithThrow(defer_stmt, decls, body, arena, throw_target, switch_break_target, options);
+            try emitBody(d.body, decls, body, arena, throw_target, switch_break_target, options);
             try body.appendSlice(arena, "    }\n");
         },
         .break_stmt => |control| {
