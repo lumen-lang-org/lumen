@@ -48,6 +48,8 @@ fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: s
     } else {
         const final_zty = decl.checked_type orelse return error.ParseError;
         try body.print(arena, "    {s} {s}: {s} = ", .{ if (decl.mutable and decl.reassigned) "var" else "const", decl.emit_name orelse decl.name, try types.zigName(arena, final_zty) });
+        // An arrow bound to a name traces under that name (spec 237).
+        if (decl.init.* == .arrow) decl.init.arrow.name_hint = decl.name;
         try emitExpr(decl.init, body, arena);
         try body.appendSlice(arena, ";\n");
     }

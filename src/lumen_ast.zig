@@ -590,6 +590,10 @@ pub const ArrowExpr = struct {
     body_expr: ?*Expr = null, // expression body `=> expr`; null when body_block is set
     body_block: ?[]Stmt = null, // statement body `=> { ... }` (a void body)
     captures: []Capture = &.{},
+    /// Display name for stack traces: the variable the arrow was assigned to
+    /// (`const g = (x) => ...` traces as `g`); filled at emit time. Inline
+    /// arrows stay null and trace as `<anonymous>`.
+    name_hint: ?[]const u8 = null,
 };
 
 /// One segment of a template literal: either literal `text` or an interpolated

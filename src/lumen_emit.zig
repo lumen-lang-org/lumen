@@ -1784,6 +1784,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     for (ar.params) |p| {
                         if (!std.mem.eql(u8, p.name, "_")) try ww.print(a, "_ = &{s}; ", .{p.name});
                     }
+                    // Stack-trace frame: named after the binding when known
+                    // (`const g = ... => ...` traces as `g`), else <anonymous>.
+                    if (g_options.?.runtime_locations) {
+                        try ww.print(a, "__lumenPush(\"{s}\"); defer __lumenPop(); ", .{ar.name_hint orelse "<anonymous>"});
+                    }
                     if (ar.body_block) |block| {
                         // Statement-body arrow (a void body): emit the statements,
                         // no trailing return. Statements emit their decls and code
