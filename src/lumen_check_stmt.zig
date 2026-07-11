@@ -355,7 +355,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     else => return self.fail(d.line, d.col, "E_TYPE_MISMATCH"),
                 };
                 for (d.bindings) |*b| {
-                    const field_type = self.fieldType(type_name, b.name, d.line, d.col) orelse return error.ParseError;
+                    const field_type = self.fieldType(type_name, b.field_name orelse b.name, d.line, d.col) orelse return error.ParseError;
                     b.checked_type = field_type;
                     const scope = self.currentScope();
                     if (scope.get(b.name) != null) return self.fail(d.line, d.col, "E_DUPLICATE_BINDING");

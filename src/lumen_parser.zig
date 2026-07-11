@@ -347,8 +347,18 @@ pub const Parser = struct {
                     const is_rest = !is_object and self.isSpread();
                     if (is_rest) try self.advance();
                     if (self.cur != .ident) return error.ParseError;
-                    try bindings.append(self.arena, .{ .name = self.cur.ident, .is_rest = is_rest });
+                    const first_name = self.cur.ident;
                     try self.advance();
+                    // Object rename `{ field: local }` — the ident before `:` is
+                    // the source field; the ident after it is the local binding.
+                    if (is_object and self.isOp(':')) {
+                        try self.advance();
+                        if (self.cur != .ident) return error.ParseError;
+                        try bindings.append(self.arena, .{ .name = self.cur.ident, .field_name = first_name });
+                        try self.advance();
+                    } else {
+                        try bindings.append(self.arena, .{ .name = first_name, .is_rest = is_rest });
+                    }
                     if (self.isOp(',')) try self.advance() else break;
                 }
                 try self.expectOp(close);

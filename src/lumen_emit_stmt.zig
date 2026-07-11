@@ -455,7 +455,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 const bname = b.emit_name orelse b.name;
                 try body.print(arena, "    const {s}: {s} = ", .{ bname, try types.zigName(arena, bty) });
                 if (d.is_object) {
-                    try body.print(arena, "{s}.{s};\n", .{ src, b.name });
+                    try body.print(arena, "{s}.{s};\n", .{ src, b.field_name orelse b.name });
                 } else if (d.is_tuple) {
                     // A tuple lowers to a positional struct: read field `.@"i"`.
                     try body.print(arena, "{s}.@\"{d}\";\n", .{ src, i });
