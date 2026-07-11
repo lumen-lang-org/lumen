@@ -438,7 +438,17 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             // wrapping block, so the bindings remain in the enclosing scope.
             const src = try std.fmt.allocPrint(arena, "__lumen_ds_{d}_{d}", .{ d.line, d.col });
             try body.print(arena, "    const {s} = ", .{src});
-            try emitExpr(d.source, body, arena);
+            // An array-literal source lowers to a tuple; wrap it in a real slice
+            // so a rest binding (`src[i..]`) and runtime indexing work.
+            if (!d.is_object and d.source.* == .array and d.source.array.elem_type == null and d.bindings.len > 0) {
+                const et = d.bindings[0].checked_type orelse .i32;
+                const elem_t = if (types.isArray(et)) (types.arrayElem(et) orelse .i32) else et;
+                try body.print(arena, "@as([]const {s}, ", .{try types.zigName(arena, elem_t)});
+                try emitExpr(d.source, body, arena);
+                try body.appendSlice(arena, ")");
+            } else {
+                try emitExpr(d.source, body, arena);
+            }
             try body.appendSlice(arena, ";\n");
             for (d.bindings, 0..) |b, i| {
                 const bty = b.checked_type orelse return error.ParseError;
@@ -446,6 +456,9 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.print(arena, "    const {s}: {s} = ", .{ bname, try types.zigName(arena, bty) });
                 if (d.is_object) {
                     try body.print(arena, "{s}.{s};\n", .{ src, b.name });
+                } else if (b.is_rest) {
+                    // The remaining elements as a slice.
+                    try body.print(arena, "{s}[{d}..];\n", .{ src, i });
                 } else {
                     try body.print(arena, "{s}[{d}];\n", .{ src, i });
                 }

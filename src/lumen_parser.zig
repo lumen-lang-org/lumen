@@ -343,8 +343,11 @@ pub const Parser = struct {
                 const close: u8 = if (is_object) '}' else ']';
                 var bindings: std.ArrayListUnmanaged(ast.DestructBinding) = .empty;
                 while (!self.isOp(close)) {
+                    // Array rest element `[a, ...rest]` — binds the remainder.
+                    const is_rest = !is_object and self.isSpread();
+                    if (is_rest) try self.advance();
                     if (self.cur != .ident) return error.ParseError;
-                    try bindings.append(self.arena, .{ .name = self.cur.ident });
+                    try bindings.append(self.arena, .{ .name = self.cur.ident, .is_rest = is_rest });
                     try self.advance();
                     if (self.isOp(',')) try self.advance() else break;
                 }

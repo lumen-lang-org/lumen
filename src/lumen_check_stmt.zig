@@ -366,13 +366,17 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             } else {
                 if (!types.isArray(src_type)) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
                 const elem = types.arrayElem(src_type) orelse return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
-                for (d.bindings) |*b| {
-                    b.checked_type = elem;
+                for (d.bindings, 0..) |*b, i| {
+                    // A rest binding `...rest` (only valid as the last element)
+                    // takes the remaining elements as an array of the same type.
+                    if (b.is_rest and i != d.bindings.len - 1) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
+                    const bt: types.Type = if (b.is_rest) src_type else elem;
+                    b.checked_type = bt;
                     const scope = self.currentScope();
                     if (scope.get(b.name) != null) return self.fail(d.line, d.col, "E_DUPLICATE_BINDING");
                     const emit_name = try self.freshEmitName(b.name);
                     b.emit_name = emit_name;
-                    scope.put(self.arena, b.name, .{ .ty = elem, .mutable = d.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
+                    scope.put(self.arena, b.name, .{ .ty = bt, .mutable = d.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
                 }
             }
         },

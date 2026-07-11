@@ -191,6 +191,7 @@ pub const DestructBinding = struct {
     name: []const u8,
     emit_name: ?[]const u8 = null,
     checked_type: ?types.Type = null,
+    is_rest: bool = false, // `[a, ...rest]` — binds the remaining elements as an array
 };
 
 pub const DestructureDecl = struct {
