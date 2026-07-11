@@ -919,12 +919,27 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     try out.appendSlice(arena, decls.items);
 
     if (program.needs_read_file_sync) {
-        try out.appendSlice(arena,
-            \\fn __readFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8) []const u8 {
-            \\    return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(16 * 1024 * 1024)) catch "";
-            \\}
-            \\
-        );
+        if (options.runtime_locations) {
+            // A missing/unreadable file raises a catchable Lumen exception
+            // (spec 253) instead of silently reading as "".
+            try out.appendSlice(arena,
+                \\fn __readFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8) error{LumenThrow}![]const u8 {
+                \\    return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(16 * 1024 * 1024)) catch |e| {
+                \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot read '{s}': {s}", .{ path, @errorName(e) }) catch "cannot read file";
+                \\        __lumen_throwing = true;
+                \\        return error.LumenThrow;
+                \\    };
+                \\}
+                \\
+            );
+        } else {
+            try out.appendSlice(arena,
+                \\fn __readFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8) []const u8 {
+                \\    return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(16 * 1024 * 1024)) catch "";
+                \\}
+                \\
+            );
+        }
     }
     if (program.needs_exists_sync) {
         try out.appendSlice(arena,
@@ -953,12 +968,25 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         );
     }
     if (program.needs_write_file_sync) {
-        try out.appendSlice(arena,
-            \\fn __writeFileSync(io: std.Io, path: []const u8, data: []const u8) void {
-            \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data }) catch {};
-            \\}
-            \\
-        );
+        if (options.runtime_locations) {
+            try out.appendSlice(arena,
+                \\fn __writeFileSync(io: std.Io, path: []const u8, data: []const u8) error{LumenThrow}!void {
+                \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data }) catch |e| {
+                \\        __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot write '{s}': {s}", .{ path, @errorName(e) }) catch "cannot write file";
+                \\        __lumen_throwing = true;
+                \\        return error.LumenThrow;
+                \\    };
+                \\}
+                \\
+            );
+        } else {
+            try out.appendSlice(arena,
+                \\fn __writeFileSync(io: std.Io, path: []const u8, data: []const u8) void {
+                \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data }) catch {};
+                \\}
+                \\
+            );
+        }
     }
     if (program.needs_append_file_sync) {
         // No direct append API on this std.Io.Dir; read the existing content (if

@@ -727,6 +727,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ".len == 0)");
             } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "readFileSync")) {
+                if (g_options.?.runtime_locations) {
+                    try emitThrowingCallPrefix(w, arena);
+                    try w.appendSlice(arena, "__readFileSync(__io, __alloc, ");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.append(arena, ')');
+                    try emitThrowingCallSuffix(w, arena);
+                    return;
+                }
                 try w.appendSlice(arena, "__readFileSync(__io, __alloc, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
@@ -771,11 +779,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "writeFileSync")) {
+                const write_throws = g_options.?.runtime_locations;
+                if (write_throws) try emitThrowingCallPrefix(w, arena);
                 try w.appendSlice(arena, "__writeFileSync(__io, ");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+                if (write_throws) try emitThrowingCallSuffix(w, arena);
             } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "appendFileSync")) {
                 try w.appendSlice(arena, "__appendFileSync(__io, __alloc, ");
                 try emitExpr(cl.args[0], w, arena);

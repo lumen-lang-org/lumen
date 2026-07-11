@@ -120,8 +120,10 @@ pub fn exprCanThrow(e: *const Expr) bool {
             break :blk false;
         },
         .static_call => |sc| blk: {
-            // JSON.parse raises on invalid input (spec 252).
+            // JSON.parse raises on invalid input (spec 252); readFileSync /
+            // writeFileSync raise on I/O failure (spec 253).
             if (std.mem.eql(u8, sc.namespace, "JSON") and std.mem.eql(u8, sc.name, "parse")) break :blk true;
+            if (std.mem.eql(u8, sc.namespace, "fs") and (std.mem.eql(u8, sc.name, "readFileSync") or std.mem.eql(u8, sc.name, "writeFileSync"))) break :blk true;
             for (sc.args) |a| if (exprCanThrow(a)) break :blk true;
             break :blk false;
         },
