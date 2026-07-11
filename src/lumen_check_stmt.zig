@@ -284,6 +284,18 @@ pub fn assignField(self: *Checker, program: *ast.Program, field_type: types.Type
     }
 }
 
+/// Whether the block unconditionally leaves the enclosing straight-line flow
+/// via `break`/`continue` (loop guard clauses, spec 260/262).
+pub fn blockBreaksOut(body: []ast.Stmt) bool {
+    for (body) |stmt| {
+        switch (stmt) {
+            .break_stmt, .continue_stmt => return true,
+            else => {},
+        }
+    }
+    return false;
+}
+
 pub fn blockReturns(body: []ast.Stmt) bool {
     for (body) |stmt| {
         if (stmtReturns(stmt)) return true;
@@ -836,7 +848,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     self.narrowed_variants.items.len -= 1;
                 };
                 try self.checkBlock(program, else_body);
-            } else if (blockReturns(branch.then_body)) {
+            } else if (blockReturns(branch.then_body) or blockBreaksOut(branch.then_body)) {
                 // Guard clause: the then-branch always exits, so its negative
                 // narrowing holds for the rest of the enclosing block
                 // (checkBlock restores the lists at block exit).

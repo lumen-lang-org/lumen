@@ -160,6 +160,10 @@ pub fn parseTypeAnnotation(self: *Parser) CompileError![]const u8 {
     }
     if (self.isOp('(')) return self.parseFunctionType();
     if (self.isOp('[')) return self.parseTupleType();
+    if (self.isOp('{')) {
+        self.last_err = "inline object types are not supported — declare a named type (`type T = { ... }`) and use its name";
+        return error.ParseError;
+    }
     var base = try self.parseTypeMember();
     var optional = false;
     while (self.isCmp("|")) {
