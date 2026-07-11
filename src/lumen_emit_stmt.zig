@@ -322,7 +322,9 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 for (decl.fields) |field| {
                     const field_type = field.checked_type orelse return error.ParseError;
                     const zty = try types.zigName(arena, field_type);
-                    try decls.print(arena, "    {s}: {s} = {s},\n", .{ field.name, zty, try analysis.zigZeroValue(arena, field_type) });
+                    try decls.appendSlice(arena, "    ");
+                    try emit_mod.emitFieldName(decls, arena, field.name);
+                    try decls.print(arena, ": {s} = {s},\n", .{ zty, try analysis.zigZeroValue(arena, field_type) });
                 }
                 try decls.appendSlice(arena, "};\n");
                 return;
@@ -331,7 +333,9 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try decls.print(arena, "const {s} = struct {{\n", .{decl.name});
             for (decl.fields) |field| {
                 const field_type = field.checked_type orelse return error.ParseError;
-                try decls.print(arena, "    {s}: {s},\n", .{ field.name, try types.zigName(arena, field_type) });
+                try decls.appendSlice(arena, "    ");
+                try emit_mod.emitFieldName(decls, arena, field.name);
+                try decls.print(arena, ": {s},\n", .{try types.zigName(arena, field_type)});
             }
             try decls.appendSlice(arena, "};\n");
         },

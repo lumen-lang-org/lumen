@@ -86,8 +86,18 @@ fn emitRawStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: []
 /// Emits a struct field name, quoting an ECMAScript `#private` name (spec 052)
 /// as `@"#name"` since Zig identifiers can't start with `#`. Ordinary names
 /// pass through unchanged.
+/// Field names that collide with Zig keywords/primitives must be spelled
+/// `@"name"` in the generated code (spec 282). TS happily allows them.
+fn isZigReservedField(name: []const u8) bool {
+    const reserved = [_][]const u8{ "error", "test", "var", "const", "fn", "type", "pub", "if", "else", "while", "for", "return", "switch", "struct", "enum", "union", "defer", "try", "catch", "and", "or", "break", "continue", "export", "extern", "inline", "noalias", "comptime", "unreachable", "async", "await", "suspend", "resume", "opaque", "orelse", "align", "callconv", "anytype", "volatile", "null", "true", "false", "undefined" };
+    for (reserved) |kw| {
+        if (std.mem.eql(u8, name, kw)) return true;
+    }
+    return false;
+}
+
 pub fn emitFieldName(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, name: []const u8) CompileError!void {
-    if (name.len > 0 and name[0] == '#') {
+    if ((name.len > 0 and name[0] == '#') or isZigReservedField(name)) {
         try w.print(arena, "@\"{s}\"", .{name});
     } else {
         try w.appendSlice(arena, name);
@@ -1935,7 +1945,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.appendSlice(arena, ".{ ");
             for (fields, 0..) |f, i| {
                 if (i > 0) try w.appendSlice(arena, ", ");
-                try w.print(arena, ".{s} = ", .{f.name});
+                try w.append(arena, '.');
+                try emitFieldName(w, arena, f.name);
+                try w.appendSlice(arena, " = ");
                 try emitExpr(f.value, w, arena);
             }
             try w.appendSlice(arena, " }");
