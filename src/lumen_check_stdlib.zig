@@ -3529,13 +3529,42 @@ pub fn arrayCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCal
         return res;
     }
     // Array.from(x): a string -> array of single-char strings; an array -> copy.
+    // Array.from(x, (v, i) => u): map each element through the callback -> u[].
     if (std.mem.eql(u8, call.name, "from")) {
-        if (call.args.len != 1) {
+        if (call.args.len != 1 and call.args.len != 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
         const src = self.exprType(program, call.args[0], line, col) orelse return null;
         call.checked_arg_type = src;
+        if (call.args.len == 2) {
+            // The source element type: a string yields single-char strings.
+            const src_elem: types.Type = if (types.same(.string, src))
+                .string
+            else if (types.isArray(src))
+                (types.arrayElem(src) orelse {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                })
+            else if (src == .set_type)
+                src.set_type.*
+            else {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+            const cb_type = self.checkCbArg(program, call.args[1], &.{ src_elem, .i32 }, line, col) orelse return null;
+            if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, src_elem)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            call.cb_wants_index = cb_type.func_type.params.len == 2;
+            const res = types.arrayOf(cb_type.func_type.ret.*) orelse {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+            call.checked_type = res;
+            return res;
+        }
         if (types.same(.string, src)) {
             call.checked_type = types.arrayOf(.string).?;
             return call.checked_type;

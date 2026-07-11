@@ -386,6 +386,7 @@ pub const StaticCall = struct {
     type_args: [][]const u8 = &.{},
     checked_type: ?types.Type = null,
     checked_arg_type: ?types.Type = null,
+    cb_wants_index: bool = false, // Array.from(src, (v, i) => ...) — the map callback takes the element index
 };
 
 pub const Stmt = union(enum) {

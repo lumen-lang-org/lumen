@@ -616,6 +616,34 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, ") & 0xFF); ");
                 }
                 try w.print(arena, "break :{s} @as([]const u8, __b); }})", .{fcc_lbl});
+            } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "from") and cl.args.len == 2) {
+                // Array.from(src, cb): build the source slice, then map each
+                // element through the closure into the result array.
+                const src = cl.checked_arg_type orelse return error.ParseError;
+                const rt = cl.checked_type orelse return error.ParseError;
+                const rz = try types.zigName(arena, types.arrayElem(rt) orelse return error.ParseError);
+                const idx_arg = if (cl.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__afm{d}: {{ const __src: ", .{s});
+                if (types.isStringLike(src)) {
+                    // Source elements are single-character strings.
+                    try w.appendSlice(arena, "[]const []const u8 = __blk: { const __s0 = ");
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.appendSlice(arena, "; var __p: std.ArrayListUnmanaged([]const u8) = .empty; for (__s0) |*__cp| __p.append(__sa(), __cp[0..1]) catch unreachable; break :__blk __p.items; }");
+                } else if (src == .set_type) {
+                    const ez = try types.zigName(arena, src.set_type.*);
+                    try w.print(arena, "[]const {s} = (", .{ez});
+                    try emitExpr(cl.args[0], w, arena);
+                    try w.appendSlice(arena, ").values()");
+                } else {
+                    const ez = try types.zigName(arena, types.arrayElem(src) orelse return error.ParseError);
+                    try w.print(arena, "[]const {s} = ", .{ez});
+                    try emitExpr(cl.args[0], w, arena);
+                }
+                try w.appendSlice(arena, "; const __cb = ");
+                try emitExpr(cl.args[1], w, arena);
+                try w.print(arena, "; const __r = __sa().alloc({s}, __src.len) catch unreachable; for (__src, 0..) |__e, __i| {{ __r[__i] = __cb.call(__cb.ctx, __e{s}); }} break :__afm{d} @as([]const {s}, __r); }})", .{ rz, idx_arg, s, rz });
             } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "from")) {
                 const src = cl.checked_arg_type orelse return error.ParseError;
                 g_global_pred_seq += 1;

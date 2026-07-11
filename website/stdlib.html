@@ -184,7 +184,7 @@
     <tr><td><code>a.join(sep?)</code> · <code>a.toString()</code></td><td>→ string (<code>sep</code> defaults to <code>","</code>; <code>toString</code> is the comma-joined form)</td></tr>
     <tr><td><code>Array.isEmpty(a)</code></td><td>T[] → bool</td></tr>
     <tr><td><code>Array.of(...items)</code></td><td>(T, …) → T[] (new array from the arguments)</td></tr>
-    <tr><td><code>Array.from(x)</code></td><td>string → string[] (chars) · T[] → T[] (copy)</td></tr>
+    <tr><td><code>Array.from(x)</code> · <code>Array.from(x, (v, i?) =&gt; u)</code></td><td>string → string[] (chars) · T[] → T[] (copy) · Set&lt;T&gt; → T[]; with a map callback → u[] (each element mapped, optional index)</td></tr>
   </table>
 
   <h4 id="collections">Collections</h4>
