@@ -27,6 +27,7 @@ const lumen_opt = @import("lumen_opt.zig");
 const regex_specialize = @import("regex_specialize.zig");
 const array_string = @import("lumen_emit_array_string.zig");
 const emit_stmt = @import("lumen_emit_stmt.zig");
+const analysis = @import("lumen_emit_analysis.zig");
 
 const CompileError = diag_mod.CompileError;
 const Diag = diag_mod.Diag;
@@ -309,6 +310,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 try w.append(arena, ')');
             } else {
+                // Exception propagation (spec 245): a call to a throwing
+                // function comes back as an error union. Inside a try body the
+                // error routes to the catch (set the slot, break out); inside
+                // another throwing function it forwards with `try`; anywhere
+                // else it is uncaught -- panic with the thrown message so the
+                // runtime error/trace machinery reports it.
+                const callee_throws = analysis.fnThrows(cl.emit_name orelse cl.name);
+                if (callee_throws) {
+                    if (g_throw_target != null) {
+                        try w.appendSlice(arena, "(");
+                    } else if (g_fn_can_error) {
+                        try w.appendSlice(arena, "(try ");
+                    } else {
+                        try w.appendSlice(arena, "(");
+                    }
+                }
                 // A `string` return from an extern function arrives as a raw
                 // `[*:0]const u8`; copy it once into an owned Lumen string so the
                 // value outlives the C buffer.
@@ -332,6 +349,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 try w.append(arena, ')');
                 if (cl.ffi_string_return) try w.appendSlice(arena, ")) catch unreachable)");
+                if (analysis.fnThrows(cl.emit_name orelse cl.name)) {
+                    if (g_throw_target) |slot| {
+                        const label = try std.mem.replaceOwned(u8, arena, slot, "__lumen_throw_", "__lumen_try_");
+                        try w.print(arena, " catch {{ {s} = __lumen_err_msg; break :{s}; }})", .{ slot, label });
+                    } else if (g_fn_can_error) {
+                        try w.appendSlice(arena, ")");
+                    } else {
+                        try w.appendSlice(arena, " catch @panic(__lumen_err_msg))");
+                    }
+                }
             }
         },
         .static_call => |cl| {
@@ -1760,6 +1787,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.append(arena, ')');
         },
         .arrow => |arrow| {
+            // An arrow body is its own (non-error-union) function: calls to
+            // throwing functions inside it must not `try`-forward or break to
+            // an outer try label across the function boundary (spec 245).
+            const saved_can_error = g_fn_can_error;
+            const saved_throw_target = g_throw_target;
+            g_fn_can_error = false;
+            g_throw_target = null;
+            defer {
+                g_fn_can_error = saved_can_error;
+                g_throw_target = saved_throw_target;
+            }
             const ret = arrow.checked_return_type orelse return error.ParseError;
             // Build the fat-pointer struct name for this signature.
             const params = try arena.alloc(types.Type, arrow.params.len);
@@ -2033,6 +2071,13 @@ pub var g_async_inner: ?[]const u8 = null;
 // its accumulator's name; `g_cur_into_acc` is set while emitting an `__into` body.
 pub var g_dest_acc: ?*std.StringHashMapUnmanaged([]const u8) = null;
 pub var g_cur_into_acc: ?[]const u8 = null;
+
+// Exception propagation (spec 245): the innermost try's throw slot while its
+// body is being emitted (calls to throwing functions route errors there), and
+// whether the function being emitted returns an error union (calls forward
+// with `try`). Saved/restored around nested statement and arrow emission.
+pub var g_throw_target: ?[]const u8 = null;
+pub var g_fn_can_error: bool = false;
 
 pub fn findClass(name: []const u8) ?*const ast.ClassDecl {
     const prog = g_program orelse return null;

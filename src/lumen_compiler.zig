@@ -78,6 +78,7 @@ const PARSE_RT =
 const regex_specialize = @import("regex_specialize.zig");
 const lumen_opt = @import("lumen_opt.zig");
 const lumen_emit = @import("lumen_emit.zig");
+const emit_analysis = @import("lumen_emit_analysis.zig");
 pub const CompileOptions = lumen_emit.CompileOptions;
 const emitProgram = lumen_emit.emitProgram;
 const collectDestPassable = lumen_opt.collectDestPassable;
@@ -218,6 +219,32 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     lumen_emit.g_dest_acc = &dest_map;
     defer lumen_emit.g_dest_acc = null;
 
+    // Exception propagation (spec 245): compute which functions can throw
+    // (directly or transitively through calls) so they emit as Zig error
+    // unions and their call sites unwrap/route the error. Skipped for
+    // release-fast builds (no runtime location tracking): throws stay panics.
+    var throwing_fns: std.StringHashMapUnmanaged(void) = .empty;
+    if (options.runtime_locations) {
+        emit_analysis.g_throwing_fns = &throwing_fns;
+        var changed = true;
+        while (changed) {
+            changed = false;
+            for (program.stmts) |*fs| {
+                if (fs.* != .function_decl) continue;
+                const f = &fs.function_decl;
+                if (f.is_async) continue;
+                if (f.type_params.len > 0) continue; // generic template: only specializations emit
+                if (dest_map.get(f.name) != null) continue; // builder __into twins keep panic semantics
+                if (throwing_fns.get(f.name) != null) continue;
+                if (emit_analysis.bodyCanThrow(f.body)) {
+                    try throwing_fns.put(arena, f.name, {});
+                    changed = true;
+                }
+            }
+        }
+    }
+    defer emit_analysis.g_throwing_fns = null;
+
     var decls: std.ArrayListUnmanaged(u8) = .empty; // top-level struct type definitions
     var body: std.ArrayListUnmanaged(u8) = .empty;
 
@@ -292,7 +319,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         };
 
         try out.print(arena, "const __lumen_file = \"{s}\";\n", .{safe_name});
-        try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\nvar __lumen_throwing: bool = false;\nvar __lumen_color: bool = false;\n");
+        try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\nvar __lumen_throwing: bool = false;\nvar __lumen_color: bool = false;\nvar __lumen_err_msg: []const u8 = \"\";\n");
         // Call-stack frames for runtime stack traces. Each user function pushes a
         // frame on entry (recording its name and the caller's statement position,
         // i.e. the call site) and pops on exit. Depth keeps counting past the
@@ -306,6 +333,10 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    __lumen_depth += 1;
             \\}
             \\fn __lumenPop() void {
+            \\    // While an exception unwinds (error return), keep the frames so
+            \\    // an uncaught error still prints the full throw-site trace; a
+            \\    // catch restores the depth it saved at try entry.
+            \\    if (__lumen_throwing) return;
             \\    __lumen_depth -= 1;
             \\}
             \\

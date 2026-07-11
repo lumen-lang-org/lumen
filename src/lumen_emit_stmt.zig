@@ -239,6 +239,12 @@ pub fn emitSwitchCaseMatch(switch_type: types.Type, switch_value: *const Expr, c
 }
 
 pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, throw_target: ?[]const u8, switch_break_target: ?[]const u8, options: CompileOptions) CompileError!void {
+    // Expressions don't see the threaded throw_target parameter; mirror it in
+    // a module global so throwing-call sites inside this statement's
+    // expressions can route errors to the enclosing try (spec 245).
+    const saved_throw_target = emit_mod.g_throw_target;
+    emit_mod.g_throw_target = throw_target;
+    defer emit_mod.g_throw_target = saved_throw_target;
     if (options.runtime_locations) {
         const line_col: emit_mod.SourceLoc = switch (stmt.*) {
             .type_decl => |decl| .{ .line = decl.line, .col = decl.col },
@@ -395,7 +401,17 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             }
             // An async function returns its declared `*LumenPromise(T)`; `return v`
             // statements in the body resolve the promise with `v`.
-            try decls.print(arena, ") {s} {{\n", .{try types.zigName(arena, return_type)});
+            // A throwing function returns an error union so a `throw` can
+            // propagate to callers (spec 245).
+            const fn_throws = analysis.fnThrows(decl.name);
+            if (fn_throws) {
+                try decls.print(arena, ") error{{LumenThrow}}!{s} {{\n", .{try types.zigName(arena, return_type)});
+            } else {
+                try decls.print(arena, ") {s} {{\n", .{try types.zigName(arena, return_type)});
+            }
+            const saved_can_error = emit_mod.g_fn_can_error;
+            emit_mod.g_fn_can_error = fn_throws;
+            defer emit_mod.g_fn_can_error = saved_can_error;
             const prev_async_inner = emit_mod.g_async_inner;
             if (decl.is_async and return_type == .promise_type) {
                 emit_mod.g_async_inner = try types.zigName(arena, return_type.promise_type.*);
@@ -815,6 +831,12 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.print(arena, "    {s} = ", .{target});
                 try emitExpr(throw_stmt.value, body, arena);
                 try body.print(arena, ";\n    break :{s};\n", .{label});
+            } else if (emit_mod.g_fn_can_error) {
+                // Inside a throwing function: stash the message and return the
+                // error; the call site unwraps or forwards it (spec 245).
+                try body.appendSlice(arena, "    __lumen_err_msg = ");
+                try emitExpr(throw_stmt.value, body, arena);
+                try body.appendSlice(arena, ";\n    __lumen_throwing = true;\n    return error.LumenThrow;\n");
             } else {
                 // An uncaught throw: flag it so the panic handler labels it
                 // "Uncaught Error" rather than a generic runtime error.
@@ -833,6 +855,12 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             const need_slot = try_stmt.has_catch or can_throw;
             const slot_kw = if (can_throw) "var" else "const";
             if (need_slot) try body.print(arena, "    {s} {s}: ?[]const u8 = null;\n", .{ slot_kw, slot });
+            // Snapshot the stack-trace depth: a caught exception unwinds with
+            // its frames left in place (so an uncaught one keeps its trace);
+            // the catch restores the depth from before the try (spec 245).
+            const depth_snap = try std.fmt.allocPrint(arena, "__lumen_depth_snap_{d}_{d}", .{ try_stmt.line, try_stmt.col });
+            const track_depth = try_stmt.has_catch and options.runtime_locations;
+            if (track_depth) try body.print(arena, "    const {s} = __lumen_depth;\n", .{depth_snap});
             // Wrap the whole try/catch in an outer block. `finally` lowers to a
             // `defer` at the top of that block, so it always runs on every exit
             // — normal fallthrough, a caught throw, or a rethrow that breaks out
@@ -866,6 +894,8 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                     if (throw_target) |outer| {
                         const outer_label = try std.mem.replaceOwned(u8, arena, outer, "__lumen_throw_", "__lumen_try_");
                         try body.print(arena, "    {s} = __lumen_rethrow;\n    break :{s};\n", .{ outer, outer_label });
+                    } else if (emit_mod.g_fn_can_error) {
+                        try body.appendSlice(arena, "    __lumen_err_msg = __lumen_rethrow;\n    __lumen_throwing = true;\n    return error.LumenThrow;\n");
                     } else {
                         try body.appendSlice(arena, "    __lumen_throwing = true;\n    @panic(__lumen_rethrow);\n");
                     }
@@ -884,6 +914,11 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                     // Optional catch binding (spec 052): run the catch body on
                     // any error without capturing it -- no binding to discard.
                     try body.print(arena, "    if ({s} != null) {{\n", .{slot});
+                }
+                if (track_depth) {
+                    // A propagated exception arrived with __lumen_throwing set
+                    // and its frames still pushed; catching it ends the unwind.
+                    try body.print(arena, "    __lumen_throwing = false;\n    __lumen_depth = {s};\n", .{depth_snap});
                 }
                 for (try_stmt.catch_body) |*catch_stmt| {
                     try emitStmtWithThrow(catch_stmt, decls, body, arena, throw_target, switch_break_target, options);

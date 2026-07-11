@@ -36,16 +36,99 @@ pub fn zigZeroValue(arena: std.mem.Allocator, t: types.Type) CompileError![]cons
     };
 }
 
+/// Function names whose calls can throw (exception propagation, spec 245).
+/// Populated by the compiler's fixpoint pass before emission; null disables
+/// call-aware throw analysis (e.g. release-fast builds keep panic semantics).
+pub var g_throwing_fns: ?*const std.StringHashMapUnmanaged(void) = null;
+
+/// Whether calling the named function can raise a Lumen exception.
+pub fn fnThrows(name: []const u8) bool {
+    const set = g_throwing_fns orelse return false;
+    return set.get(name) != null;
+}
+
+/// Whether evaluating this expression can raise a Lumen exception — i.e. it
+/// contains a call to a function in the throwing set. Arrow-function bodies
+/// don't count: an arrow is a value here, not an evaluation.
+pub fn exprCanThrow(e: *const Expr) bool {
+    if (g_throwing_fns == null) return false;
+    return switch (e.*) {
+        .call => |c| blk: {
+            if (!c.is_closure and !c.is_into_call and fnThrows(c.emit_name orelse c.name)) break :blk true;
+            for (c.args) |a| if (exprCanThrow(a)) break :blk true;
+            break :blk false;
+        },
+        .array => |a| blk: {
+            for (a.items) |item| if (exprCanThrow(item)) break :blk true;
+            break :blk false;
+        },
+        .tuple_lit => |t| blk: {
+            for (t.items) |item| if (exprCanThrow(item)) break :blk true;
+            break :blk false;
+        },
+        .spread => |inner| exprCanThrow(inner),
+        .neg, .not, .bnot, .await_expr => |inner| exprCanThrow(inner),
+        .inc_dec => |i| exprCanThrow(i.target),
+        .bin => |b| exprCanThrow(b.l) or exprCanThrow(b.r),
+        .bool_bin => |b| exprCanThrow(b.l) or exprCanThrow(b.r),
+        .cmp => |c| exprCanThrow(c.l) or exprCanThrow(c.r),
+        .coalesce => |c| exprCanThrow(c.l) or exprCanThrow(c.r),
+        .ternary => |t| exprCanThrow(t.cond) or exprCanThrow(t.then_expr) or exprCanThrow(t.else_expr),
+        .super_call => |sc| blk: {
+            for (sc.args) |a| if (exprCanThrow(a)) break :blk true;
+            break :blk false;
+        },
+        .new_expr => |ne| blk: {
+            for (ne.args) |a| if (exprCanThrow(a)) break :blk true;
+            break :blk false;
+        },
+        .method_call => |mc| blk: {
+            if (exprCanThrow(mc.obj)) break :blk true;
+            for (mc.args) |a| if (exprCanThrow(a)) break :blk true;
+            break :blk false;
+        },
+        .optional_call => |oc| blk: {
+            if (exprCanThrow(oc.callee)) break :blk true;
+            for (oc.args) |a| if (exprCanThrow(a)) break :blk true;
+            break :blk false;
+        },
+        .static_call => |sc| blk: {
+            for (sc.args) |a| if (exprCanThrow(a)) break :blk true;
+            break :blk false;
+        },
+        .template => |parts| blk: {
+            for (parts) |part| if (part.expr) |hole| if (exprCanThrow(hole)) break :blk true;
+            break :blk false;
+        },
+        .obj => |fields| blk: {
+            for (fields) |f| if (exprCanThrow(f.value)) break :blk true;
+            break :blk false;
+        },
+        .field => |f| exprCanThrow(f.obj),
+        .index => |i| exprCanThrow(i.obj) or exprCanThrow(i.value),
+        .cast => |c| exprCanThrow(c.inner),
+        else => false,
+    };
+}
+
 pub fn stmtCanThrow(stmt: *const Stmt) bool {
     return switch (stmt.*) {
         .throw_stmt => true,
-        .while_stmt => |w| bodyCanThrow(w.body),
-        .do_while_stmt => |w| bodyCanThrow(w.body),
-        .for_stmt => |f| bodyCanThrow(f.body),
-        .for_of_stmt => |f| bodyCanThrow(f.body),
-        .for_in_stmt => |f| bodyCanThrow(f.body),
-        .if_stmt => |b| bodyCanThrow(b.then_body) or (b.else_body != null and bodyCanThrow(b.else_body.?)),
+        .while_stmt => |w| exprCanThrow(w.cond) or bodyCanThrow(w.body),
+        .do_while_stmt => |w| exprCanThrow(w.cond) or bodyCanThrow(w.body),
+        .for_stmt => |f| blk: {
+            if (f.init) |i| if (!i.no_init and exprCanThrow(i.init)) break :blk true;
+            for (f.extra_inits) |i| if (!i.no_init and exprCanThrow(i.init)) break :blk true;
+            if (f.cond) |c| if (exprCanThrow(c)) break :blk true;
+            if (f.update) |u| if (exprCanThrow(u.value)) break :blk true;
+            for (f.extra_updates) |u| if (exprCanThrow(u.value)) break :blk true;
+            break :blk bodyCanThrow(f.body);
+        },
+        .for_of_stmt => |f| exprCanThrow(f.iterable) or bodyCanThrow(f.body),
+        .for_in_stmt => |f| exprCanThrow(f.iterable) or bodyCanThrow(f.body),
+        .if_stmt => |b| exprCanThrow(b.cond) or bodyCanThrow(b.then_body) or (b.else_body != null and bodyCanThrow(b.else_body.?)),
         .switch_stmt => |sw| blk: {
+            if (exprCanThrow(sw.value)) break :blk true;
             for (sw.cases) |cse| if (bodyCanThrow(cse.body)) break :blk true;
             if (sw.default_body) |db| if (bodyCanThrow(db)) break :blk true;
             break :blk false;
@@ -53,6 +136,21 @@ pub fn stmtCanThrow(stmt: *const Stmt) bool {
         .defer_stmt => |d| bodyCanThrow(d.body),
         .block_stmt => |b| bodyCanThrow(b.body),
         .using_decl => |u| if (u.defer_body) |b| bodyCanThrow(b) else false,
+        .var_decl => |d| !d.no_init and exprCanThrow(d.init),
+        .var_decl_group => |group| blk: {
+            for (group) |d| if (!d.no_init and exprCanThrow(d.init)) break :blk true;
+            break :blk false;
+        },
+        .destructure_decl => |d| exprCanThrow(d.source),
+        .assign => |a| exprCanThrow(a.value),
+        .member_assign => |ma| exprCanThrow(ma.value),
+        .console_log => |log| blk: {
+            if (exprCanThrow(log.value)) break :blk true;
+            for (log.extra_values) |v| if (exprCanThrow(v)) break :blk true;
+            break :blk false;
+        },
+        .return_stmt => |r| r.value != null and exprCanThrow(r.value.?),
+        .expr_stmt => |es| exprCanThrow(es.value),
         // A nested try swallows throws from its own try body via its own slot;
         // it propagates to the outer slot only if its catch or finally throws --
         // or, for a no-catch `try/finally`, if its try body throws (which
