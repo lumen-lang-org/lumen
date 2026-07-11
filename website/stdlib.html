@@ -187,6 +187,8 @@
     <tr><td><code>Array.of(...items)</code></td><td>(T, …) → T[] (new array from the arguments)</td></tr>
     <tr><td><code>new Array(n).fill(v)</code> · <code>Array(n).fill(v)</code></td><td>(int, T) → T[] (an <code>n</code>-length array with every element <code>v</code>)</td></tr>
     <tr><td><code>Array.from(x)</code> · <code>Array.from(x, (v, i?) =&gt; u)</code></td><td>string → string[] (chars) · T[] → T[] (copy) · Set&lt;T&gt; → T[]; with a map callback → u[] (each element mapped, optional index)</td></tr>
+    <tr><td><code>Array.isArray(x)</code></td><td>any → bool &mdash; a compile-time verdict (types are static), <code>true</code> for any array value</td></tr>
+    <tr><td><code>Object.keys(record)</code></td><td>T → string[] &mdash; the record type's field names, in declaration order (static shape)</td></tr>
   </table>
 
   <h4 id="collections">Collections</h4>
@@ -355,9 +357,13 @@ console.log(emitter.listenerCount("greet")); // 1</code></pre>
 
   <div class="api" id="fs-readFileSync">
     <h5><code>fs.readFileSync(path, encoding?)</code></h5>
-    <p class="sub">(string, string?) → string &mdash; UTF-8 text; <code>""</code> if unreadable.</p>
-<pre><code class="lumen">const data: string = fs.readFileSync("notes.txt");
-console.log(data);</code></pre>
+    <p class="sub">(string, string?) → string &mdash; UTF-8 text; <strong>throws a catchable <code>Error</code></strong> naming the path if the file can't be read.</p>
+<pre><code class="lumen">try {
+  const data: string = fs.readFileSync("notes.txt");
+  console.log(data);
+} catch (e) {
+  console.log(e.message); // cannot read 'notes.txt': FileNotFound
+}</code></pre>
   </div>
 
   <div class="api" id="fs-readFile">
@@ -441,7 +447,7 @@ console.log(data);</code></pre>
 
   <div class="api" id="fs-writeFileSync">
     <h5><code>fs.writeFileSync(path, data)</code></h5>
-    <p class="sub">(string, string) → void &mdash; creates the file or truncates it first.</p>
+    <p class="sub">(string, string) → void &mdash; creates the file or truncates it first; throws a catchable <code>Error</code> on an I/O failure.</p>
 <pre><code class="lumen">fs.writeFileSync("notes.txt", "hello world");</code></pre>
   </div>
 
@@ -1674,6 +1680,7 @@ console.log("still running");</code></pre>
   <div class="api-list">
     <a href="#time-now">now</a>
     <a href="#time-monotonic">monotonic</a>
+    <a href="#date-now">Date.now</a>
   </div>
 
   <div class="api" id="time-now">
@@ -1682,6 +1689,17 @@ console.log("still running");</code></pre>
     (wall-clock/real time).</p>
 <pre><code class="lumen">const n: i64 = time.now();
 console.log(n);</code></pre>
+  </div>
+
+  <div class="api" id="date-now">
+    <h5><code>Date.now()</code></h5>
+    <p class="sub">→ i64 &mdash; the familiar JS spelling of
+    <code>time.now()</code>: milliseconds since the Unix epoch. Promotes to
+    <code>number</code> in float contexts. The rest of the <code>Date</code>
+    object is planned.</p>
+<pre><code class="lumen">const start: i64 = Date.now();
+// ... work ...
+console.log(Date.now() - start &gt;= 0); // true</code></pre>
   </div>
 
   <div class="api" id="time-monotonic">
@@ -1929,11 +1947,10 @@ net.createServer(9301, handleConn);</code></pre>
   <p class="sub">Automatic (de)serialization for Lumen's record types, so no
   custom per-field (de)serialization code was needed. <strong>Deviation from
   Node</strong>: <code>JSON.parse&lt;T&gt;</code> takes an explicit type
-  argument (there's no dynamic/<code>any</code> value to hand back) and
-  returns <code>T</code>'s zero value on any parse failure &mdash; malformed
-  JSON, a missing field, a type mismatch &mdash; rather than throwing, the
-  same fallback shape every other fallible builtin here uses. Works for
-  primitives, named record types, and arrays of either;
+  argument (there's no dynamic/<code>any</code> value to hand back). Invalid
+  input <strong>throws a catchable <code>Error</code></strong> (like JS's
+  <code>SyntaxError</code>) &mdash; wrap it in <code>try</code>/<code>catch</code>.
+  Works for primitives, named record types, and arrays of either;
   <code>Map</code>/<code>Set</code>/tuples are not supported as
   <code>T</code> this pass (see Planned below).</p>
 
@@ -1956,14 +1973,16 @@ console.log(JSON.stringify(p)); // {"name":"Ada","age":30,"active":true}</code><
     <h5><code>JSON.parse&lt;T&gt;(text)</code></h5>
     <p class="sub">string → T &mdash; the first explicit type argument on a
     namespace call in Lumen (every other generic call site is a free
-    function/class). <code>T</code>'s zero value on any parse failure, see
-    above.</p>
+    function/class). Throws a catchable <code>Error</code> on invalid input.</p>
 <pre><code class="lumen">type Person = { name: string, age: int, active: bool };
 const p: Person = JSON.parse&lt;Person&gt;('{"name":"Grace","age":45,"active":false}');
 console.log(p.name); // Grace
 
-const broken: Person = JSON.parse&lt;Person&gt;("not json");
-console.log(broken.name); // "" -- zeroed fallback, not a crash</code></pre>
+try {
+  const broken: Person = JSON.parse&lt;Person&gt;("not json");
+} catch (e) {
+  console.log(e.message); // JSON.parse: invalid JSON (...)
+}</code></pre>
   </div>
 
   <h4 id="zlib">zlib</h4>
