@@ -38,7 +38,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             if (self.cur != .cmp or !std.mem.eql(u8, self.cur.cmp, "|")) return error.ParseError;
             try self.advance();
         }
-        try self.expectOp(';');
+        try self.expectSemi();
         return .{ .type_decl = .{ .name = tname, .string_literals = try literals.toOwnedSlice(self.arena), .line = line, .col = col } };
     }
     if (self.cur == .num) {
@@ -51,7 +51,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             if (self.cur != .cmp or !std.mem.eql(u8, self.cur.cmp, "|")) return error.ParseError;
             try self.advance();
         }
-        try self.expectOp(';');
+        try self.expectSemi();
         return .{ .type_decl = .{ .name = tname, .int_literals = try int_literals.toOwnedSlice(self.arena), .line = line, .col = col } };
     }
     // Object record body: `type T = { ... }`.
@@ -73,7 +73,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     // A function-type alias `type F = (a: T) => R;`.
     if (self.isOp('(')) {
         const fn_ann = try self.parseFunctionType();
-        try self.expectOp(';');
+        try self.expectSemi();
         return .{ .type_decl = .{ .name = tname, .alias = fn_ann, .line = line, .col = col } };
     }
     // Otherwise an alias `type X = <member>;`, an optional alias
@@ -85,7 +85,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
         try self.advance();
         try members.append(self.arena, try self.parseTypeMember());
     }
-    try self.expectOp(';');
+    try self.expectSemi();
     const items = try members.toOwnedSlice(self.arena);
     if (items.len == 1) {
         return .{ .type_decl = .{ .name = tname, .alias = items[0], .line = line, .col = col } };
@@ -148,7 +148,7 @@ pub fn parseExternDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     try self.expectOp(')');
     try self.expectOp(':');
     const return_annotation = try self.parseTypeAnnotation();
-    try self.expectOp(';');
+    try self.expectSemi();
     return .{ .extern_decl = .{ .name = name, .params = try params.toOwnedSlice(self.arena), .return_annotation = return_annotation, .line = line, .col = col } };
 }
 

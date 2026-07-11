@@ -84,6 +84,7 @@ pub const Parser = struct {
     cur: Tok,
     cur_line: u32 = 1, // source line of `cur`
     cur_col: u32 = 1, // source column of `cur`
+    prev_line: u32 = 1, // source line of the token consumed just before `cur` (for ASI)
     last_err: []const u8 = "syntax error", // message for the next diagnostic
 
     pub fn init(arena: std.mem.Allocator, src: []const u8) CompileError!Parser {
@@ -92,9 +93,20 @@ pub const Parser = struct {
         return .{ .arena = arena, .lex = lex, .cur = first, .cur_line = lex.tok_line, .cur_col = lex.tok_col };
     }
     pub fn advance(self: *Parser) CompileError!void {
+        self.prev_line = self.cur_line;
         self.cur = try self.lex.next();
         self.cur_line = self.lex.tok_line;
         self.cur_col = self.lex.tok_col;
+    }
+    /// A statement terminator: a literal `;`, or ASI — the next token is on a new
+    /// line, is a closing `}`, or is EOF. Covers the common no-semicolon style.
+    pub fn expectSemi(self: *Parser) CompileError!void {
+        if (self.isOp(';')) {
+            try self.advance();
+            return;
+        }
+        if (self.cur == .eof or self.isOp('}') or self.cur_line > self.prev_line) return;
+        return error.ParseError;
     }
     pub fn isOp(self: *Parser, ch: u8) bool {
         return self.cur == .op and self.cur.op == ch;
@@ -121,12 +133,14 @@ pub const Parser = struct {
         const save_cur = self.cur;
         const save_line = self.cur_line;
         const save_col = self.cur_col;
+        const save_prev = self.prev_line;
         self.advance() catch {};
         const result = self.isOp('(');
         self.lex = save_lex;
         self.cur = save_cur;
         self.cur_line = save_line;
         self.cur_col = save_col;
+        self.prev_line = save_prev;
         return result;
     }
     /// True when the token after `cur` is `:`. Restores parser state afterwards.
@@ -136,12 +150,14 @@ pub const Parser = struct {
         const save_cur = self.cur;
         const save_line = self.cur_line;
         const save_col = self.cur_col;
+        const save_prev = self.prev_line;
         self.advance() catch {};
         const result = self.isOp(':');
         self.lex = save_lex;
         self.cur = save_cur;
         self.cur_line = save_line;
         self.cur_col = save_col;
+        self.prev_line = save_prev;
         return result;
     }
     pub fn node(self: *Parser, e: Expr) CompileError!*Expr {
@@ -227,7 +243,7 @@ pub const Parser = struct {
             }
             if (self.isOp('[') or self.isOp('(') or self.cur == .str or self.cur == .num or self.cur == .flt or self.cur == .template) {
                 const value = try self.parseExpr();
-                try self.expectOp(';');
+                try self.expectSemi();
                 return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
             }
             return error.ParseError;
@@ -256,7 +272,7 @@ pub const Parser = struct {
         // `await <expr>;` as a statement (the resolved value is discarded).
         if (eq(u8, kw, "await")) {
             const value = try self.parseExpr();
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
         }
 
@@ -292,7 +308,7 @@ pub const Parser = struct {
                     if (self.isOp(',')) try self.advance() else break;
                 }
                 try self.expectOp(')');
-                try self.expectOp(';');
+                try self.expectSemi();
                 const this_e = try self.node(.this_expr);
                 const mc = try self.node(.{ .method_call = .{ .obj = this_e, .name = member, .args = try args.toOwnedSlice(self.arena) } });
                 return .{ .expr_stmt = .{ .value = mc, .line = line, .col = col } };
@@ -302,7 +318,7 @@ pub const Parser = struct {
             if (self.cur == .op2 and (eq(u8, self.cur.op2, "++") or eq(u8, self.cur.op2, "--"))) {
                 const is_inc = eq(u8, self.cur.op2, "++");
                 try self.advance();
-                try self.expectOp(';');
+                try self.expectSemi();
                 const one = try self.node(.{ .num = 1 });
                 return .{ .member_assign = .{ .field = member, .op = if (is_inc) "+=" else "-=", .value = one, .line = line, .col = col } };
             }
@@ -314,7 +330,7 @@ pub const Parser = struct {
                 try self.advance();
             } else return error.ParseError;
             const value = try self.parseExpr();
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .member_assign = .{ .field = member, .op = op, .value = value, .line = line, .col = col } };
         }
 
@@ -329,7 +345,7 @@ pub const Parser = struct {
                     if (self.isOp(',')) try self.advance() else break;
                 }
                 try self.expectOp(')');
-                try self.expectOp(';');
+                try self.expectSemi();
                 return .{ .super_ctor = .{ .args = try args.toOwnedSlice(self.arena), .line = line, .col = col } };
             }
             try self.expectOp('.');
@@ -343,7 +359,7 @@ pub const Parser = struct {
                 if (self.isOp(',')) try self.advance() else break;
             }
             try self.expectOp(')');
-            try self.expectOp(';');
+            try self.expectSemi();
             const sc = try self.node(.{ .super_call = .{ .name = member, .args = try args.toOwnedSlice(self.arena) } });
             return .{ .expr_stmt = .{ .value = sc, .line = line, .col = col } };
         }
@@ -379,7 +395,7 @@ pub const Parser = struct {
                 try self.expectOp(close);
                 try self.expectOp('=');
                 const source = try self.parseExpr();
-                try self.expectOp(';');
+                try self.expectSemi();
                 return .{ .destructure_decl = .{ .mutable = mutable, .is_object = is_object, .bindings = try bindings.toOwnedSlice(self.arena), .source = source, .line = line, .col = col } };
             }
             // One or more comma-separated declarators: `let a = 1, b = 2;`.
@@ -416,7 +432,7 @@ pub const Parser = struct {
                 }
                 break;
             }
-            try self.expectOp(';');
+            try self.expectSemi();
             if (decls.items.len == 1) return .{ .var_decl = decls.items[0] };
             return .{ .var_decl_group = try decls.toOwnedSlice(self.arena) };
         }
@@ -459,12 +475,12 @@ pub const Parser = struct {
                     defer_body = single;
                 }
                 try self.expectOp(')');
-                try self.expectOp(';');
+                try self.expectSemi();
                 const init_call = try self.node(.{ .call = .{ .name = "defer", .args = &.{} } });
                 return .{ .using_decl = .{ .name = name, .annotation = annotation, .init = init_call, .defer_body = defer_body, .line = line, .col = col } };
             }
             const initial_value = try self.parseExpr();
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .using_decl = .{ .name = name, .annotation = annotation, .init = initial_value, .line = line, .col = col } };
         }
 
@@ -489,7 +505,7 @@ pub const Parser = struct {
                     try extra_values.append(self.arena, try self.parseExpr());
                 }
                 try self.expectOp(')');
-                try self.expectOp(';');
+                try self.expectSemi();
                 return .{ .console_log = .{ .method = method, .value = value, .extra_values = try extra_values.toOwnedSlice(self.arena), .line = line, .col = col } };
             }
             self.last_err = "E_UNSUPPORTED_STD";
@@ -513,7 +529,7 @@ pub const Parser = struct {
             try self.expectOp('(');
             const cond = try self.parseExpr();
             try self.expectOp(')');
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .do_while_stmt = .{ .body = body, .cond = cond, .line = line, .col = col } };
         }
 
@@ -736,7 +752,7 @@ pub const Parser = struct {
         if (eq(u8, kw, "return")) {
             try self.advance();
             const value = if (self.isOp(';')) null else try self.parseExpr();
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .return_stmt = .{ .value = value, .line = line, .col = col } };
         }
 
@@ -747,7 +763,7 @@ pub const Parser = struct {
                 try self.advance();
                 break :blk n;
             } else null;
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .break_stmt = .{ .label = lbl, .line = line, .col = col } };
         }
 
@@ -758,14 +774,14 @@ pub const Parser = struct {
                 try self.advance();
                 break :blk n;
             } else null;
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .continue_stmt = .{ .label = lbl, .line = line, .col = col } };
         }
 
         if (eq(u8, kw, "throw")) {
             try self.advance();
             const value = try self.parseExpr();
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .throw_stmt = .{ .value = value, .line = line, .col = col } };
         }
 
@@ -855,7 +871,7 @@ pub const Parser = struct {
                 try self.advance(); // '=>'
                 const tbody = try self.parseBlock();
                 try self.expectOp(')');
-                try self.expectOp(';');
+                try self.expectSemi();
                 return .{ .test_decl = .{ .name = name, .body = tbody, .line = line, .col = col } };
             }
         }
@@ -888,7 +904,7 @@ pub const Parser = struct {
                 try self.expectOp('(');
                 const expected = try self.parseExpr();
                 try self.expectOp(')');
-                try self.expectOp(';');
+                try self.expectSemi();
                 const args = try self.arena.alloc(*Expr, 2);
                 args[0] = actual;
                 args[1] = expected;
@@ -896,7 +912,7 @@ pub const Parser = struct {
                 return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
             }
             // Boolean form: `expect(cond);`.
-            try self.expectOp(';');
+            try self.expectSemi();
             const args = try self.arena.alloc(*Expr, 1);
             args[0] = actual;
             const value = try self.node(.{ .call = .{ .name = "expect", .args = args } });
@@ -905,7 +921,7 @@ pub const Parser = struct {
 
         if (isBuiltin(kw)) {
             const value = try self.parseExpr();
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
         }
 
@@ -928,10 +944,10 @@ pub const Parser = struct {
             if (self.isOp('.') or self.isOp('[') or self.isOp2("?.")) {
                 const call_e = try self.node(.{ .call = .{ .name = name, .args = try args.toOwnedSlice(self.arena) } });
                 const e = try self.parsePostfixFrom(call_e);
-                try self.expectOp(';');
+                try self.expectSemi();
                 return .{ .expr_stmt = .{ .value = e, .line = line, .col = col } };
             }
-            try self.expectOp(';');
+            try self.expectSemi();
             const value = try self.node(.{ .call = .{ .name = name, .args = try args.toOwnedSlice(self.arena) } });
             return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
         }
@@ -957,7 +973,7 @@ pub const Parser = struct {
                 if (is_assign) {
                     const obj = try self.node(.{ .var_ref = .{ .name = name } });
                     const value = try self.parseExpr();
-                    try self.expectOp(';');
+                    try self.expectSemi();
                     return .{ .member_assign = .{ .field = field, .op = op, .value = value, .obj = obj, .line = line, .col = col } };
                 }
             }
@@ -974,7 +990,7 @@ pub const Parser = struct {
             self.cur_line = save_line_name;
             self.cur_col = save_col_name;
             const value = try self.parseExpr();
-            try self.expectOp(';');
+            try self.expectSemi();
             return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
         }
         // An assignment (`x = ...`, `x += ...`, `x++`) or, failing that, a
@@ -990,7 +1006,7 @@ pub const Parser = struct {
         self.cur_line = save_line_name;
         self.cur_col = save_col_name;
         const value = try self.parseExpr();
-        try self.expectOp(';');
+        try self.expectSemi();
         return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
     }
 

@@ -796,20 +796,20 @@ pub fn parseAssignmentTail(self: *Parser, name: []const u8, line: u32, col: u32,
     if (self.isOp('=')) {
         try self.advance();
         const value = try self.parseExpr();
-        if (needs_semicolon) try self.expectOp(';');
+        if (needs_semicolon) try self.expectSemi();
         return .{ .name = name, .op = "=", .value = value, .line = line, .col = col };
     }
     if (self.isCompoundAssignOp()) {
         const op = self.cur.op2;
         try self.advance();
         const value = try self.parseExpr();
-        if (needs_semicolon) try self.expectOp(';');
+        if (needs_semicolon) try self.expectSemi();
         return .{ .name = name, .op = op, .value = value, .line = line, .col = col };
     }
     if (self.isOp2("++") or self.isOp2("--")) {
         const op = self.cur.op2;
         try self.advance();
-        if (needs_semicolon) try self.expectOp(';');
+        if (needs_semicolon) try self.expectSemi();
         return .{ .name = name, .op = if (std.mem.eql(u8, op, "++")) "+=" else "-=", .value = try self.oneExpr(1), .line = line, .col = col };
     }
     return error.ParseError;
@@ -820,6 +820,6 @@ pub fn parsePrefixUpdate(self: *Parser, op: []const u8, line: u32, col: u32, nee
     if (self.cur != .ident) return error.ParseError;
     const name = self.cur.ident;
     try self.advance();
-    if (needs_semicolon) try self.expectOp(';');
+    if (needs_semicolon) try self.expectSemi();
     return .{ .name = name, .op = if (std.mem.eql(u8, op, "++")) "+=" else "-=", .value = try self.oneExpr(1), .line = line, .col = col };
 }
