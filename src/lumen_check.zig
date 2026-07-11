@@ -436,11 +436,14 @@ pub const Checker = struct {
     /// narrowed in the then-branch; `x == null` returns it for the else-branch.
     /// `in_then` says which branch the non-optional narrowing applies to.
     /// The narrowable path of an expression: a plain variable (`x`) or a
-    /// single-level field read on one (`x.f`, keyed as "x.f").
+    /// field-access chain rooted at one (`x.f`, `a.b.c`, keyed dotted). Any
+    /// non-plain segment (index, call, optional-chain) makes it un-narrowable
+    /// (re-reading it might not be side-effect-free / stable), so return null.
     pub fn narrowPath(self: *Checker, e: *ast.Expr) ?[]const u8 {
         if (e.* == .var_ref) return e.var_ref.name;
-        if (e.* == .field and e.field.obj.* == .var_ref) {
-            return std.fmt.allocPrint(self.arena, "{s}.{s}", .{ e.field.obj.var_ref.name, e.field.name }) catch null;
+        if (e.* == .field and !e.field.optional_chain) {
+            const base = self.narrowPath(e.field.obj) orelse return null;
+            return std.fmt.allocPrint(self.arena, "{s}.{s}", .{ base, e.field.name }) catch null;
         }
         return null;
     }
