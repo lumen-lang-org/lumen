@@ -3282,8 +3282,9 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
             call.checked_type = elem;
             return elem;
         }
-        // Variadic: two or more arguments, all of the same numeric type.
-        if (call.args.len < 2) {
+        // Variadic: one or more arguments, all of the same numeric type. A
+        // single argument (`Math.min(5)`) is just that value, as in JS.
+        if (call.args.len < 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
