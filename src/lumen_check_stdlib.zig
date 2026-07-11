@@ -867,7 +867,10 @@ pub fn numberInstanceMethod(self: *Checker, program: *ast.Program, mc: anytype, 
         }
         return .string;
     }
-    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    {
+        const tn = types.tsName(self.arena, obj_type) catch "number";
+        _ = self.failUnknownMethod(line, col, tn, name, &.{ "toFixed", "toPrecision", "toExponential", "toString" }) catch {};
+    }
     return null;
 }
 

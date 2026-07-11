@@ -552,7 +552,10 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     .named, .named_array, .union_type, .string_literal_union, .int_literal_union, .optional => {},
                     else => if (self.exprType(program, assignment.value, assignment.line, assignment.col)) |actual_type| {
                         if (!types.same(expected_type, actual_type)) {
-                            return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
+                            // Let ensureAssignable below handle coercions
+                            // (numeric promotion, widening) and render the
+                            // detailed expected/got message on real mismatches.
+                            try self.ensureAssignable(program, expected_type, assignment.value, assignment.line, assignment.col);
                         }
                     } else return self.inferenceFail(assignment.line, assignment.col, "cannot infer assignment type"),
                 }
