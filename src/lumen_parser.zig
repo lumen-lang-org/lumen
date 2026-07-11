@@ -106,6 +106,7 @@ pub const Parser = struct {
             return;
         }
         if (self.cur == .eof or self.isOp('}') or self.cur_line > self.prev_line) return;
+        self.last_err = std.fmt.allocPrint(self.arena, "expected end of statement (';' or a newline), found {s}", .{self.describeCur()}) catch "syntax error";
         return error.ParseError;
     }
     pub fn isOp(self: *Parser, ch: u8) bool {
@@ -120,8 +121,27 @@ pub const Parser = struct {
     pub fn oneExpr(self: *Parser, value: i64) CompileError!*Expr {
         return self.node(.{ .num = value });
     }
+    /// A short human description of the current token, for parse diagnostics.
+    pub fn describeCur(self: *Parser) []const u8 {
+        return switch (self.cur) {
+            .num, .flt => "a number",
+            .str => "a string",
+            .template => "a template literal",
+            .regex => "a regex literal",
+            .op => |c| std.fmt.allocPrint(self.arena, "'{c}'", .{c}) catch "a symbol",
+            .op2 => |s| std.fmt.allocPrint(self.arena, "'{s}'", .{s}) catch "a symbol",
+            .op3 => |s| std.fmt.allocPrint(self.arena, "'{s}'", .{s}) catch "a symbol",
+            .cmp => |s| std.fmt.allocPrint(self.arena, "'{s}'", .{s}) catch "a symbol",
+            .ident => |s| std.fmt.allocPrint(self.arena, "'{s}'", .{s}) catch "an identifier",
+            .eof => "end of file",
+        };
+    }
+
     pub fn expectOp(self: *Parser, ch: u8) CompileError!void {
-        if (!self.isOp(ch)) return error.ParseError;
+        if (!self.isOp(ch)) {
+            self.last_err = std.fmt.allocPrint(self.arena, "expected '{c}', found {s}", .{ ch, self.describeCur() }) catch "syntax error";
+            return error.ParseError;
+        }
         try self.advance();
     }
     pub fn isKw(self: *Parser, kw: []const u8) bool {
@@ -171,7 +191,13 @@ pub const Parser = struct {
     pub fn parseBlock(self: *Parser) CompileError![]Stmt {
         try self.expectOp('{');
         var body: std.ArrayListUnmanaged(Stmt) = .empty;
-        while (!self.isOp('}')) try body.append(self.arena, try self.parseStmt());
+        while (!self.isOp('}')) {
+            if (self.cur == .eof) {
+                self.last_err = "expected '}' to close this block, found end of file";
+                return error.ParseError;
+            }
+            try body.append(self.arena, try self.parseStmt());
+        }
         try self.expectOp('}');
         return body.toOwnedSlice(self.arena);
     }
