@@ -799,8 +799,12 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             const slot = try std.fmt.allocPrint(arena, "__lumen_throw_{d}_{d}", .{ try_stmt.line, try_stmt.col });
             const label = try std.fmt.allocPrint(arena, "__lumen_try_{d}_{d}", .{ try_stmt.line, try_stmt.col });
             const can_throw = analysis.bodyCanThrow(try_stmt.try_body);
+            // The throw slot is only needed when a catch reads it or a
+            // throwing body must re-propagate; a no-catch try/finally over a
+            // non-throwing body needs none (an unused const would be rejected).
+            const need_slot = try_stmt.has_catch or can_throw;
             const slot_kw = if (can_throw) "var" else "const";
-            try body.print(arena, "    {s} {s}: ?[]const u8 = null;\n", .{ slot_kw, slot });
+            if (need_slot) try body.print(arena, "    {s} {s}: ?[]const u8 = null;\n", .{ slot_kw, slot });
             // Wrap the whole try/catch in an outer block. `finally` lowers to a
             // `defer` at the top of that block, so it always runs on every exit
             // — normal fallthrough, a caught throw, or a rethrow that breaks out
@@ -825,34 +829,53 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 if (analysis.stmtAlwaysThrows(try_body_stmt)) break;
             }
             try body.appendSlice(arena, "    }\n");
-            if (try_stmt.catch_name) |catch_name| {
-                const catch_emit = try_stmt.catch_emit_name orelse catch_name;
-                try body.print(arena, "    if ({s}) |{s}| {{\n", .{ slot, catch_emit });
-                // Zig rejects an unused capture, so discard the binding when
-                // the catch body never reads it.
-                if (!bodyUsesName(try_stmt.catch_body, catch_name)) {
-                    try body.print(arena, "    _ = {s};\n", .{catch_emit});
+            if (!try_stmt.has_catch) {
+                // `try { ... } finally { ... }` with no catch: an uncaught throw
+                // re-propagates after finally runs. The finally is a `defer` on
+                // the enclosing block, so it unwinds before the break/panic.
+                if (can_throw) {
+                    try body.print(arena, "    if ({s}) |__lumen_rethrow| {{\n", .{slot});
+                    if (throw_target) |outer| {
+                        const outer_label = try std.mem.replaceOwned(u8, arena, outer, "__lumen_throw_", "__lumen_try_");
+                        try body.print(arena, "    {s} = __lumen_rethrow;\n    break :{s};\n", .{ outer, outer_label });
+                    } else {
+                        try body.appendSlice(arena, "    @panic(__lumen_rethrow);\n");
+                    }
+                    try body.appendSlice(arena, "    }\n");
                 }
             } else {
-                // Optional catch binding (spec 052): run the catch body on
-                // any error without capturing it -- no binding to discard.
-                try body.print(arena, "    if ({s} != null) {{\n", .{slot});
+                if (try_stmt.catch_name) |catch_name| {
+                    const catch_emit = try_stmt.catch_emit_name orelse catch_name;
+                    try body.print(arena, "    if ({s}) |{s}| {{\n", .{ slot, catch_emit });
+                    // Zig rejects an unused capture, so discard the binding when
+                    // the catch body never reads it.
+                    if (!bodyUsesName(try_stmt.catch_body, catch_name)) {
+                        try body.print(arena, "    _ = {s};\n", .{catch_emit});
+                    }
+                } else {
+                    // Optional catch binding (spec 052): run the catch body on
+                    // any error without capturing it -- no binding to discard.
+                    try body.print(arena, "    if ({s} != null) {{\n", .{slot});
+                }
+                for (try_stmt.catch_body) |*catch_stmt| {
+                    try emitStmtWithThrow(catch_stmt, decls, body, arena, throw_target, switch_break_target, options);
+                    // A rethrow lowers to a `break`; later siblings are dead code.
+                    // Only meaningful when an enclosing try provides a throw target.
+                    if (throw_target != null and analysis.stmtAlwaysThrows(catch_stmt)) break;
+                }
+                try body.appendSlice(arena, "    }\n");
             }
-            for (try_stmt.catch_body) |*catch_stmt| {
-                try emitStmtWithThrow(catch_stmt, decls, body, arena, throw_target, switch_break_target, options);
-                // A rethrow lowers to a `break`; later siblings are dead code.
-                // Only meaningful when an enclosing try provides a throw target.
-                if (throw_target != null and analysis.stmtAlwaysThrows(catch_stmt)) break;
-            }
-            try body.appendSlice(arena, "    }\n");
-            // When the try can throw and both the try and catch bodies always
-            // return/throw, the outer block cannot fall through — the non-throw
-            // path returned inside the labeled block, and the throw path returns
-            // in the catch. Emit `unreachable` so Zig's flow analysis agrees a
-            // function ending in this try needs no dead trailing return.
-            if (can_throw and try_stmt.catch_body.len > 0 and
-                analysis.bodyAlwaysReturns(try_stmt.try_body) and analysis.bodyAlwaysReturns(try_stmt.catch_body))
-            {
+            // When the try can throw and the outer block cannot fall through,
+            // emit `unreachable` so Zig's flow analysis agrees a function ending
+            // in this try needs no dead trailing return. This holds when the
+            // non-throw path returned in the try body and the throw path diverges:
+            // for a catch, both bodies always return; for a no-catch try/finally,
+            // the try body always returns (the rethrow-if panics/breaks on throw).
+            const both_diverge = if (try_stmt.has_catch)
+                (try_stmt.catch_body.len > 0 and analysis.bodyAlwaysReturns(try_stmt.try_body) and analysis.bodyAlwaysReturns(try_stmt.catch_body))
+            else
+                analysis.bodyAlwaysReturns(try_stmt.try_body);
+            if (can_throw and both_diverge) {
                 try body.appendSlice(arena, "    unreachable;\n");
             }
             try body.appendSlice(arena, "    }\n");

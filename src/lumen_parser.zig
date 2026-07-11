@@ -725,26 +725,35 @@ pub const Parser = struct {
         if (eq(u8, kw, "try")) {
             try self.advance();
             const try_body = try self.parseBlock();
-            if (!self.isKw("catch")) return error.ParseError;
-            try self.advance();
-            // Optional catch binding (spec 052): `catch { ... }` with no
-            // `(e)` discards the error. `catch ()` (empty parens) stays a
-            // parse error -- an opened paren must name a binding.
+            // A `catch` clause is optional when a `finally` follows
+            // (`try { ... } finally { ... }`); an uncaught throw runs finally
+            // then re-propagates.
             var catch_name: ?[]const u8 = null;
-            if (self.isOp('(')) {
+            var catch_body: []Stmt = &.{};
+            var has_catch = false;
+            if (self.isKw("catch")) {
+                has_catch = true;
                 try self.advance();
-                if (self.cur != .ident) return error.ParseError;
-                catch_name = self.cur.ident;
-                try self.advance();
-                try self.expectOp(')');
+                // Optional catch binding (spec 052): `catch { ... }` with no
+                // `(e)` discards the error. `catch ()` (empty parens) stays a
+                // parse error -- an opened paren must name a binding.
+                if (self.isOp('(')) {
+                    try self.advance();
+                    if (self.cur != .ident) return error.ParseError;
+                    catch_name = self.cur.ident;
+                    try self.advance();
+                    try self.expectOp(')');
+                }
+                catch_body = try self.parseBlock();
+            } else if (!self.isKw("finally")) {
+                return error.ParseError; // must have catch or finally
             }
-            const catch_body = try self.parseBlock();
             var finally_body: ?[]Stmt = null;
             if (self.isKw("finally")) {
                 try self.advance();
                 finally_body = try self.parseBlock();
             }
-            return .{ .try_stmt = .{ .try_body = try_body, .catch_name = catch_name, .catch_body = catch_body, .finally_body = finally_body, .line = line, .col = col } };
+            return .{ .try_stmt = .{ .try_body = try_body, .catch_name = catch_name, .catch_body = catch_body, .has_catch = has_catch, .finally_body = finally_body, .line = line, .col = col } };
         }
 
         // Test declarations. Two surfaces lower to the same `test_decl`:

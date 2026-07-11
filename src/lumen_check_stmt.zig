@@ -250,8 +250,12 @@ pub fn stmtReturns(stmt: ast.Stmt) bool {
         },
         // A try/catch returns on all paths when both the try body and the catch
         // body return. (The emit appends an `unreachable` when the try can throw
-        // so Zig's flow analysis agrees.) A try with no catch does not.
-        .try_stmt => |t| t.catch_body.len != 0 and blockReturns(t.try_body) and blockReturns(t.catch_body),
+        // so Zig's flow analysis agrees.) A no-catch try/finally returns when its
+        // try body returns (an uncaught throw re-propagates out of the function).
+        .try_stmt => |t| if (t.has_catch)
+            (t.catch_body.len != 0 and blockReturns(t.try_body) and blockReturns(t.catch_body))
+        else
+            blockReturns(t.try_body),
         else => false,
     };
 }

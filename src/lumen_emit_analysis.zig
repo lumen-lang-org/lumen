@@ -54,8 +54,10 @@ pub fn stmtCanThrow(stmt: *const Stmt) bool {
         .block_stmt => |b| bodyCanThrow(b.body),
         .using_decl => |u| if (u.defer_body) |b| bodyCanThrow(b) else false,
         // A nested try swallows throws from its own try body via its own slot;
-        // it propagates to the outer slot only if its catch or finally throws.
-        .try_stmt => |t| bodyCanThrow(t.catch_body) or (t.finally_body != null and bodyCanThrow(t.finally_body.?)),
+        // it propagates to the outer slot only if its catch or finally throws --
+        // or, for a no-catch `try/finally`, if its try body throws (which
+        // re-propagates after finally).
+        .try_stmt => |t| (!t.has_catch and bodyCanThrow(t.try_body)) or bodyCanThrow(t.catch_body) or (t.finally_body != null and bodyCanThrow(t.finally_body.?)),
         else => false,
     };
 }

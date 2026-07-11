@@ -348,6 +348,7 @@ pub const TryStmt = struct {
     catch_name: ?[]const u8,
     catch_emit_name: ?[]const u8 = null,
     catch_body: []Stmt,
+    has_catch: bool = true, // false for `try { ... } finally { ... }` with no catch clause: an uncaught throw runs finally then re-propagates
     finally_body: ?[]Stmt = null,
     line: u32,
     col: u32,
