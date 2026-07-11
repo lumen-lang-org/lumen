@@ -1129,9 +1129,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             } else if (std.mem.eql(u8, cl.namespace, "JSON") and std.mem.eql(u8, cl.name, "parse")) {
                 const result_type = cl.checked_arg_type orelse .void;
                 const zig_name = types.zigName(arena, result_type) catch "void";
+                const parse_throws = g_options.?.runtime_locations;
+                if (parse_throws) try emitThrowingCallPrefix(w, arena);
                 try w.print(arena, "__jsonParse({s}, __alloc, ", .{zig_name});
                 try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
+                if (parse_throws) try emitThrowingCallSuffix(w, arena);
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "sep")) {
                 try w.appendSlice(arena, "@as([]const u8, \"/\")");
             } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "delimiter")) {

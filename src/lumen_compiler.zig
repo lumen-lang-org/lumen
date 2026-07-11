@@ -2612,12 +2612,31 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\fn __jsonStringify(alloc: std.mem.Allocator, value: anytype) []const u8 {
             \\    return std.json.Stringify.valueAlloc(alloc, value, .{}) catch "";
             \\}
-            \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) T {
-            \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch return std.mem.zeroes(T);
-            \\    return parsed.value;
-            \\}
             \\
         );
+        if (options.runtime_locations) {
+            // Invalid JSON raises a catchable Lumen exception (spec 252),
+            // matching JS's SyntaxError instead of silently zeroing the value.
+            try out.appendSlice(arena,
+                \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) error{LumenThrow}!T {
+                \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch |e| {
+                \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "JSON.parse: invalid JSON ({s})", .{@errorName(e)}) catch "JSON.parse: invalid JSON";
+                \\        __lumen_throwing = true;
+                \\        return error.LumenThrow;
+                \\    };
+                \\    return parsed.value;
+                \\}
+                \\
+            );
+        } else {
+            try out.appendSlice(arena,
+                \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) T {
+                \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch return std.mem.zeroes(T);
+                \\    return parsed.value;
+                \\}
+                \\
+            );
+        }
     }
     if (program.needs_process_api) {
         // cwd/chdir/env go through Io-abstracted (cwd/chdir) or entry-captured
