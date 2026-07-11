@@ -18,6 +18,7 @@ const ast = @import("lumen_ast.zig");
 const types = @import("lumen_types.zig");
 const diag_mod = @import("lumen_diag.zig");
 const check_mod = @import("lumen_check.zig");
+const check_stmt = @import("lumen_check_stmt.zig");
 
 const Checker = check_mod.Checker;
 const CompileError = diag_mod.CompileError;
@@ -364,16 +365,34 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             self.in_function = true;
             var body_type: ?types.Type = null;
             if (arrow.body_block) |block| {
-                // Statement-body arrow: a void body. `return;` is allowed;
-                // `return <value>;` is rejected (a value body must use `=> expr`).
                 const saved_ret = self.current_return_type;
-                self.current_return_type = .void;
-                body_type = .void;
-                for (block) |*stmt| {
-                    self.checkStmt(program, stmt) catch {
+                // A block-body arrow with a return annotation is a value-returning
+                // function body: returns are checked against the annotated type
+                // and all paths must return. Without an annotation it is a void
+                // body (`return;` allowed, `return <value>;` rejected).
+                if (arrow.return_annotation.len > 0) {
+                    const ret_ann = self.typeFromAnnotation(arrow.return_annotation, line, col) catch return null;
+                    self.current_return_type = ret_ann;
+                    body_type = ret_ann;
+                    for (block) |*stmt| {
+                        self.checkStmt(program, stmt) catch {
+                            body_type = null;
+                            break;
+                        };
+                    }
+                    if (body_type != null and ret_ann != .void and !check_stmt.blockReturns(block)) {
+                        _ = self.fail(line, col, "E_MISSING_RETURN") catch {};
                         body_type = null;
-                        break;
-                    };
+                    }
+                } else {
+                    self.current_return_type = .void;
+                    body_type = .void;
+                    for (block) |*stmt| {
+                        self.checkStmt(program, stmt) catch {
+                            body_type = null;
+                            break;
+                        };
+                    }
                 }
                 self.current_return_type = saved_ret;
             } else if (arrow.return_annotation.len > 0) {
