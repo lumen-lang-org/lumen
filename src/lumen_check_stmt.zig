@@ -236,6 +236,17 @@ pub fn stmtReturns(stmt: ast.Stmt) bool {
         .return_stmt => true,
         .if_stmt => |branch| branch.else_body != null and blockReturns(branch.then_body) and blockReturns(branch.else_body.?),
         .throw_stmt => true,
+        // A switch returns on all paths when it has a `default` that returns and
+        // every case has a (non-empty) body that returns. Empty fall-through
+        // cases are conservatively treated as non-returning here.
+        .switch_stmt => |sw| blk: {
+            const dflt = sw.default_body orelse break :blk false;
+            if (!blockReturns(dflt)) break :blk false;
+            for (sw.cases) |c| {
+                if (!blockReturns(c.body)) break :blk false;
+            }
+            break :blk true;
+        },
         else => false,
     };
 }
