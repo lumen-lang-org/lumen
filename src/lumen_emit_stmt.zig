@@ -40,6 +40,11 @@ fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: s
         // String-builder: a growable buffer instead of an immutable slice. The
         // init is always `""`, so it starts empty.
         try body.print(arena, "    var {s}: std.ArrayListUnmanaged(u8) = .empty;\n", .{decl.emit_name orelse decl.name});
+    } else if (decl.no_init) {
+        // `let x: T;` with no initializer -> `var x: T = undefined;` (always
+        // `var`: an uninitialized binding is meant to be assigned before use).
+        const final_zty = decl.checked_type orelse return error.ParseError;
+        try body.print(arena, "    var {s}: {s} = undefined;\n", .{ decl.emit_name orelse decl.name, try types.zigName(arena, final_zty) });
     } else {
         const final_zty = decl.checked_type orelse return error.ParseError;
         try body.print(arena, "    {s} {s}: {s} = ", .{ if (decl.mutable and decl.reassigned) "var" else "const", decl.emit_name orelse decl.name, try types.zigName(arena, final_zty) });

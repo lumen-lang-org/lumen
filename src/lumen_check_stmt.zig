@@ -272,7 +272,9 @@ pub fn checkVarDecl(self: *Checker, program: *ast.Program, decl: *ast.VarDecl) C
     if (final_type == .void) return self.fail(decl.line, decl.col, "E_VOID_VALUE");
     if (final_type == .none) return self.inferenceFail(decl.line, decl.col, "cannot infer type of null; annotate as T | null");
 
-    try self.ensureAssignable(program, final_type, decl.init, decl.line, decl.col);
+    // A `let x: T;` declaration has no initializer to check; it binds the
+    // annotated type directly (mutable, so it can be assigned before use).
+    if (!decl.no_init) try self.ensureAssignable(program, final_type, decl.init, decl.line, decl.col);
     decl.checked_type = final_type;
     try self.declare(decl.name, decl, final_type, decl.line, decl.col);
 }

@@ -395,6 +395,18 @@ pub const Parser = struct {
                     try self.advance();
                     annotation = try self.parseTypeAnnotation();
                 }
+                // `let x: T;` — a typed declaration with no initializer. Requires
+                // an annotation (the type can't be inferred from nothing). A
+                // throwaway `0` placeholder fills `init`; `no_init` drives emit.
+                if (annotation != null and !self.isOp('=')) {
+                    const placeholder = try self.node(.{ .num = 0 });
+                    try decls.append(self.arena, .{ .mutable = mutable, .name = name, .annotation = annotation, .init = placeholder, .no_init = true, .line = dline, .col = dcol });
+                    if (self.isOp(',')) {
+                        try self.advance();
+                        continue;
+                    }
+                    break;
+                }
                 try self.expectOp('=');
                 const initial_value = try self.parseExpr();
                 try decls.append(self.arena, .{ .mutable = mutable, .name = name, .annotation = annotation, .init = initial_value, .line = dline, .col = dcol });

@@ -162,6 +162,7 @@ pub const VarDecl = struct {
     checked_type: ?types.Type = null,
     reassigned: bool = false,
     init: *Expr,
+    no_init: bool = false, // `let x: T;` — declared with a type but no initializer; emitted as `var x: T = undefined;` (init holds a throwaway placeholder)
     line: u32,
     col: u32,
     is_accumulator: bool = false, // string-builder local: emitted as a growable ArrayList(u8)
