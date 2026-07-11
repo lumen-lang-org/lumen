@@ -1250,6 +1250,7 @@ fn reactorWrappers(arena: std.mem.Allocator, names: []const []const u8) ![]const
 }
 
 fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, action: Action, cli_libs: []const []const u8, wasm: bool, reactor: bool, err: *std.Io.Writer) !u8 {
+    const compile_start = std.Io.Clock.Timestamp.now(io, .awake);
     if (!std.mem.endsWith(u8, path, ".ts")) {
         try err.print("error: expected a .ts source file, got {s}\n", .{path});
         return 2;
@@ -1406,7 +1407,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             ow.interface.writeAll(result.stdout) catch {};
             ow.interface.flush() catch {};
         }
-        return try renderTestResults(err, source, path, zig_src, gen_path, result.stderr, result.term);
+        return try renderTestResults(arena, err, source, path, zig_src, gen_path, result.stderr, result.term);
     }
     const result = std.process.run(arena, io, .{ .argv = argv.items }) catch {
         try err.print("error: could not run the native backend\n", .{});
@@ -1416,7 +1417,15 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .exited => |code| {
             if (code == 0) {
                 // `lumen run` keeps the program's output clean: no compile banner.
-                if (action != .build_quiet) try err.print("compiled {s} -> {s}\n", .{ path, exe_name });
+                if (action != .build_quiet) {
+                    const elapsed = compile_start.durationTo(std.Io.Clock.Timestamp.now(io, .awake));
+                    const ms: u64 = @intCast(@max(0, @divTrunc(elapsed.raw.nanoseconds, std.time.ns_per_ms)));
+                    if (ms >= 1000) {
+                        try err.print("compiled {s} -> {s} ({d}.{d}s)\n", .{ path, exe_name, ms / 1000, (ms % 1000) / 100 });
+                    } else {
+                        try err.print("compiled {s} -> {s} ({d}ms)\n", .{ path, exe_name, ms });
+                    }
+                }
                 return 0;
             }
             try reportBackendFailure(err, source, path, zig_src, gen_path, result.stderr);
@@ -1515,7 +1524,7 @@ fn tsLineForGenLine(zig_src: []const u8, zline: u32) u32 {
 /// Failing expects map to the .ts line through the generated-code position
 /// markers. If the output has no test results at all the generated code
 /// failed to build — fall back to the backend-failure report.
-fn renderTestResults(err: *std.Io.Writer, ts_source: []const u8, ts_path: []const u8, zig_src: []const u8, gen_path: []const u8, stderr_text: []const u8, term: std.process.Child.Term) !u8 {
+fn renderTestResults(arena: std.mem.Allocator, err: *std.Io.Writer, ts_source: []const u8, ts_path: []const u8, zig_src: []const u8, gen_path: []const u8, stderr_text: []const u8, term: std.process.Child.Term) !u8 {
     const gen_base = std.fs.path.basename(gen_path);
     var saw_result = false;
     var awaiting_location = false; // last test failed; show its first user frame
@@ -1545,10 +1554,18 @@ fn renderTestResults(err: *std.Io.Writer, ts_source: []const u8, ts_path: []cons
                 } else {
                     failed += 1;
                     awaiting_location = true;
+                    // A throw inside a test arrives as a panic; render it the
+                    // way runtime errors do ("Uncaught Error: msg"), without
+                    // the thread id noise.
+                    var msg = status;
+                    if (std.mem.startsWith(u8, msg, "thread ")) {
+                        if (std.mem.indexOf(u8, msg, " panic: ")) |pp| msg = msg[pp + " panic: ".len ..];
+                    }
+                    const shown = if (msg.ptr != status.ptr) std.fmt.allocPrint(arena, "Uncaught Error: {s}", .{msg}) catch msg else msg;
                     if (g_color) {
-                        try err.print(C_BOLD_RED ++ "✗" ++ C_RESET ++ " {s} — " ++ C_BOLD ++ "{s}" ++ C_RESET ++ "\n", .{ name, status });
+                        try err.print(C_BOLD_RED ++ "✗" ++ C_RESET ++ " {s} — " ++ C_BOLD ++ "{s}" ++ C_RESET ++ "\n", .{ name, shown });
                     } else {
-                        try err.print("FAIL {s} — {s}\n", .{ name, status });
+                        try err.print("FAIL {s} — {s}\n", .{ name, shown });
                     }
                 }
                 continue;
