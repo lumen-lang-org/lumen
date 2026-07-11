@@ -473,6 +473,18 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         return .f64;
                     }
                 }
+                // `Number.MAX_SAFE_INTEGER` and the other Number constants read
+                // as f64 properties (JS numbers are all f64).
+                if (std.mem.eql(u8, field.obj.var_ref.name, "Number") and
+                    self.bindingPtr("Number") == null)
+                {
+                    const lit: ?[]const u8 =
+                        if (std.mem.eql(u8, field.name, "MAX_SAFE_INTEGER")) "9007199254740991" else if (std.mem.eql(u8, field.name, "MIN_SAFE_INTEGER")) "-9007199254740991" else if (std.mem.eql(u8, field.name, "MAX_VALUE")) "1.7976931348623157e308" else if (std.mem.eql(u8, field.name, "MIN_VALUE")) "5e-324" else if (std.mem.eql(u8, field.name, "EPSILON")) "2.220446049250313e-16" else if (std.mem.eql(u8, field.name, "POSITIVE_INFINITY")) "std.math.inf(f64)" else if (std.mem.eql(u8, field.name, "NEGATIVE_INFINITY")) "-std.math.inf(f64)" else if (std.mem.eql(u8, field.name, "NaN")) "std.math.nan(f64)" else null;
+                    if (lit) |l| {
+                        field.builtin_const = l;
+                        return .f64;
+                    }
+                }
                 // `ClassName.staticField` — a static member read. Only when the
                 // name is a class and not shadowed by a local binding.
                 if (self.bindingPtr(field.obj.var_ref.name) == null) {
