@@ -192,6 +192,20 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
         },
+        .func_type => |fsig| {
+            // An untyped arrow argument to a function-typed parameter borrows the
+            // parameter's declared parameter types as contextual hints, so
+            // `apply(x => x * 2, ...)` infers `x: i32` from `f: (x: i32) => i32`.
+            // A typed arrow / named function value flows through the plain check.
+            if (value.* == .arrow) {
+                const actual = self.checkCbArg(program, value, fsig.params, line, col) orelse
+                    return self.fail(line, col, "E_TYPE_MISMATCH");
+                if (!types.same(expected, actual)) return self.fail(line, col, "E_TYPE_MISMATCH");
+                return;
+            }
+            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+        },
         else => {
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
