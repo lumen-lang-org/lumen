@@ -578,13 +578,36 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             const iter_ty = loop.iter_type orelse return error.ParseError;
             // `for (const [k, v] of map)` — iterate the map's keys and values in
             // parallel.
-            if (loop.is_pair) {
+            if (loop.is_pair and !loop.is_array_entries) {
                 const kn = loop.binding_emit_name orelse loop.binding;
                 const vn = loop.value_binding;
                 try body.appendSlice(arena, "    {\n    const __pm = ");
                 try emitExpr(loop.iterable, body, arena);
                 try body.print(arena, ";\n    for (__pm.keys(), __pm.values()) |{s}, {s}| {{\n", .{ kn, vn });
                 try body.print(arena, "    _ = &{s}; _ = &{s};\n", .{ kn, vn });
+                for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
+                try body.appendSlice(arena, "    }\n    }\n");
+                return;
+            }
+            // `for (const [i, v] of arr.entries())` — iterate the receiver array
+            // with a running i32 index and the element in parallel.
+            if (loop.is_array_entries) {
+                const kn = loop.binding_emit_name orelse loop.binding;
+                const vn = loop.value_binding;
+                const et = loop.elem_type orelse return error.ParseError;
+                const et_zig = try types.zigName(arena, et);
+                const seq = try std.fmt.allocPrint(arena, "__lumen_en_seq_{d}_{d}", .{ loop.line, loop.col });
+                const idx = try std.fmt.allocPrint(arena, "__lumen_en_idx_{d}_{d}", .{ loop.line, loop.col });
+                try body.appendSlice(arena, "    {\n");
+                try body.print(arena, "    const {s}: []const {s} = ", .{ seq, et_zig });
+                try emitExpr(loop.iterable, body, arena);
+                try body.appendSlice(arena, ";\n");
+                try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
+                try body.print(arena, "    {s}while ({s} < {s}.len) : ({s} += 1) {{\n", .{ try labelPrefix(arena, loop.label, loop.body), idx, seq, idx });
+                try body.print(arena, "    const {s}: i32 = @intCast({s});\n", .{ kn, idx });
+                try body.print(arena, "    const {s}: {s} = {s}[{s}];\n", .{ vn, et_zig, seq, idx });
+                if (!std.mem.eql(u8, kn, "_")) try body.print(arena, "    _ = &{s};\n", .{kn});
+                if (!std.mem.eql(u8, vn, "_")) try body.print(arena, "    _ = &{s};\n", .{vn});
                 for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
                 try body.appendSlice(arena, "    }\n    }\n");
                 return;

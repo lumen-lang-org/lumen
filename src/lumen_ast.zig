@@ -263,6 +263,7 @@ pub const ForOfStmt = struct {
     binding: []const u8,
     binding_emit_name: ?[]const u8 = null,
     is_pair: bool = false, // `for (const [k, v] of map)` — binding is the key, value_binding the value
+    is_array_entries: bool = false, // `for (const [i, v] of arr.entries())` — binding is the index (i32), value the element; iterable is rewritten to the receiver array
     value_binding: []const u8 = "",
     iterable: *Expr,
     iter_type: ?types.Type = null,

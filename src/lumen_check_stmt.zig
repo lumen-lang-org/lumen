@@ -517,6 +517,38 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             loop.update = update_stmt.assign;
         },
         .for_of_stmt => |*loop| {
+            // `for (const [i, v] of arr.entries())` — index/value pairs over an
+            // array. Handled before generic iterable inference because
+            // `.entries()` isn't a standalone array method (it only exists as a
+            // for-of iterable here). The iterable is rewritten to the receiver.
+            if (loop.is_pair and loop.iterable.* == .method_call and
+                std.mem.eql(u8, loop.iterable.method_call.name, "entries"))
+            {
+                const recv = loop.iterable.method_call.obj;
+                const recv_ty = self.exprType(program, recv, loop.line, loop.col) orelse
+                    return self.inferenceFail(loop.line, loop.col, "cannot infer for-of iterable type");
+                if (types.isArray(recv_ty)) {
+                    if (loop.iterable.method_call.args.len != 0) return self.fail(loop.line, loop.col, "E_ARG_COUNT");
+                    const et = types.arrayElem(recv_ty) orelse return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+                    loop.is_array_entries = true;
+                    loop.iterable = recv;
+                    loop.iter_type = recv_ty;
+                    loop.elem_type = et;
+                    try self.pushScope();
+                    defer self.popScope();
+                    const scope = self.currentScope();
+                    const kn = try self.freshEmitName(loop.binding);
+                    const vn = try self.freshEmitName(loop.value_binding);
+                    loop.binding_emit_name = kn;
+                    scope.put(self.arena, loop.binding, .{ .ty = .i32, .mutable = loop.mutable, .emit_name = kn }) catch return error.OutOfMemory;
+                    scope.put(self.arena, loop.value_binding, .{ .ty = et, .mutable = loop.mutable, .emit_name = vn }) catch return error.OutOfMemory;
+                    loop.value_binding = vn;
+                    self.loop_depth += 1;
+                    defer self.loop_depth -= 1;
+                    try self.checkBlock(program, loop.body);
+                    return;
+                }
+            }
             const iter_type = self.exprType(program, loop.iterable, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer for-of iterable type");
             loop.iter_type = iter_type;
