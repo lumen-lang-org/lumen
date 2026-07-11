@@ -832,7 +832,7 @@ fn fileHash(arena: std.mem.Allocator, io: std.Io, path: []const u8) u64 {
     return std.hash.Wyhash.hash(0, data);
 }
 
-const Action = enum { build_exe, run_test, check_only };
+const Action = enum { build_exe, build_quiet, run_test, check_only };
 
 /// The ambient declarations that make Lumen `.ts` sources type-check under plain
 /// tsc/editors. Embedded from the repo's canonical `/lumen.d.ts` so `lumen init`
@@ -1210,7 +1210,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     var argv: std.ArrayListUnmanaged([]const u8) = .empty;
     const needs_xev = !wasm and std.mem.indexOf(u8, zig_src, "@import(\"xev\")") != null;
     switch (action) {
-        .build_exe => if (wasm) {
+        .build_exe, .build_quiet => if (wasm) {
             try argv.appendSlice(arena, &.{ "zig", "build-exe", gen_path, "-target", "wasm32-wasi", "-O", "ReleaseSmall", emit });
         } else if (needs_xev) {
             // libxev (the async event loop) is a pure-Zig dependency, not a system
@@ -1300,7 +1300,8 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     switch (result.term) {
         .exited => |code| {
             if (code == 0) {
-                try err.print("compiled {s} -> {s}\n", .{ path, exe_name });
+                // `lumen run` keeps the program's output clean: no compile banner.
+                if (action != .build_quiet) try err.print("compiled {s} -> {s}\n", .{ path, exe_name });
                 return 0;
             }
             try reportBackendFailure(err, source, path, zig_src, gen_path, result.stderr);
@@ -1466,7 +1467,7 @@ pub fn main(init: std.process.Init) !void {
             try err.writeAll("usage: lumen run [--release-fast] <file.ts> [args...]\n");
             break :blk 2;
         };
-        const compile_code = try compileFile(arena, io, src, mode, .build_exe, &.{}, false, false, err);
+        const compile_code = try compileFile(arena, io, src, mode, .build_quiet, &.{}, false, false, err);
         if (compile_code != 0) break :blk compile_code;
         try err.flush();
         // Execute ./<stem> forwarding trailing args.
