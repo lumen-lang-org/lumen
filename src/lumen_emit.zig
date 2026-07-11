@@ -1795,9 +1795,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     .str => |s| try emitStrLit(w, arena, s),
                 }
             } else if (fa.builtin == .length) {
-                try w.appendSlice(arena, "@as(i32, @intCast(");
-                try emitExpr(fa.obj, w, arena);
-                try w.appendSlice(arena, ".len))");
+                // A bare array-literal receiver lowers to a tuple, which has no
+                // runtime `.len`; but with no spread element (elem_type == null)
+                // its length is the static item count. Emit that directly.
+                if (fa.obj.* == .array and fa.obj.array.elem_type == null) {
+                    try w.print(arena, "@as(i32, {d})", .{fa.obj.array.items.len});
+                } else {
+                    try w.appendSlice(arena, "@as(i32, @intCast(");
+                    try emitExpr(fa.obj, w, arena);
+                    try w.appendSlice(arena, ".len))");
+                }
             } else if (fa.builtin == .container_size) {
                 try emitExpr(fa.obj, w, arena);
                 try w.appendSlice(arena, ".size()");
