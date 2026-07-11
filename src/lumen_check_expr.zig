@@ -631,6 +631,18 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (obj_type == .regexp and (std.mem.eql(u8, field.name, "source") or std.mem.eql(u8, field.name, "flags"))) {
                 return .string;
             }
+            if (obj_type == .optional) {
+                // Property read on a possibly-null value: name the value when
+                // it's a simple variable and point at the two idiomatic fixes.
+                const tn = types.tsName(self.arena, obj_type) catch "T | null";
+                const subject: []const u8 = if (field.obj.* == .var_ref)
+                    std.fmt.allocPrint(self.arena, "'{s}' (`{s}`)", .{ field.obj.var_ref.name, tn }) catch "value"
+                else
+                    std.fmt.allocPrint(self.arena, "value of type `{s}`", .{tn}) catch "value";
+                const msg = std.fmt.allocPrint(self.arena, "{s} may be null — check `!= null` before reading '.{s}', or use optional chaining `?.{s}`", .{ subject, field.name, field.name }) catch "possibly null";
+                _ = self.fail(line, col, msg) catch {};
+                return null;
+            }
             return switch (obj_type) {
                 .named => |type_name| self.fieldType(type_name, field.name, line, col),
                 .union_type => |union_name| blk2: {
@@ -828,7 +840,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 // Route through the shared call-argument checker so a constructor
                 // honors default and optional (`x?`) parameters, filling omitted
                 // trailing arguments with their default / null.
-                const normalized = self.checkCallArgs(program, ctor_params, ne.args, line, col) orelse return null;
+                const ctor_disp = std.fmt.allocPrint(self.arena, "constructor of '{s}'", .{ne.class_name}) catch "constructor";
+                const normalized = self.checkCallArgs(program, ctor_disp, ctor_params, ne.args, line, col) orelse return null;
                 ne.args = normalized;
             } else if (ne.args.len != 0) {
                 _ = self.fail(line, col, "E_ARG_COUNT") catch {};
@@ -984,6 +997,18 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             if (types.isHmac(obj_type)) {
                 return self.hmacMethod(program, mc, obj_type, line, col);
+            }
+            if (obj_type == .optional) {
+                // Method call on a possibly-null receiver: same guidance as a
+                // field read (narrow with `!= null`); `?.m()` is not supported.
+                const tn = types.tsName(self.arena, obj_type) catch "T | null";
+                const subject: []const u8 = if (mc.obj.* == .var_ref)
+                    std.fmt.allocPrint(self.arena, "'{s}' (`{s}`)", .{ mc.obj.var_ref.name, tn }) catch "value"
+                else
+                    std.fmt.allocPrint(self.arena, "value of type `{s}`", .{tn}) catch "value";
+                const msg = std.fmt.allocPrint(self.arena, "{s} may be null — check `!= null` before calling '.{s}()'", .{ subject, mc.name }) catch "possibly null";
+                _ = self.fail(line, col, msg) catch {};
+                return null;
             }
             if (obj_type != .class_type) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
@@ -1402,7 +1427,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
                 call.ref_args = flags;
             }
-            call.args = self.checkCallArgs(program, func.params, call.args, line, col) orelse return null;
+            const callee_disp = std.fmt.allocPrint(self.arena, "'{s}'", .{call.name}) catch "function";
+            call.args = self.checkCallArgs(program, callee_disp, func.params, call.args, line, col) orelse return null;
             if (func.is_extern) {
                 // Mark string params/return so the emitter inserts the FFI
                 // marshalling glue (NUL-terminate in, copy out).

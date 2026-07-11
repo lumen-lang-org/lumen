@@ -814,7 +814,11 @@ pub const Checker = struct {
     /// collected into an array literal). Spread arguments (`...src`) are only
     /// permitted feeding a rest parameter. Returns null after recording a
     /// diagnostic on any mismatch.
-    pub fn checkCallArgs(self: *Checker, program: *ast.Program, params: []const ast.FunctionParam, args: []const *ast.Expr, line: u32, col: u32) ?[]*ast.Expr {
+    fn plural(n: usize) []const u8 {
+        return if (n == 1) "" else "s";
+    }
+
+    pub fn checkCallArgs(self: *Checker, program: *ast.Program, callee: []const u8, params: []const ast.FunctionParam, args: []const *ast.Expr, line: u32, col: u32) ?[]*ast.Expr {
         const has_rest = params.len > 0 and params[params.len - 1].is_rest;
         const fixed_count = if (has_rest) params.len - 1 else params.len;
 
@@ -834,7 +838,15 @@ pub const Checker = struct {
         }
 
         if (args.len < required or (!has_rest and args.len > fixed_count)) {
-            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            // "expects 2 arguments", "expects 1-3 arguments" (defaults/optionals),
+            // "expects at least 1 argument" (rest param).
+            const expected: []const u8 = blk: {
+                if (has_rest) break :blk std.fmt.allocPrint(self.arena, "at least {d} argument{s}", .{ required, plural(required) }) catch "";
+                if (required == fixed_count) break :blk std.fmt.allocPrint(self.arena, "{d} argument{s}", .{ required, plural(required) }) catch "";
+                break :blk std.fmt.allocPrint(self.arena, "{d}-{d} arguments", .{ required, fixed_count }) catch "";
+            };
+            const msg = std.fmt.allocPrint(self.arena, "{s} expects {s}, got {d}", .{ callee, expected, args.len }) catch "E_ARG_COUNT";
+            _ = self.fail(line, col, msg) catch {};
             return null;
         }
 

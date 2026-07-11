@@ -27,7 +27,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 }
                 return self.fail(line, col, "E_TYPE_MISMATCH");
             }
-            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .int_literal_union => |type_name| {
@@ -39,12 +39,12 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 }
                 return self.fail(line, col, "E_TYPE_MISMATCH");
             }
-            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .named => |type_name| {
             if (value.* != .obj) {
-                const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+                const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
                 if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
                 return;
             }
@@ -97,7 +97,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // A union value flows through (same union, narrowed variant, or a
             // value already typed as one of the variants).
             if (value.* != .obj) {
-                const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+                const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
                 if (types.same(expected, actual_type)) return;
                 if (actual_type == .named) {
                     for (uinfo.variants) |v| {
@@ -129,7 +129,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
         },
         .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array => {
             if (value.* != .array) {
-                const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+                const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
                 if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
                 return;
             }
@@ -155,7 +155,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 .array => |a| a.items,
                 .tuple_lit => |t| t.items,
                 else => {
-                    const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+                    const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
                     if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
                     return;
                 },
@@ -178,7 +178,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // an i32-*typed variable* still can't implicitly narrow/widen
             // into an i64 slot, matching every other integer width here.
             if (value.* == .num) return;
-            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .f64 => {
@@ -189,7 +189,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // itself coerces to f64 without any extra cast needed here --
             // this is purely a checker-side gap, not an emit-side one.
             if (value.* == .num) return;
-            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .func_type => |fsig| {
@@ -203,11 +203,11 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 if (!types.same(expected, actual)) return self.fail(line, col, "E_TYPE_MISMATCH");
                 return;
             }
-            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         else => {
-            const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
+            const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
     }
