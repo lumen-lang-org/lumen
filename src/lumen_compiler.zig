@@ -291,7 +291,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         };
 
         try out.print(arena, "const __lumen_file = \"{s}\";\n", .{safe_name});
-        try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\n");
+        try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\nvar __lumen_throwing: bool = false;\n");
         // Call-stack frames for runtime stack traces. Each user function pushes a
         // frame on entry (recording its name and the caller's statement position,
         // i.e. the call site) and pops on exit. Depth keeps counting past the
@@ -323,7 +323,8 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         // the offending source line + a caret.
         try out.appendSlice(arena,
             \\fn __lumenPanic(msg: []const u8, _: ?usize) noreturn {
-            \\    std.debug.print("\n{s}:{d}:{d}: runtime error: {s}\n", .{ __lumen_file, __lumen_line, __lumen_col, msg });
+            \\    const __kind: []const u8 = if (__lumen_throwing) "Uncaught Error" else "runtime error";
+            \\    std.debug.print("\n{s}:{d}:{d}: {s}: {s}\n", .{ __lumen_file, __lumen_line, __lumen_col, __kind, msg });
             \\    var __it = std.mem.splitScalar(u8, __lumen_src, '\n');
             \\    var __n: u32 = 1;
             \\    while (__it.next()) |__l| : (__n += 1) {

@@ -619,7 +619,11 @@ fn stmtUsesName(stmt: *const Stmt, name: []const u8) bool {
             for (sc.args) |it| if (exprUsesName(it, name)) break :blk true;
             break :blk false;
         },
-        .console_log => |log| exprUsesName(log.value, name),
+        .console_log => |log| blk: {
+            if (exprUsesName(log.value, name)) break :blk true;
+            for (log.extra_values) |v| if (exprUsesName(v, name)) break :blk true;
+            break :blk false;
+        },
         .return_stmt => |r| if (r.value) |x| exprUsesName(x, name) else false,
         .throw_stmt => |t| exprUsesName(t.value, name),
         .expr_stmt => |x| exprUsesName(x.value, name),

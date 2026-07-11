@@ -808,7 +808,9 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try emitExpr(throw_stmt.value, body, arena);
                 try body.print(arena, ";\n    break :{s};\n", .{label});
             } else {
-                try body.appendSlice(arena, "    @panic(");
+                // An uncaught throw: flag it so the panic handler labels it
+                // "Uncaught Error" rather than a generic runtime error.
+                try body.appendSlice(arena, "    __lumen_throwing = true;\n    @panic(");
                 try emitExpr(throw_stmt.value, body, arena);
                 try body.appendSlice(arena, ");\n");
             }
@@ -857,7 +859,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                         const outer_label = try std.mem.replaceOwned(u8, arena, outer, "__lumen_throw_", "__lumen_try_");
                         try body.print(arena, "    {s} = __lumen_rethrow;\n    break :{s};\n", .{ outer, outer_label });
                     } else {
-                        try body.appendSlice(arena, "    @panic(__lumen_rethrow);\n");
+                        try body.appendSlice(arena, "    __lumen_throwing = true;\n    @panic(__lumen_rethrow);\n");
                     }
                     try body.appendSlice(arena, "    }\n");
                 }
