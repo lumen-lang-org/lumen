@@ -74,6 +74,21 @@ fn humanizeDiag(code: []const u8) []const u8 {
 /// unset). Decided once at startup.
 var g_color: bool = false;
 
+/// Merged-source line origins for the file being compiled (import inlining
+/// shifts lines); empty when unavailable. Diagnostics display the origin
+/// file:line while excerpts read the merged text (identical content).
+var g_line_map: []const LineOrigin = &.{};
+
+fn diagOrigin(fallback_file: []const u8, line: u32) LineOrigin {
+    if (line >= 1 and line - 1 < g_line_map.len) {
+        var o = g_line_map[line - 1];
+        // Normalize a `././`-style join for display.
+        while (std.mem.startsWith(u8, o.file, "./")) o.file = o.file[2..];
+        return o;
+    }
+    return .{ .file = fallback_file, .line = line };
+}
+
 const C_BOLD_RED = "\x1b[1;31m";
 const C_BOLD = "\x1b[1m";
 const C_CYAN = "\x1b[36m";
@@ -82,10 +97,11 @@ const C_DIM = "\x1b[2m";
 const C_RESET = "\x1b[0m";
 
 fn printOneDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: compiler.Diag) !void {
+    const origin = diagOrigin(file, diag.line);
     if (g_color) {
-        try err.print(C_CYAN ++ "{s}:{d}:{d}:" ++ C_RESET ++ " " ++ C_BOLD_RED ++ "error:" ++ C_RESET ++ " " ++ C_BOLD ++ "{s}" ++ C_RESET ++ "\n", .{ file, diag.line, diag.col, humanizeDiag(diag.msg) });
+        try err.print(C_CYAN ++ "{s}:{d}:{d}:" ++ C_RESET ++ " " ++ C_BOLD_RED ++ "error:" ++ C_RESET ++ " " ++ C_BOLD ++ "{s}" ++ C_RESET ++ "\n", .{ origin.file, origin.line, diag.col, humanizeDiag(diag.msg) });
     } else {
-        try err.print("{s}:{d}:{d}: error: {s}\n", .{ file, diag.line, diag.col, humanizeDiag(diag.msg) });
+        try err.print("{s}:{d}:{d}: error: {s}\n", .{ origin.file, origin.line, diag.col, humanizeDiag(diag.msg) });
     }
     var it = std.mem.splitScalar(u8, source, '\n');
     var n: u32 = 1;
@@ -93,9 +109,9 @@ fn printOneDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag:
         if (n == diag.line) {
             const trimmed = std.mem.trimEnd(u8, line, "\r");
             if (g_color) {
-                try err.print(C_DIM ++ "  {d} |" ++ C_RESET ++ " {s}\n" ++ C_DIM ++ "    |" ++ C_RESET ++ " ", .{ diag.line, trimmed });
+                try err.print(C_DIM ++ "  {d} |" ++ C_RESET ++ " {s}\n" ++ C_DIM ++ "    |" ++ C_RESET ++ " ", .{ origin.line, trimmed });
             } else {
-                try err.print("  {d} | {s}\n    | ", .{ diag.line, trimmed });
+                try err.print("  {d} | {s}\n    | ", .{ origin.line, trimmed });
             }
             var col: u32 = 1;
             while (col < diag.col) : (col += 1) try err.writeByte(' ');
@@ -151,16 +167,17 @@ fn printWarnings(err: *std.Io.Writer, source: []const u8, file: []const u8, warn
             }
             if (skip) continue;
         }
+        const worigin = diagOrigin(file, w.line);
         if (g_color) {
-            try err.print(C_CYAN ++ "{s}:{d}:{d}:" ++ C_RESET ++ " " ++ C_BOLD_YELLOW ++ "warning:" ++ C_RESET ++ " {s}\n", .{ file, w.line, w.col, w.msg });
+            try err.print(C_CYAN ++ "{s}:{d}:{d}:" ++ C_RESET ++ " " ++ C_BOLD_YELLOW ++ "warning:" ++ C_RESET ++ " {s}\n", .{ worigin.file, worigin.line, w.col, w.msg });
         } else {
-            try err.print("{s}:{d}:{d}: warning: {s}\n", .{ file, w.line, w.col, w.msg });
+            try err.print("{s}:{d}:{d}: warning: {s}\n", .{ worigin.file, worigin.line, w.col, w.msg });
         }
         var it = std.mem.splitScalar(u8, source, '\n');
         var n: u32 = 1;
         while (it.next()) |line| : (n += 1) {
             if (n == w.line) {
-                try err.print("  {d} | {s}\n", .{ w.line, std.mem.trimEnd(u8, line, "\r") });
+                try err.print("  {d} | {s}\n", .{ worigin.line, std.mem.trimEnd(u8, line, "\r") });
                 break;
             }
         }
@@ -515,11 +532,16 @@ fn appendTransformed(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
     }
 }
 
+/// Origin of one line of the merged (import-inlined) source: which file and
+/// which line within it, so diagnostics point at the file the user wrote.
+const LineOrigin = struct { file: []const u8, line: u32 };
+
 fn appendExpandedSource(
     arena: std.mem.Allocator,
     io: std.Io,
     path: []const u8,
     out: *std.ArrayListUnmanaged(u8),
+    line_map: *std.ArrayListUnmanaged(LineOrigin),
     visiting: *std.StringHashMapUnmanaged(void),
     emitted: *std.StringHashMapUnmanaged(void),
     import_kind: ?ImportSpec.Kind,
@@ -582,8 +604,18 @@ fn appendExpandedSource(
     // Tests belong to the module under test, not to importers: strip `test "…"`
     // blocks from imported modules (depth > 0) so they don't leak into the build.
     var test_skip: i32 = 0;
+    var src_line: u32 = 0;
     var lines = std.mem.splitScalar(u8, source, '\n');
     while (lines.next()) |line| {
+        src_line += 1;
+        const out_len_before = out.items.len;
+        var child_recorded = false;
+        // Record where any lines appended for this source line came from.
+        // A spliced import records its own origins during recursion.
+        defer if (!child_recorded) {
+            var nl = std.mem.count(u8, out.items[out_len_before..], "\n");
+            while (nl > 0) : (nl -= 1) line_map.append(arena, .{ .file = path, .line = src_line }) catch {};
+        };
         if (test_skip > 0) {
             test_skip += braceDelta(line);
             continue;
@@ -601,7 +633,8 @@ fn appendExpandedSource(
                 try joinUrl(arena, dir, import_spec.spec)
             else
                 try std.fs.path.join(arena, &.{ dir, import_spec.spec });
-            try appendExpandedSource(arena, io, imported_path, out, visiting, emitted, import_spec.kind, depth + 1);
+            child_recorded = true;
+            try appendExpandedSource(arena, io, imported_path, out, line_map, visiting, emitted, import_spec.kind, depth + 1);
             continue;
         }
         const trimmed = std.mem.trim(u8, line, " \t\r");
@@ -624,7 +657,8 @@ fn appendExpandedSource(
             else
                 try std.fs.path.join(arena, &.{ dir, re.spec });
             const re_kind: ?ImportSpec.Kind = if (re.binds) |b| .{ .named = b } else null;
-            try appendExpandedSource(arena, io, re_path, out, visiting, emitted, re_kind, depth + 1);
+            child_recorded = true;
+            try appendExpandedSource(arena, io, re_path, out, line_map, visiting, emitted, re_kind, depth + 1);
             continue;
         }
         // `export { a, b }` re-export lists carry no declaration of their own:
@@ -645,12 +679,15 @@ fn appendExpandedSource(
     try emitted.put(arena, key, {});
 }
 
-fn readSourceWithImports(arena: std.mem.Allocator, io: std.Io, path: []const u8) ![]const u8 {
+const ExpandedSource = struct { text: []const u8, line_map: []const LineOrigin };
+
+fn readSourceWithImports(arena: std.mem.Allocator, io: std.Io, path: []const u8) !ExpandedSource {
     var out: std.ArrayListUnmanaged(u8) = .empty;
+    var line_map: std.ArrayListUnmanaged(LineOrigin) = .empty;
     var visiting: std.StringHashMapUnmanaged(void) = .empty;
     var emitted: std.StringHashMapUnmanaged(void) = .empty;
-    try appendExpandedSource(arena, io, path, &out, &visiting, &emitted, null, 0);
-    return out.items;
+    try appendExpandedSource(arena, io, path, &out, &line_map, &visiting, &emitted, null, 0);
+    return .{ .text = out.items, .line_map = line_map.items };
 }
 
 /// Walks the LOCAL import closure of `path`, appending each resolved local file
@@ -1167,7 +1204,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         return 2;
     }
 
-    const source = readSourceWithImports(arena, io, path) catch |e| {
+    const expanded = readSourceWithImports(arena, io, path) catch |e| {
         switch (e) {
             error.InvalidImport => try err.print("{s}:1:1: error: E_UNSUPPORTED_IMPORT\n", .{path}),
             error.ImportReadFailed => try err.print("{s}:1:1: error: E_IMPORT_NOT_FOUND\n", .{path}),
@@ -1178,6 +1215,9 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         }
         return 2;
     };
+    const source = expanded.text;
+    g_line_map = expanded.line_map;
+    defer g_line_map = &.{};
 
     var diag: compiler.Diag = .{};
     var warnings: std.ArrayListUnmanaged(compiler.Diag) = .empty;
