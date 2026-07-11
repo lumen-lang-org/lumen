@@ -85,6 +85,9 @@ pub const FunctionParam = struct {
     // which needs explicit `.*` on reads and assignments in the body. Record and
     // tuple inner types rely on Zig's single-pointer field auto-deref instead.
     ref_scalar: bool = false,
+    // A constructor parameter property (`constructor(public x: T)`): declares a
+    // field `x` and assigns `this.x = x` at construction.
+    is_property: bool = false,
 };
 
 /// `extern function name(params): ret;` — an external C-ABI function. No body;

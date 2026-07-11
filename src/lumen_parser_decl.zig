@@ -254,6 +254,17 @@ pub fn parseParamList(self: *Parser) CompileError![]ast.FunctionParam {
             is_rest = true;
             seen_rest = true;
         }
+        // A constructor parameter property modifier (`public`/`private`/
+        // `protected`/`readonly`) before the name declares a field of that name.
+        // Harmless for non-constructor params (they never carry one).
+        var is_property = false;
+        while (self.cur == .ident and
+            (std.mem.eql(u8, self.cur.ident, "public") or std.mem.eql(u8, self.cur.ident, "private") or
+                std.mem.eql(u8, self.cur.ident, "protected") or std.mem.eql(u8, self.cur.ident, "readonly")))
+        {
+            is_property = true;
+            try self.advance();
+        }
         if (self.cur != .ident) return error.ParseError;
         const param_name = self.cur.ident;
         try self.advance();
@@ -268,7 +279,7 @@ pub fn parseParamList(self: *Parser) CompileError![]ast.FunctionParam {
             try self.advance();
             default_value = try self.parseExpr();
         }
-        try params.append(self.arena, .{ .name = param_name, .annotation = annotation, .is_rest = is_rest, .default = default_value, .is_optional = is_optional });
+        try params.append(self.arena, .{ .name = param_name, .annotation = annotation, .is_rest = is_rest, .default = default_value, .is_optional = is_optional, .is_property = is_property });
         if (self.isOp(',')) try self.advance() else break;
     }
     // A rest parameter must be the final parameter.
@@ -439,6 +450,14 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             ctor_params = try self.parseParamList();
             ctor_body = try self.parseBlock();
             has_ctor = true;
+            // Parameter properties: each `public/private/... p: T` ctor param
+            // declares a field `p` and assigns `this.p = p` at construction.
+            for (ctor_params) |p| {
+                if (!p.is_property) continue;
+                try fields.append(self.arena, .{ .name = p.name, .annotation = p.annotation });
+                const p_ref = try self.node(.{ .var_ref = .{ .name = p.name } });
+                try field_inits.append(self.arena, .{ .member_assign = .{ .field = p.name, .value = p_ref, .line = m_line, .col = m_col } });
+            }
         } else if (self.isOp('(')) {
             // method (or accessor)
             const params = try self.parseParamList();
