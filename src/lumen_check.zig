@@ -259,6 +259,13 @@ pub const Checker = struct {
     pub fn failTypeMismatch(self: *Checker, line: u32, col: u32, expected: types.Type, actual: types.Type) CompileError {
         const en = types.tsName(self.arena, expected) catch return self.fail(line, col, "E_TYPE_MISMATCH");
         const an = types.tsName(self.arena, actual) catch return self.fail(line, col, "E_TYPE_MISMATCH");
+        // A subclass value in a superclass slot: no vtables in V1, so class
+        // values are not polymorphic — explain rather than a bare mismatch.
+        if (expected == .class_type and actual == .class_type and self.isSubclassOf(actual.class_type, expected.class_type)) {
+            const msg2 = std.fmt.allocPrint(self.arena, "class values are not polymorphic — a `{s}` slot cannot hold a `{s}`; declare it as `{s}`, or model the variants as a discriminated union", .{ en, an, an }) catch
+                return self.fail(line, col, "E_TYPE_MISMATCH");
+            return self.fail(line, col, msg2);
+        }
         // A Promise<T> where T was expected is almost always a missing await.
         const forgot_await = actual == .promise_type and types.same(expected, actual.promise_type.*);
         const msg = if (forgot_await)
