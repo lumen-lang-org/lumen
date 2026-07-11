@@ -3529,6 +3529,18 @@ pub fn stringCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
 }
 
 pub fn arrayCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    // Array.isArray(x): types are static, so the answer is a compile-time
+    // bool (spec 275). checked_arg_type carries the verdict for emission.
+    if (std.mem.eql(u8, call.name, "isArray")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const at = self.exprType(program, call.args[0], line, col) orelse return null;
+        call.checked_arg_type = if (types.isArray(at)) .bool else .void; // bool => true, void => false
+        call.checked_type = .bool;
+        return .bool;
+    }
     // Array.of(...items): T[] -- build an array from the arguments (all one type).
     if (std.mem.eql(u8, call.name, "of")) {
         if (call.args.len < 1) {

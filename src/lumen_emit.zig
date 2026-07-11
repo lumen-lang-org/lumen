@@ -1093,6 +1093,13 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "isArray")) {
+                // Compile-time verdict; evaluate (and discard) the argument.
+                g_global_pred_seq += 1;
+                const seq = g_global_pred_seq;
+                try w.print(arena, "(__ia{d}: {{ _ = &(", .{seq});
+                try emitExpr(cl.args[0], w, arena);
+                try w.print(arena, "); break :__ia{d} {s}; }})", .{ seq, if ((cl.checked_arg_type orelse .void) == .bool) "true" else "false" });
             } else if (std.mem.eql(u8, cl.namespace, "Object") and std.mem.eql(u8, cl.name, "keys")) {
                 // Static key list; evaluate (and discard) the receiver so an
                 // otherwise-unused local still counts as referenced.
