@@ -1855,7 +1855,15 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, ")); break :__si{d} @as([]const u8, __str[__ix .. __ix + 1]); }})", .{s});
                 return;
             }
-            try emitExpr(idx.obj, w, arena);
+            // A bare array-literal receiver lowers to a tuple; wrap it in a real
+            // slice so a runtime index works (`["a","b"][x]`).
+            if (idx.obj.* == .array and idx.obj.array.elem_type == null and idx.checked_element_type != null) {
+                try w.print(arena, "@as([]const {s}, ", .{try types.zigName(arena, idx.checked_element_type.?)});
+                try emitExpr(idx.obj, w, arena);
+                try w.append(arena, ')');
+            } else {
+                try emitExpr(idx.obj, w, arena);
+            }
             try w.appendSlice(arena, "[@as(usize, @intCast(");
             try emitExpr(idx.value, w, arena);
             try w.appendSlice(arena, "))]");
