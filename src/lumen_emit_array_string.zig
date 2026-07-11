@@ -97,6 +97,20 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "flatMap")) {
+        // Concatenate each callback's returned array into one flat result.
+        const u = types.arrayElem(result) orelse return error.ParseError;
+        const u_zig = try types.zigName(arena, u);
+        const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
+        const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitArrayObj(mc, w, arena);
+        try w.appendSlice(arena, "; const __cb = ");
+        try emitExpr(mc.args[0], w, arena);
+        try w.print(arena, "; var __r: std.ArrayListUnmanaged({s}) = .empty; {s} {{ __r.appendSlice(__sa(), __cb.call(__cb.ctx, __e{s})) catch unreachable; }} break :{s} @as([]const {s}, __r.items); }})", .{ u_zig, loop_hdr, idx_arg, lbl, u_zig });
+        return;
+    }
+
     if (eq(u8, name, "filter")) {
         const loop_hdr = if (mc.cb_wants_index) "for (__arr, 0..) |__e, __i|" else "for (__arr) |__e|";
         const idx_arg = if (mc.cb_wants_index) ", @as(i32, @intCast(__i))" else "";

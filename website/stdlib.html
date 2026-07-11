@@ -172,6 +172,7 @@
     <tr><th>API</th><th>Type</th></tr>
     <tr><td><code>a[i]</code> · <code>a.length</code> · <code>a.at(i)</code></td><td>element access · int · T | null (<code>at</code> allows negative index)</td></tr>
     <tr><td><code>a.map(fn)</code></td><td>((T) =&gt; U) or ((T, int) =&gt; U) → U[] (optional index)</td></tr>
+    <tr><td><code>a.flatMap(fn)</code></td><td>((T) =&gt; U[]) or ((T, int) =&gt; U[]) → U[] (each callback's array concatenated into one flat array)</td></tr>
     <tr><td><code>a.filter(fn)</code></td><td>((T) or (T, int) =&gt; bool) → T[] (optional index)</td></tr>
     <tr><td><code>a.reduce(fn, init)</code> · <code>a.reduceRight(fn, init)</code></td><td>(((U, T) or (U, T, int) =&gt; U), U) → U (optional index; <code>reduceRight</code> folds from the end)</td></tr>
     <tr><td><code>a.forEach(fn)</code></td><td>((T) =&gt; void) or ((T, int) =&gt; void) → void (optional index)</td></tr>

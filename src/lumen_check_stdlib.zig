@@ -95,6 +95,31 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // flatMap((T) => U[]): U[] — the callback returns an array per element; the
+    // results are concatenated into one flat array. The optional second callback
+    // parameter is the element index.
+    if (eq(u8, name, "flatMap")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ elem, .i32 }, line, col) orelse return null;
+        if (cb_type != .func_type or !cbParamsMatch(cb_type.func_type.params, elem)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        // The callback must return an array; the result element type is that
+        // array's element type (a flat U[], never a nested array).
+        const ret = cb_type.func_type.ret.*;
+        if (!types.isArray(ret)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        mc.cb_wants_index = cb_type.func_type.params.len == 2;
+        mc.array_result_type = ret;
+        return ret;
+    }
+
     // forEach((T) => void): void or forEach((T, int) => void): void
     if (eq(u8, name, "forEach")) {
         if (mc.args.len != 1) {
