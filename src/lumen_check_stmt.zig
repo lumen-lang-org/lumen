@@ -751,9 +751,12 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 (types.arrayElem(iter_type) orelse return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH"))
             else if (types.isStringLike(iter_type))
                 .string
+            else if (iter_type == .set_type)
+                // `for (const v of set)` iterates the set's values (spec 268).
+                iter_type.set_type.*
             else {
                 const tn = types.tsName(self.arena, iter_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "`for...of` needs an array, string, or Map — got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "`for...of` needs an array, string, Set, or Map — got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
                 return self.fail(loop.line, loop.col, msg);
             };
             loop.elem_type = elem_type;

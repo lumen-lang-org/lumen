@@ -702,6 +702,8 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.print(arena, "    const {s}: []const {s} = ", .{ seq, elem_zig });
             }
             try emitExpr(loop.iterable, body, arena);
+            // A Set iterates its values slice (spec 268).
+            if (iter_ty == .set_type) try body.appendSlice(arena, ".values()");
             try body.appendSlice(arena, ";\n");
             try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
             try body.print(arena, "    {s}while ({s} < {s}.len) : ({s} += 1) {{\n", .{ try labelPrefix(arena, loop.label, loop.body), idx, seq, idx });
