@@ -453,7 +453,16 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return null;
             }
             const inner = left_type.optional.*;
+            // `a ?? b` where `b` is also `T | null` (a chained `a ?? b ?? d`)
+            // keeps the result optional; `b` flows through unwrapped only when it
+            // is the non-optional inner type.
+            const right_type = self.exprType(program, c.r, line, col) orelse return null;
+            if (right_type == .optional and types.same(right_type.optional.*, inner)) {
+                c.result_type = left_type;
+                return left_type;
+            }
             self.ensureAssignable(program, inner, c.r, line, col) catch return null;
+            c.result_type = inner;
             return inner;
         },
         .array => |*arr| {

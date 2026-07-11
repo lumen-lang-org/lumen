@@ -1529,9 +1529,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.append(arena, ')');
         },
         .coalesce => |c| {
-            try w.append(arena, '(');
+            // `l ?? r` as `if (l) |__cv| __cv else r`. Unlike `l orelse r`, this
+            // keeps the result optional when `r` is itself optional (a chained
+            // `a ?? b ?? d`), via Zig peer-type resolution of the two branches.
+            g_global_pred_seq += 1;
+            const s = g_global_pred_seq;
+            // Pin the then-branch to the result type so Zig peer-resolution keeps
+            // the whole expression optional when `r` is optional (chained `??`).
+            const rt = try types.zigName(arena, c.result_type orelse .none);
+            try w.appendSlice(arena, "(if (");
             try emitExpr(c.l, w, arena);
-            try w.appendSlice(arena, " orelse ");
+            try w.print(arena, ") |__cv{d}| @as({s}, __cv{d}) else ", .{ s, rt, s });
             try emitExpr(c.r, w, arena);
             try w.append(arena, ')');
         },

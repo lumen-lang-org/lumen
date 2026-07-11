@@ -554,7 +554,7 @@ pub const Expr = union(enum) {
     bool_bin: struct { op: []const u8, l: *Expr, r: *Expr }, // && ||
     cmp: struct { op: []const u8, l: *Expr, r: *Expr, checked_operand_type: ?types.Type = null, opt_cmp: u8 = 0 }, // < > <= >= == !=; opt_cmp: 1=left optional vs value, 2=right optional vs value
     ternary: struct { cond: *Expr, then_expr: *Expr, else_expr: *Expr },
-    coalesce: struct { l: *Expr, r: *Expr }, // a ?? b
+    coalesce: struct { l: *Expr, r: *Expr, result_type: ?types.Type = null }, // a ?? b; result_type is the checked result (optional for a chained `a ?? b ?? d`)
     arrow: *ArrowExpr, // (x: T) => expr
     this_expr, // `this` inside a method/constructor
     super_call: struct { name: []const u8, args: []*Expr, parent: ?[]const u8 = null }, // super.m(args)
