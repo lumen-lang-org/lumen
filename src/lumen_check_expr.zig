@@ -226,6 +226,24 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             {
                 return .bool;
             }
+            // Comparing an optional against a plain value (`map.get(k) === v`):
+            // null compares unequal; otherwise the inner value is compared.
+            if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and
+                left_type == .optional and right_type != .optional and right_type != .none and
+                types.same(left_type.optional.*, right_type))
+            {
+                cmp.opt_cmp = 1;
+                cmp.checked_operand_type = right_type;
+                return .bool;
+            }
+            if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and
+                right_type == .optional and left_type != .optional and left_type != .none and
+                types.same(right_type.optional.*, left_type))
+            {
+                cmp.opt_cmp = 2;
+                cmp.checked_operand_type = left_type;
+                return .bool;
+            }
             // A numeric literal union compares like its integer backing type.
             if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and
                 ((left_type == .int_literal_union and (right_type == .i32 or right_type == .int_literal_union)) or

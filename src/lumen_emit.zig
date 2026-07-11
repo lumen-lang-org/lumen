@@ -1415,6 +1415,29 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.append(arena, ')');
         },
         .cmp => |b| {
+            if (b.opt_cmp != 0) {
+                // `optional === value`: null compares unequal; otherwise unwrap
+                // and compare the inner value.
+                const opt_side = if (b.opt_cmp == 1) b.l else b.r;
+                const val_side = if (b.opt_cmp == 1) b.r else b.l;
+                const is_neq = std.mem.eql(u8, b.op, "!=");
+                const inner_str = b.checked_operand_type != null and b.checked_operand_type.? == .string;
+                try w.appendSlice(arena, "(if (");
+                try emitExpr(opt_side, w, arena);
+                try w.appendSlice(arena, ") |__ov| (");
+                if (inner_str) {
+                    if (is_neq) try w.append(arena, '!');
+                    try w.appendSlice(arena, "std.mem.eql(u8, __ov, ");
+                    try emitExpr(val_side, w, arena);
+                    try w.append(arena, ')');
+                } else {
+                    try w.appendSlice(arena, "__ov ");
+                    try w.appendSlice(arena, if (is_neq) "!= " else "== ");
+                    try emitExpr(val_side, w, arena);
+                }
+                try w.print(arena, ") else {s})", .{if (is_neq) "true" else "false"});
+                return;
+            }
             if (b.checked_operand_type != null and b.checked_operand_type.? == .string and (std.mem.eql(u8, b.op, "==") or std.mem.eql(u8, b.op, "!="))) {
                 if (std.mem.eql(u8, b.op, "!=")) try w.append(arena, '!');
                 try w.appendSlice(arena, "std.mem.eql(u8, ");
