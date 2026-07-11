@@ -443,6 +443,17 @@ pub const Checker = struct {
     }
 
     /// The variant of `union_name` selected by discriminant literal `value`.
+    /// For a two-variant union, the variant that is NOT `variant`; null for
+    /// unions of any other size (no unique complement).
+    pub fn otherVariant(self: *Checker, union_name: []const u8, variant: []const u8) ?[]const u8 {
+        const uinfo = self.unions.get(union_name) orelse return null;
+        if (uinfo.variants.len != 2) return null;
+        for (uinfo.variants) |v| {
+            if (!std.mem.eql(u8, v.name, variant)) return v.name;
+        }
+        return null;
+    }
+
     pub fn variantForValue(self: *Checker, union_name: []const u8, value: []const u8) ?[]const u8 {
         const uinfo = self.unions.get(union_name) orelse return null;
         for (uinfo.variants) |v| {

@@ -91,6 +91,10 @@ fn warnUnreachable(self: *Checker, body: []ast.Stmt) void {
 pub fn checkBlock(self: *Checker, program: *ast.Program, body: []ast.Stmt) CompileError!void {
     try self.pushScope();
     defer self.popScope();
+    // Early-return narrowing (spec 259) appends entries that live until the
+    // end of the enclosing block; restore the list on exit.
+    const nv_len = self.narrowed_variants.items.len;
+    defer self.narrowed_variants.items.len = nv_len;
     self.nested_stmt_depth += 1;
     defer self.nested_stmt_depth -= 1;
     warnUnreachable(self, body);
@@ -776,6 +780,10 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             // Discriminant narrowing: `if (s.kind === "circle")` narrows `s` to
             // the matching variant in the then-branch.
             var var_narrowed = false;
+            // For a two-variant union, the complement variant (used to narrow
+            // the else branch and, when the then-branch always exits, the
+            // rest of the enclosing block — spec 259).
+            var other_narrow: ?struct { name: []const u8, variant: []const u8 } = null;
             if (branch.cond.* == .cmp) {
                 const c = branch.cond.cmp;
                 if (std.mem.eql(u8, c.op, "==") or std.mem.eql(u8, c.op, "===")) {
@@ -793,6 +801,9 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                             const variant = self.variantForValue(d.union_name, lit.?) orelse return self.fail(branch.line, branch.col, "E_TYPE_MISMATCH");
                             self.narrowed_variants.append(self.arena, .{ .name = d.name, .variant = variant }) catch return error.OutOfMemory;
                             var_narrowed = true;
+                            if (self.otherVariant(d.union_name, variant)) |other| {
+                                other_narrow = .{ .name = d.name, .variant = other };
+                            }
                         }
                     }
                 }
@@ -814,7 +825,20 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 defer if (active) {
                     self.narrowed.items.len -= 1;
                 };
+                var else_narrowed = false;
+                if (other_narrow) |on| {
+                    self.narrowed_variants.append(self.arena, .{ .name = on.name, .variant = on.variant }) catch return error.OutOfMemory;
+                    else_narrowed = true;
+                }
+                defer if (else_narrowed) {
+                    self.narrowed_variants.items.len -= 1;
+                };
                 try self.checkBlock(program, else_body);
+            } else if (other_narrow != null and blockReturns(branch.then_body)) {
+                // `if (s.kind == "circle") { return ... }` — after the if, s
+                // can only be the other variant; the entry is cleared at the
+                // enclosing block's exit (checkBlock restores the list).
+                self.narrowed_variants.append(self.arena, .{ .name = other_narrow.?.name, .variant = other_narrow.?.variant }) catch return error.OutOfMemory;
             }
         },
         .switch_stmt => |*switch_stmt| {
