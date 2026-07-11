@@ -1980,6 +1980,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
 /// variant's object literal can omit the other variants' fields.
 pub const CompileOptions = struct {
     runtime_locations: bool = true,
+    // When set, non-fatal diagnostics (unused variables, ...) are appended here
+    // for the caller to render after the compile.
+    warnings: ?*std.ArrayListUnmanaged(@import("lumen_diag.zig").Diag) = null,
     // Threaded down from the CLI's `--wasm` flag (spec 049): wasm32-wasi has
     // no real OS threads, and the CLI's own libxev-wiring gate hard-fails any
     // wasm build whose generated source textually contains `@import("xev")`

@@ -204,7 +204,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         return e;
     };
 
-    try check.checkProgram(arena, &program, diag);
+    try check.checkProgram(arena, &program, diag, options.warnings);
 
     // Compile append-only string locals into growable buffers (O(n) builds).
     try markAccumulators(program.stmts, &.{}, arena);

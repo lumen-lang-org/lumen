@@ -116,6 +116,26 @@ fn printDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: co
     }
 }
 
+const C_BOLD_YELLOW = "\x1b[1;33m";
+
+fn printWarnings(err: *std.Io.Writer, source: []const u8, file: []const u8, warnings: []const compiler.Diag) !void {
+    for (warnings) |w| {
+        if (g_color) {
+            try err.print(C_CYAN ++ "{s}:{d}:{d}:" ++ C_RESET ++ " " ++ C_BOLD_YELLOW ++ "warning:" ++ C_RESET ++ " {s}\n", .{ file, w.line, w.col, w.msg });
+        } else {
+            try err.print("{s}:{d}:{d}: warning: {s}\n", .{ file, w.line, w.col, w.msg });
+        }
+        var it = std.mem.splitScalar(u8, source, '\n');
+        var n: u32 = 1;
+        while (it.next()) |line| : (n += 1) {
+            if (n == w.line) {
+                try err.print("  {d} | {s}\n", .{ w.line, std.mem.trimEnd(u8, line, "\r") });
+                break;
+            }
+        }
+    }
+}
+
 /// A parsed `import ... from "..."` clause. A module may be pulled in either by
 /// its default export (`import name from "..."`) or by a list of named exports
 /// (`import { a, b } from "..."`).
@@ -1123,13 +1143,17 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     };
 
     var diag: compiler.Diag = .{};
+    var warnings: std.ArrayListUnmanaged(compiler.Diag) = .empty;
     var zig_src = compiler.compileToZigWithOptions(arena, source, path, &diag, .{
         .runtime_locations = mode.runtimeLocations(),
         .wasm = wasm,
+        .warnings = &warnings,
     }) catch {
         try printDiag(err, source, path, diag);
+        try printWarnings(err, source, path, warnings.items);
         return 1;
     };
+    try printWarnings(err, source, path, warnings.items);
 
     // `lumen check`: diagnostics only — stop before writing or building anything.
     if (action == .check_only) {

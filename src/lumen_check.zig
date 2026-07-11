@@ -69,6 +69,9 @@ const Binding = struct {
     mutable: bool,
     decl: ?*ast.VarDecl = null,
     emit_name: []const u8,
+    // Whether the binding was ever referenced (read or written) after its
+    // declaration; unreferenced `let`/`const` bindings warn at scope exit.
+    used: bool = false,
     // True for a scalar `Ref<T>` parameter: reads and assignments of this name
     // lower through the pointer (`name.*`).
     ref_scalar: bool = false,
@@ -223,6 +226,8 @@ pub const Checker = struct {
     // Diagnostics collected while continuing past failed statements (multi-error
     // reporting). The first is the primary; the rest render as `extra`.
     all_diags: std.ArrayListUnmanaged(Diag) = .empty,
+    // Non-fatal diagnostics (unused variables, ...) surfaced after the compile.
+    warnings: std.ArrayListUnmanaged(Diag) = .empty,
 
     /// Record the last failure into the multi-error list (deduplicating exact
     /// repeats at the same position) so checking can continue.
@@ -417,6 +422,17 @@ pub const Checker = struct {
     }
 
     pub fn popScope(self: *Checker) void {
+        // Warn on `let`/`const` bindings never referenced after declaration.
+        // Underscore-prefixed names opt out, matching the common convention.
+        var it = self.scopes.items[self.scopes.items.len - 1].iterator();
+        while (it.next()) |entry| {
+            const b = entry.value_ptr.*;
+            if (b.used or b.decl == null) continue;
+            const name = entry.key_ptr.*;
+            if (name.len > 0 and name[0] == '_') continue;
+            const msg = std.fmt.allocPrint(self.arena, "unused variable '{s}'", .{name}) catch continue;
+            self.warnings.append(self.arena, .{ .line = b.decl.?.line, .col = b.decl.?.col, .msg = msg }) catch {};
+        }
         self.scopes.items.len -= 1;
     }
 
@@ -424,7 +440,10 @@ pub const Checker = struct {
         var i = self.scopes.items.len;
         while (i > 0) {
             i -= 1;
-            if (self.scopes.items[i].get(name)) |found| return found;
+            if (self.scopes.items[i].getPtr(name)) |found| {
+                found.used = true;
+                return found.*;
+            }
         }
         return null;
     }
@@ -442,7 +461,10 @@ pub const Checker = struct {
         var i = self.scopes.items.len;
         while (i > 0) {
             i -= 1;
-            if (self.scopes.items[i].getPtr(name)) |found| return found;
+            if (self.scopes.items[i].getPtr(name)) |found| {
+                found.used = true;
+                return found;
+            }
         }
         return null;
     }
@@ -898,6 +920,9 @@ pub const Checker = struct {
 
     fn checkProgram(self: *Checker, program: *ast.Program) CompileError!void {
         try self.pushScope();
+        // Pop the root scope on the way out so top-level unused-variable
+        // warnings are collected like any other scope's.
+        defer self.popScope();
         // `__LumenHttpRequest`/`__LumenHttpResponse` are registered eagerly,
         // unconditionally, rather than lazily when `http.createServer`'s call
         // site is checked (the way every other record-returning builtin's
@@ -1074,8 +1099,11 @@ pub fn findField(fields: []ast.FieldInit, name: []const u8) ?ast.FieldInit {
     return null;
 }
 
-pub fn checkProgram(arena: std.mem.Allocator, program: *ast.Program, diag: *Diag) CompileError!void {
+pub fn checkProgram(arena: std.mem.Allocator, program: *ast.Program, diag: *Diag, warnings: ?*std.ArrayListUnmanaged(Diag)) CompileError!void {
     var checker = Checker{ .arena = arena };
+    defer if (warnings) |w| {
+        w.appendSlice(arena, checker.warnings.items) catch {};
+    };
     checker.checkProgram(program) catch |e| {
         if (checker.all_diags.items.len > 0) {
             const first = checker.all_diags.items[0];
