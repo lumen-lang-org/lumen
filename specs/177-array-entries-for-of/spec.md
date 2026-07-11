@@ -37,11 +37,15 @@ iterable is the receiver array; `.entries()` exists only as a for-of iterable
   binding the `i32` index and the element each iteration. The Map pair branch is
   guarded off for this case.
 
+`map.entries()` is accepted too: it is the map itself as a key/value iterable,
+so it rewrites to the receiver and iterates like `for (const [k, v] of map)`.
+
 ## Requirements
 
 - **FR-001**: `for (const [i, v] of arr.entries())` binds `i: i32` and `v: T`.
 - **FR-002**: Works for an array variable and an array literal receiver.
 - **FR-003**: Map pair iteration and plain array for-of are unchanged.
+- **FR-004**: `for (const [k, v] of map.entries())` iterates the map.
 
 ## Success Criteria
 

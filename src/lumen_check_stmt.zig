@@ -548,6 +548,12 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     try self.checkBlock(program, loop.body);
                     return;
                 }
+                // `map.entries()` is just the map itself as a key/value iterable;
+                // rewrite to the receiver and let the Map pair path below handle it.
+                if (recv_ty == .map_type) {
+                    if (loop.iterable.method_call.args.len != 0) return self.fail(loop.line, loop.col, "E_ARG_COUNT");
+                    loop.iterable = recv;
+                }
             }
             const iter_type = self.exprType(program, loop.iterable, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer for-of iterable type");
