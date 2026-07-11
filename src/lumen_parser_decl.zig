@@ -67,6 +67,10 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             if (self.isOp(',')) try self.advance() else break;
         }
         try self.expectOp('}');
+        if (self.cur == .cmp and std.mem.eql(u8, self.cur.cmp, "|")) {
+            self.last_err = "union variants must be named types — declare each variant as its own `type` and write `type U = A | B`";
+            return error.ParseError;
+        }
         if (self.isOp(';')) try self.advance();
         return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .line = line, .col = col } };
     }

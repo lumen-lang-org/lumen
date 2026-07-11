@@ -341,7 +341,10 @@ pub fn checkVarDecl(self: *Checker, program: *ast.Program, decl: *ast.VarDecl) C
         try self.typeFromAnnotation(ann, decl.line, decl.col)
     else
         self.exprType(program, decl.init, decl.line, decl.col) orelse
-            return self.inferenceFail(decl.line, decl.col, "cannot infer variable type");
+            return self.inferenceFail(decl.line, decl.col, if (decl.init.* == .obj)
+                "an object literal needs a named record type — declare `type T = { ... }` and annotate: `const x: T = { ... }`"
+            else
+                "cannot infer variable type");
     if (final_type == .void) return self.fail(decl.line, decl.col, "E_VOID_VALUE");
     if (final_type == .none) return self.inferenceFail(decl.line, decl.col, "cannot infer type of null; annotate as T | null");
 
