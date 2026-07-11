@@ -569,7 +569,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                             }
                         }
                     } else {
-                        if (!types.isNumeric(expected_type) or !types.same(expected_type, actual_type)) {
+                        // f64 slot accepts an integer RHS via numeric
+                        // promotion (spec 256): `total += n`.
+                        if (expected_type == .f64 and types.isInteger(actual_type)) {
+                            assignment.value = self.wrapFloat(assignment.value) catch return error.OutOfMemory;
+                        } else if (!types.isNumeric(expected_type) or !types.same(expected_type, actual_type)) {
                             return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
                         }
                     }

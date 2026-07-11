@@ -304,6 +304,18 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 cmp.checked_operand_type = .f64;
                 return .bool;
             }
+            // JS-style numeric promotion (spec 256): comparing an integer
+            // value with a float promotes the integer side to f64.
+            if (left_type == .f64 and types.isInteger(right_type)) {
+                cmp.r = self.wrapFloat(cmp.r) catch return null;
+                cmp.checked_operand_type = .f64;
+                return .bool;
+            }
+            if (right_type == .f64 and types.isInteger(left_type)) {
+                cmp.l = self.wrapFloat(cmp.l) catch return null;
+                cmp.checked_operand_type = .f64;
+                return .bool;
+            }
             // String-backed enum equality uses content comparison.
             if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and
                 left_type == .enum_type and right_type == .enum_type and
