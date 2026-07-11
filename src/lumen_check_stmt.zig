@@ -248,6 +248,10 @@ pub fn stmtReturns(stmt: ast.Stmt) bool {
             }
             break :blk true;
         },
+        // A try/catch returns on all paths when both the try body and the catch
+        // body return. (The emit appends an `unreachable` when the try can throw
+        // so Zig's flow analysis agrees.) A try with no catch does not.
+        .try_stmt => |t| t.catch_body.len != 0 and blockReturns(t.try_body) and blockReturns(t.catch_body),
         else => false,
     };
 }

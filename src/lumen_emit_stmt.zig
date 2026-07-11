@@ -845,6 +845,16 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 if (throw_target != null and analysis.stmtAlwaysThrows(catch_stmt)) break;
             }
             try body.appendSlice(arena, "    }\n");
+            // When the try can throw and both the try and catch bodies always
+            // return/throw, the outer block cannot fall through — the non-throw
+            // path returned inside the labeled block, and the throw path returns
+            // in the catch. Emit `unreachable` so Zig's flow analysis agrees a
+            // function ending in this try needs no dead trailing return.
+            if (can_throw and try_stmt.catch_body.len > 0 and
+                analysis.bodyAlwaysReturns(try_stmt.try_body) and analysis.bodyAlwaysReturns(try_stmt.catch_body))
+            {
+                try body.appendSlice(arena, "    unreachable;\n");
+            }
             try body.appendSlice(arena, "    }\n");
         },
         .defer_stmt => |d| {
