@@ -1376,9 +1376,13 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.append(arena, ')');
         },
         .bnot => |inner| {
-            try w.appendSlice(arena, "~(");
+            // Bitwise NOT needs a fixed-width operand: `~` on a bare
+            // `comptime_int` literal (`~5`) is a Zig error. Pin to i32 (JS
+            // bitwise operates on 32-bit integers), which is a no-op for an
+            // already-i32 operand.
+            try w.appendSlice(arena, "~(@as(i32, ");
             try emitExpr(inner, w, arena);
-            try w.append(arena, ')');
+            try w.appendSlice(arena, "))");
         },
         .await_expr => |inner| {
             // Drive the event loop until the awaited promise resolves, then read
