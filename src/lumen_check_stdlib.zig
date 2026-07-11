@@ -3109,6 +3109,10 @@ pub fn jsonCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         // T is inferred from the argument, same as every other Lumen
         // builtin -- no explicit type argument needed (there's a real
         // value to infer from, unlike parse<T> below).
+        if (call.args[0].* == .obj) {
+            _ = self.fail(line, col, "JSON.stringify needs a typed value — bind the object literal to a named record type first (`const v: T = { ... }`)") catch {};
+            return null;
+        }
         const value_type = self.exprType(program, call.args[0], line, col) orelse return null;
         if (!jsonSerializable(value_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};

@@ -207,10 +207,10 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
         }
         if (parent_needs_super and !has_super) return self.fail(c.line, c.col, "E_MISSING_SUPER");
         for (c.ctor_body) |*body_stmt| try self.checkStmt(program, body_stmt);
-    } else if (parent_needs_super) {
-        // No constructor at all but the parent demands super args.
-        return self.fail(c.line, c.col, "E_MISSING_SUPER");
     }
+    // A derived class with no constructor of its own inherits the parent's
+    // (TS semantics): `new Dog("rex")` routes the args to Animal's ctor, and
+    // the new-site arity check already validates them (spec 269).
     for (c.methods) |*m| try self.checkFunctionBody(program, m);
 }
 
