@@ -523,6 +523,8 @@ pub const Checker = struct {
             if (name.len > 0 and name[0] == '_') continue;
             const msg = std.fmt.allocPrint(self.arena, "unused variable '{s}'", .{name}) catch continue;
             self.warnings.append(self.arena, .{ .line = b.decl.?.line, .col = b.decl.?.col, .msg = msg }) catch {};
+            // Zig rejects unused locals; mark the decl so emission discards it.
+            b.decl.?.unused = true;
         }
         self.scopes.items.len -= 1;
     }

@@ -53,6 +53,11 @@ fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: s
         try emitExpr(decl.init, body, arena);
         try body.appendSlice(arena, ";\n");
     }
+    // A never-referenced binding warned at check time still compiles (JS
+    // semantics); discard it so Zig accepts the unused local (spec 280).
+    if (decl.unused) {
+        try body.print(arena, "    _ = &{s};\n", .{decl.emit_name orelse decl.name});
+    }
 }
 
 var g_log_seq: usize = 0;
