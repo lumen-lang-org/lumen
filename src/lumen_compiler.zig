@@ -291,7 +291,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         };
 
         try out.print(arena, "const __lumen_file = \"{s}\";\n", .{safe_name});
-        try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\nvar __lumen_throwing: bool = false;\n");
+        try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\nvar __lumen_throwing: bool = false;\nvar __lumen_color: bool = false;\n");
         // Call-stack frames for runtime stack traces. Each user function pushes a
         // frame on entry (recording its name and the caller's statement position,
         // i.e. the call site) and pops on exit. Depth keeps counting past the
@@ -324,15 +324,20 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         try out.appendSlice(arena,
             \\fn __lumenPanic(msg: []const u8, _: ?usize) noreturn {
             \\    const __kind: []const u8 = if (__lumen_throwing) "Uncaught Error" else "runtime error";
-            \\    std.debug.print("\n{s}:{d}:{d}: {s}: {s}\n", .{ __lumen_file, __lumen_line, __lumen_col, __kind, msg });
+            \\    const __cc: []const u8 = if (__lumen_color) "\x1b[36m" else "";
+            \\    const __cr: []const u8 = if (__lumen_color) "\x1b[1;31m" else "";
+            \\    const __cg: []const u8 = if (__lumen_color) "\x1b[32m" else "";
+            \\    const __cd: []const u8 = if (__lumen_color) "\x1b[2m" else "";
+            \\    const __c0: []const u8 = if (__lumen_color) "\x1b[0m" else "";
+            \\    std.debug.print("\n{s}{s}:{d}:{d}:{s} {s}{s}:{s} {s}\n", .{ __cc, __lumen_file, __lumen_line, __lumen_col, __c0, __cr, __kind, __c0, msg });
             \\    var __it = std.mem.splitScalar(u8, __lumen_src, '\n');
             \\    var __n: u32 = 1;
             \\    while (__it.next()) |__l| : (__n += 1) {
             \\        if (__n == __lumen_line) {
-            \\            std.debug.print("  {d} | {s}\n    | ", .{ __lumen_line, __l });
+            \\            std.debug.print("{s}  {d} |{s} {s}\n{s}    |{s} ", .{ __cd, __lumen_line, __c0, __l, __cd, __c0 });
             \\            var __k: u32 = 1;
             \\            while (__k < __lumen_col) : (__k += 1) std.debug.print(" ", .{});
-            \\            std.debug.print("^\n", .{});
+            \\            std.debug.print("{s}^{s}\n", .{ __cg, __c0 });
             \\            break;
             \\        }
             \\    }
@@ -2975,6 +2980,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     if (program.uses_io) {
         try out.appendSlice(arena, "pub fn main(__init: std.process.Init) !void {\n");
         try out.appendSlice(arena, "    __io = __init.io;\n    __alloc = __init.arena.allocator();\n");
+        try out.appendSlice(arena, "    __lumen_color = (__init.environ_map.get(\"NO_COLOR\") == null) and (std.Io.File.stderr().isTty(__init.io) catch false);\n");
         if (program.needs_args) {
             try out.appendSlice(arena, "    __lumen_argv = __init.minimal.args.toSlice(__alloc) catch std.process.exit(1);\n");
         }
