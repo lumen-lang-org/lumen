@@ -126,8 +126,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
         // A float literal is `comptime_float` (f128) in Zig; left bare, chains of
         // literal arithmetic fold at f128 precision and print extra digits
         // (`0.1 + 0.2` -> `0.3000...0004`). Pin it to f64 so arithmetic and
-        // formatting match JS's double semantics.
-        .float => |v| try w.print(arena, "@as(f64, {d})", .{v}),
+        // formatting match JS's double semantics. Use `{e}` (shortest
+        // round-trip scientific) rather than `{d}`: `{d}` expands a large
+        // magnitude like `1e308` to a 309-digit integer literal that Zig cannot
+        // coerce to f64, whereas `{e}` always yields a valid float literal.
+        .float => |v| try w.print(arena, "@as(f64, {e})", .{v}),
         .regex => |rx| {
             try w.appendSlice(arena, "__LumenRegExp{ .source = ");
             try emitRawStrLit(w, arena, rx.source);
