@@ -292,6 +292,23 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
 
         try out.print(arena, "const __lumen_file = \"{s}\";\n", .{safe_name});
         try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\n");
+        // Call-stack frames for runtime stack traces. Each user function pushes a
+        // frame on entry (recording its name and the caller's statement position,
+        // i.e. the call site) and pops on exit. Depth keeps counting past the
+        // fixed capacity so a deep recursion still reports its true depth.
+        try out.appendSlice(arena,
+            \\const __LumenFrame = struct { name: []const u8, line: u32, col: u32 };
+            \\var __lumen_stack: [128]__LumenFrame = undefined;
+            \\var __lumen_depth: usize = 0;
+            \\fn __lumenPush(name: []const u8) void {
+            \\    if (__lumen_depth < __lumen_stack.len) __lumen_stack[__lumen_depth] = .{ .name = name, .line = __lumen_line, .col = __lumen_col };
+            \\    __lumen_depth += 1;
+            \\}
+            \\fn __lumenPop() void {
+            \\    __lumen_depth -= 1;
+            \\}
+            \\
+        );
         // Embed the .ts source as a multiline string (no escaping needed) so the handler can show the line.
         try out.appendSlice(arena, "const __lumen_src =\n");
         {
@@ -317,6 +334,24 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\            std.debug.print("^\n", .{});
             \\            break;
             \\        }
+            \\    }
+            \\    // Call-stack trace, innermost frame first. Each frame's shown
+            \\    // location is where execution currently is inside it: the failing
+            \\    // statement for the innermost, the call site for outer frames.
+            \\    if (__lumen_depth > 0) {
+            \\        var __loc_line = __lumen_line;
+            \\        var __loc_col = __lumen_col;
+            \\        var __k = @min(__lumen_depth, __lumen_stack.len);
+            \\        if (__lumen_depth > __lumen_stack.len) {
+            \\            std.debug.print("    ... {d} deeper frames omitted\n", .{__lumen_depth - __lumen_stack.len});
+            \\        }
+            \\        while (__k > 0) {
+            \\            __k -= 1;
+            \\            std.debug.print("    at {s} ({s}:{d}:{d})\n", .{ __lumen_stack[__k].name, __lumen_file, __loc_line, __loc_col });
+            \\            __loc_line = __lumen_stack[__k].line;
+            \\            __loc_col = __lumen_stack[__k].col;
+            \\        }
+            \\        std.debug.print("    at <main> ({s}:{d}:{d})\n", .{ __lumen_file, __loc_line, __loc_col });
             \\    }
             \\    std.process.exit(1);
             \\}

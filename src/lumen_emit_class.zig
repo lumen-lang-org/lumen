@@ -186,6 +186,10 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
     }
     try decls.print(arena, ") {s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
     if (!bodyUsesThis(m.body)) try decls.appendSlice(arena, "    _ = self;\n");
+    // Stack-trace frame for the method (shown as `Class.method`).
+    if (options.runtime_locations) {
+        try decls.print(arena, "    __lumenPush(\"{s}.{s}\"); defer __lumenPop();\n", .{ self_type, m.name });
+    }
     try emitUnusedParamDiscards(m.params, m.body, decls, arena);
     for (m.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, decls, arena, throw_target, switch_break_target, options);
     try decls.appendSlice(arena, "    }\n");

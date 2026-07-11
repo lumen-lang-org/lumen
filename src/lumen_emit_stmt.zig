@@ -395,6 +395,11 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 emit_mod.g_async_inner = null;
             }
             defer emit_mod.g_async_inner = prev_async_inner;
+            // Stack-trace frame: record this call (entry captures the caller's
+            // current statement position, i.e. the call site).
+            if (options.runtime_locations) {
+                try decls.print(arena, "    __lumenPush(\"{s}\"); defer __lumenPop();\n", .{decl.name});
+            }
             try analysis.emitUnusedParamDiscards(decl.params, decl.body, decls, arena);
             for (decl.body) |*body_stmt| try emitStmt(body_stmt, decls, decls, arena, options);
             // An async `Promise<void>` body may legally fall through without a
