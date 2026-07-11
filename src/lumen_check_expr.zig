@@ -300,6 +300,26 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             }
+            // An empty array literal `[]` has no self-inferable type, but in a
+            // ternary it can borrow the other branch's array type (the common
+            // `cond ? [x] : []` shape). Type the non-empty branch first, then
+            // assign the empty one against it.
+            const then_empty = ternary.then_expr.* == .array and ternary.then_expr.array.items.len == 0;
+            const else_empty = ternary.else_expr.* == .array and ternary.else_expr.array.items.len == 0;
+            if (then_empty != else_empty) {
+                const typed_expr = if (then_empty) ternary.else_expr else ternary.then_expr;
+                const empty_expr = if (then_empty) ternary.then_expr else ternary.else_expr;
+                const typed_type = self.exprType(program, typed_expr, line, col) orelse return null;
+                if (!types.isArray(typed_type)) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                self.ensureAssignable(program, typed_type, empty_expr, line, col) catch {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                };
+                return typed_type;
+            }
             const then_type = self.exprType(program, ternary.then_expr, line, col) orelse return null;
             const else_type = self.exprType(program, ternary.else_expr, line, col) orelse return null;
             if (!types.same(then_type, else_type)) {
