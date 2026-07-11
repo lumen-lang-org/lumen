@@ -523,6 +523,14 @@ pub const __lumen_regex = struct {
         return __reReplaceCompiled(a, c, input, repl);
     }
 
+    /// The index of the first regex match in `input`, or -1 (JS
+    /// `String.prototype.search`). On a bad pattern returns -1.
+    pub fn searchRegex(a: __re_std.mem.Allocator, pattern: []const u8, flags: []const u8, input: []const u8) i64 {
+        const c = __reCompilePattern(a, pattern, flags) orelse return -1;
+        if (__reFind(c, input, 0)) |m| return @intCast(m.start);
+        return -1;
+    }
+
     /// Splits `input` at each regex match, returning the pieces (JS
     /// `String.prototype.split` with a RegExp separator). Zero-width matches are
     /// skipped to avoid looping, so an empty pattern yields the whole string as
