@@ -454,7 +454,7 @@ pub fn cloneStmt(self: *Checker, s: ast.Stmt) CompileError!ast.Stmt {
         .expr_stmt => |x| .{ .expr_stmt = .{ .value = try self.cloneExpr(x.value), .line = x.line, .col = x.col } },
         .while_stmt => |w| .{ .while_stmt = .{ .cond = try self.cloneExpr(w.cond), .body = try self.cloneBody(w.body), .label = w.label, .line = w.line, .col = w.col } },
         .do_while_stmt => |w| .{ .do_while_stmt = .{ .body = try self.cloneBody(w.body), .cond = try self.cloneExpr(w.cond), .label = w.label, .line = w.line, .col = w.col } },
-        .for_stmt => |f| .{ .for_stmt = .{ .init = try self.cloneVarDecl(f.init), .cond = try self.cloneExpr(f.cond), .update = try self.cloneAssign(f.update), .body = try self.cloneBody(f.body), .label = f.label, .line = f.line, .col = f.col } },
+        .for_stmt => |f| .{ .for_stmt = .{ .init = if (f.init) |i| try self.cloneVarDecl(i) else null, .cond = if (f.cond) |c| try self.cloneExpr(c) else null, .update = if (f.update) |u| try self.cloneAssign(u) else null, .body = try self.cloneBody(f.body), .label = f.label, .line = f.line, .col = f.col } },
         .for_of_stmt => |f| .{ .for_of_stmt = .{ .mutable = f.mutable, .binding = f.binding, .iterable = try self.cloneExpr(f.iterable), .body = try self.cloneBody(f.body), .label = f.label, .line = f.line, .col = f.col } },
         .for_in_stmt => |f| .{ .for_in_stmt = .{ .mutable = f.mutable, .binding = f.binding, .iterable = try self.cloneExpr(f.iterable), .body = try self.cloneBody(f.body), .label = f.label, .line = f.line, .col = f.col } },
         .if_stmt => |b| .{ .if_stmt = .{ .cond = try self.cloneExpr(b.cond), .then_body = try self.cloneBody(b.then_body), .else_body = if (b.else_body) |eb| try self.cloneBody(eb) else null, .line = b.line, .col = b.col } },

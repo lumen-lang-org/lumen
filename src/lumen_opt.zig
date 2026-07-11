@@ -295,8 +295,8 @@ fn accDisqStmt(stmt: *const Stmt, name: []const u8, arena: std.mem.Allocator) Co
         .while_stmt => |w| return accBadRef(w.cond, name) or (try accDisqBody(w.body, name, arena)),
         .do_while_stmt => |w| return accBadRef(w.cond, name) or (try accDisqBody(w.body, name, arena)),
         .for_stmt => |f| {
-            if (std.mem.eql(u8, f.update.name, name)) return true;
-            return accBadRef(f.init.init, name) or accBadRef(f.cond, name) or accBadRef(f.update.value, name) or (try accDisqBody(f.body, name, arena));
+            if (f.update) |u| if (std.mem.eql(u8, u.name, name)) return true;
+            return (f.init != null and accBadRef(f.init.?.init, name)) or (f.cond != null and accBadRef(f.cond.?, name)) or (f.update != null and accBadRef(f.update.?.value, name)) or (try accDisqBody(f.body, name, arena));
         },
         .for_of_stmt => |f| {
             if (std.mem.eql(u8, f.binding, name)) return true;
@@ -389,9 +389,9 @@ fn markAccStmt(stmt: *Stmt, name: []const u8) void {
             markAccBody(w.body, name);
         },
         .for_stmt => |*f| {
-            markAccExpr(f.init.init, name);
-            markAccExpr(f.cond, name);
-            markAccExpr(f.update.value, name);
+            if (f.init) |*i| markAccExpr(i.init, name);
+            if (f.cond) |c| markAccExpr(c, name);
+            if (f.update) |*u| markAccExpr(u.value, name);
             markAccBody(f.body, name);
         },
         .for_of_stmt => |*f| {
@@ -625,7 +625,7 @@ fn stmtUsesName(stmt: *const Stmt, name: []const u8) bool {
         .expr_stmt => |x| exprUsesName(x.value, name),
         .while_stmt => |w| exprUsesName(w.cond, name) or bodyUsesName(w.body, name),
         .do_while_stmt => |w| exprUsesName(w.cond, name) or bodyUsesName(w.body, name),
-        .for_stmt => |f| exprUsesName(f.init.init, name) or exprUsesName(f.cond, name) or exprUsesName(f.update.value, name) or bodyUsesName(f.body, name),
+        .for_stmt => |f| (f.init != null and exprUsesName(f.init.?.init, name)) or (f.cond != null and exprUsesName(f.cond.?, name)) or (f.update != null and exprUsesName(f.update.?.value, name)) or bodyUsesName(f.body, name),
         .for_of_stmt => |f| exprUsesName(f.iterable, name) or bodyUsesName(f.body, name),
         .for_in_stmt => |f| exprUsesName(f.iterable, name) or bodyUsesName(f.body, name),
         .if_stmt => |b| exprUsesName(b.cond, name) or bodyUsesName(b.then_body, name) or (b.else_body != null and bodyUsesName(b.else_body.?, name)),

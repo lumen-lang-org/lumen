@@ -254,10 +254,12 @@ pub const DoWhileStmt = struct {
 };
 
 pub const ForStmt = struct {
-    init: VarDecl,
+    // Each C-style clause is optional: `for (;;)`, `for (; c; )`, `for (i; ; u)`.
+    // A missing condition means an unconditional loop (`true`).
+    init: ?VarDecl,
     extra_inits: []VarDecl = &.{}, // `for (let i = 0, n = 5; ...)` — the declarators after the first
-    cond: *Expr,
-    update: Assign,
+    cond: ?*Expr,
+    update: ?Assign,
     extra_updates: []Assign = &.{}, // `for (...; ...; i++, j--)` — the updates after the first
     body: []Stmt,
     label: ?[]const u8 = null,

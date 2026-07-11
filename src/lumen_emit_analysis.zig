@@ -174,7 +174,7 @@ pub fn stmtUsesThis(stmt: *const Stmt) bool {
         .expr_stmt => |x| exprUsesThis(x.value),
         .while_stmt => |w| exprUsesThis(w.cond) or bodyUsesThis(w.body),
         .do_while_stmt => |w| exprUsesThis(w.cond) or bodyUsesThis(w.body),
-        .for_stmt => |f| exprUsesThis(f.init.init) or exprUsesThis(f.cond) or exprUsesThis(f.update.value) or bodyUsesThis(f.body),
+        .for_stmt => |f| (f.init != null and exprUsesThis(f.init.?.init)) or (f.cond != null and exprUsesThis(f.cond.?)) or (f.update != null and exprUsesThis(f.update.?.value)) or bodyUsesThis(f.body),
         .for_of_stmt => |f| exprUsesThis(f.iterable) or bodyUsesThis(f.body),
         .for_in_stmt => |f| exprUsesThis(f.iterable) or bodyUsesThis(f.body),
         .if_stmt => |b| exprUsesThis(b.cond) or bodyUsesThis(b.then_body) or (b.else_body != null and bodyUsesThis(b.else_body.?)),

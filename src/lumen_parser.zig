@@ -508,6 +508,50 @@ pub const Parser = struct {
         if (eq(u8, kw, "for")) {
             try self.advance();
             try self.expectOp('(');
+            // C-style for with an omitted init clause: `for (; cond?; update?)`.
+            if (self.isOp(';')) {
+                try self.advance(); // past the first ';'
+                const cond: ?*Expr = if (self.isOp(';')) null else try self.parseExpr();
+                try self.expectOp(';');
+                const ul = self.cur_line;
+                const uc = self.cur_col;
+                const update: ?ast.Assign = if (self.isOp(')')) null else if (self.cur == .op2 and (eq(u8, self.cur.op2, "++") or eq(u8, self.cur.op2, "--"))) blk: {
+                    const op = self.cur.op2;
+                    break :blk try self.parsePrefixUpdate(op, ul, uc, false);
+                } else blk: {
+                    if (self.cur != .ident) return error.ParseError;
+                    const un = self.cur.ident;
+                    try self.advance();
+                    break :blk try self.parseAssignmentTail(un, ul, uc, false);
+                };
+                var extra_updates: std.ArrayListUnmanaged(ast.Assign) = .empty;
+                while (self.isOp(',')) {
+                    try self.advance();
+                    const el = self.cur_line;
+                    const ec = self.cur_col;
+                    const u = if (self.cur == .op2 and (eq(u8, self.cur.op2, "++") or eq(u8, self.cur.op2, "--"))) blk2: {
+                        const op = self.cur.op2;
+                        break :blk2 try self.parsePrefixUpdate(op, el, ec, false);
+                    } else blk2: {
+                        if (self.cur != .ident) return error.ParseError;
+                        const un = self.cur.ident;
+                        try self.advance();
+                        break :blk2 try self.parseAssignmentTail(un, el, ec, false);
+                    };
+                    try extra_updates.append(self.arena, u);
+                }
+                try self.expectOp(')');
+                const body = try self.parseBlockOrStmt();
+                return .{ .for_stmt = .{
+                    .init = null,
+                    .cond = cond,
+                    .update = update,
+                    .extra_updates = try extra_updates.toOwnedSlice(self.arena),
+                    .body = body,
+                    .line = line,
+                    .col = col,
+                } };
+            }
             if (self.cur != .ident) return error.ParseError;
             const init_kw = self.cur.ident;
             const is_const = eq(u8, init_kw, "const");
@@ -610,11 +654,13 @@ pub const Parser = struct {
                 try extra_inits.append(self.arena, .{ .mutable = true, .name = en, .annotation = eann, .init = ev, .line = el, .col = ec });
             }
             try self.expectOp(';');
-            const cond = try self.parseExpr();
+            // The condition may be omitted (`for (i; ; u)`) — an unconditional loop.
+            const cond: ?*Expr = if (self.isOp(';')) null else try self.parseExpr();
             try self.expectOp(';');
+            // The update may be omitted (`for (i; c; )`).
             const update_line = self.cur_line;
             const update_col = self.cur_col;
-            const update = if (self.cur == .op2 and (std.mem.eql(u8, self.cur.op2, "++") or std.mem.eql(u8, self.cur.op2, "--"))) blk: {
+            const update: ?ast.Assign = if (self.isOp(')')) null else if (self.cur == .op2 and (std.mem.eql(u8, self.cur.op2, "++") or std.mem.eql(u8, self.cur.op2, "--"))) blk: {
                 const op = self.cur.op2;
                 break :blk try self.parsePrefixUpdate(op, update_line, update_col, false);
             } else blk: {

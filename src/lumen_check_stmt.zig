@@ -536,26 +536,30 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
         .for_stmt => |*loop| {
             try self.pushScope();
             defer self.popScope();
-            var init_stmt: ast.Stmt = .{ .var_decl = loop.init };
-            try self.checkStmt(program, &init_stmt);
+            var init_stmt: ?ast.Stmt = if (loop.init) |i| .{ .var_decl = i } else null;
+            if (init_stmt) |*is| try self.checkStmt(program, is);
             for (loop.extra_inits) |*extra| try self.checkVarDecl(program, extra);
-            const cond_type = self.exprType(program, loop.cond, loop.line, loop.col) orelse
-                return self.inferenceFail(loop.line, loop.col, "cannot infer for condition type");
-            if (!types.same(.bool, cond_type)) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+            // An omitted condition is an unconditional loop; otherwise it must be
+            // a bool.
+            if (loop.cond) |cond| {
+                const cond_type = self.exprType(program, cond, loop.line, loop.col) orelse
+                    return self.inferenceFail(loop.line, loop.col, "cannot infer for condition type");
+                if (!types.same(.bool, cond_type)) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+            }
             self.loop_depth += 1;
             defer self.loop_depth -= 1;
             try self.checkBlock(program, loop.body);
-            var update_stmt: ast.Stmt = .{ .assign = loop.update };
-            try self.checkStmt(program, &update_stmt);
+            var update_stmt: ?ast.Stmt = if (loop.update) |u| .{ .assign = u } else null;
+            if (update_stmt) |*us| try self.checkStmt(program, us);
             for (loop.extra_updates) |*extra| {
                 var us: ast.Stmt = .{ .assign = extra.* };
                 try self.checkStmt(program, &us);
                 extra.* = us.assign;
             }
-            // Write init back after the update marks the binding reassigned, so
-            // the loop variable emits as `var`, not `const`.
-            loop.init = init_stmt.var_decl;
-            loop.update = update_stmt.assign;
+            // Write init/update back after the update marks the binding
+            // reassigned, so the loop variable emits as `var`, not `const`.
+            if (init_stmt) |is| loop.init = is.var_decl;
+            if (update_stmt) |us| loop.update = us.assign;
         },
         .for_of_stmt => |*loop| {
             // `for (const [i, v] of arr.entries())` — index/value pairs over an

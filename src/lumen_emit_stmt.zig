@@ -556,29 +556,37 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
         },
         .for_stmt => |loop| {
             try body.appendSlice(arena, "    {\n");
-            var init_stmt: Stmt = .{ .var_decl = loop.init };
-            try emitStmtWithThrow(&init_stmt, decls, body, arena, throw_target, switch_break_target, options);
+            if (loop.init) |i| {
+                var init_stmt: Stmt = .{ .var_decl = i };
+                try emitStmtWithThrow(&init_stmt, decls, body, arena, throw_target, switch_break_target, options);
+            }
             for (loop.extra_inits) |extra| {
                 var es: Stmt = .{ .var_decl = extra };
                 try emitStmtWithThrow(&es, decls, body, arena, throw_target, switch_break_target, options);
             }
             try body.print(arena, "    {s}while (", .{try labelPrefix(arena, loop.label, loop.body)});
-            try emitExpr(loop.cond, body, arena);
-            try body.appendSlice(arena, ") : (");
-            if (loop.extra_updates.len == 0) {
-                try emitAssignExpr(loop.update, body, arena);
-            } else {
-                // Several updates run each iteration: a block continue-expression.
-                try body.appendSlice(arena, "{ ");
-                try emitAssignExpr(loop.update, body, arena);
-                try body.appendSlice(arena, "; ");
-                for (loop.extra_updates) |u| {
-                    try emitAssignExpr(u, body, arena);
+            // An omitted condition loops unconditionally.
+            if (loop.cond) |c| try emitExpr(c, body, arena) else try body.appendSlice(arena, "true");
+            try body.appendSlice(arena, ")");
+            // The continue-expression (update step) is emitted only when present.
+            if (loop.update) |upd| {
+                try body.appendSlice(arena, " : (");
+                if (loop.extra_updates.len == 0) {
+                    try emitAssignExpr(upd, body, arena);
+                } else {
+                    // Several updates run each iteration: a block continue-expression.
+                    try body.appendSlice(arena, "{ ");
+                    try emitAssignExpr(upd, body, arena);
                     try body.appendSlice(arena, "; ");
+                    for (loop.extra_updates) |u| {
+                        try emitAssignExpr(u, body, arena);
+                        try body.appendSlice(arena, "; ");
+                    }
+                    try body.appendSlice(arena, "}");
                 }
-                try body.appendSlice(arena, "}");
+                try body.appendSlice(arena, ")");
             }
-            try body.appendSlice(arena, ") {\n");
+            try body.appendSlice(arena, " {\n");
             for (loop.body) |*body_stmt| try emitStmtWithThrow(body_stmt, decls, body, arena, throw_target, null, options);
             try body.appendSlice(arena, "    }\n");
             try body.appendSlice(arena, "    }\n");
