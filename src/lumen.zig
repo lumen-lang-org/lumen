@@ -70,17 +70,36 @@ fn humanizeDiag(code: []const u8) []const u8 {
     return code;
 }
 
+/// Whether diagnostics use ANSI color (stderr is a terminal and NO_COLOR is
+/// unset). Decided once at startup.
+var g_color: bool = false;
+
+const C_BOLD_RED = "\x1b[1;31m";
+const C_BOLD = "\x1b[1m";
+const C_CYAN = "\x1b[36m";
+const C_GREEN = "\x1b[32m";
+const C_DIM = "\x1b[2m";
+const C_RESET = "\x1b[0m";
+
 fn printOneDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: compiler.Diag) !void {
-    try err.print("{s}:{d}:{d}: error: {s}\n", .{ file, diag.line, diag.col, humanizeDiag(diag.msg) });
+    if (g_color) {
+        try err.print(C_CYAN ++ "{s}:{d}:{d}:" ++ C_RESET ++ " " ++ C_BOLD_RED ++ "error:" ++ C_RESET ++ " " ++ C_BOLD ++ "{s}" ++ C_RESET ++ "\n", .{ file, diag.line, diag.col, humanizeDiag(diag.msg) });
+    } else {
+        try err.print("{s}:{d}:{d}: error: {s}\n", .{ file, diag.line, diag.col, humanizeDiag(diag.msg) });
+    }
     var it = std.mem.splitScalar(u8, source, '\n');
     var n: u32 = 1;
     while (it.next()) |line| : (n += 1) {
         if (n == diag.line) {
             const trimmed = std.mem.trimEnd(u8, line, "\r");
-            try err.print("  {d} | {s}\n    | ", .{ diag.line, trimmed });
+            if (g_color) {
+                try err.print(C_DIM ++ "  {d} |" ++ C_RESET ++ " {s}\n" ++ C_DIM ++ "    |" ++ C_RESET ++ " ", .{ diag.line, trimmed });
+            } else {
+                try err.print("  {d} | {s}\n    | ", .{ diag.line, trimmed });
+            }
             var col: u32 = 1;
             while (col < diag.col) : (col += 1) try err.writeByte(' ');
-            try err.writeAll("^\n");
+            if (g_color) try err.writeAll(C_GREEN ++ "^" ++ C_RESET ++ "\n") else try err.writeAll("^\n");
             break;
         }
     }
@@ -1329,6 +1348,12 @@ pub fn main(init: std.process.Init) !void {
     var err_buf: [4096]u8 = undefined;
     var err_fw: std.Io.File.Writer = .init(.stderr(), io, &err_buf);
     const err = &err_fw.interface;
+
+    // Color diagnostics when stderr is a terminal, honoring NO_COLOR.
+    g_color = blk: {
+        if (init.environ_map.get("NO_COLOR") != null) break :blk false;
+        break :blk std.Io.File.stderr().isTty(io) catch false;
+    };
 
     if (args.len < 2) {
         try err.writeAll("usage: lumen init [dir]\n       lumen compile [--release-fast] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen watch [--no-run] <file.ts>\n       lumen test <file.ts>\n");
