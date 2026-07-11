@@ -385,6 +385,22 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 };
                 return typed_type;
             }
+            // An object literal in one branch borrows the other branch's
+            // record type (`cond ? { ...fields } : t` — spec 276), the same
+            // contextual trick the empty-array case above uses.
+            const then_obj = ternary.then_expr.* == .obj;
+            const else_obj = ternary.else_expr.* == .obj;
+            if (then_obj != else_obj) {
+                const typed_expr = if (then_obj) ternary.else_expr else ternary.then_expr;
+                const obj_expr = if (then_obj) ternary.then_expr else ternary.else_expr;
+                const typed_type = self.exprType(program, typed_expr, line, col) orelse return null;
+                if (typed_type == .named) {
+                    self.ensureAssignable(program, typed_type, obj_expr, line, col) catch {
+                        return null;
+                    };
+                    return typed_type;
+                }
+            }
             // `x !== null ? A : B` narrows `x` to non-null in the branch the
             // check guards (the then-branch for `!== null`, else for `=== null`),
             // matching the if-statement narrowing.
