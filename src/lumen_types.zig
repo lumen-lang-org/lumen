@@ -491,6 +491,8 @@ pub fn fromAnnotation(name: []const u8) Type {
     // parameter annotation -- so `Socket` needs a real spelling->Type mapping
     // here, the reverse of `toAnnotation`'s `.socket_type => "Socket"` arm.
     if (eq(u8, name, "Socket")) return .socket_type;
+    if (eq(u8, name, "RegExp")) return .regexp;
+    if (eq(u8, name, "Error")) return .error_obj;
     if (eq(u8, name, "int") or eq(u8, name, "i32")) return .i32;
     if (eq(u8, name, "i64")) return .i64;
     if (eq(u8, name, "number") or eq(u8, name, "float") or eq(u8, name, "f64")) return .f64;
