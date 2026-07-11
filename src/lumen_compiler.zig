@@ -277,7 +277,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         try out.appendSlice(arena, "var __alloc: std.mem.Allocator = std.heap.page_allocator;\n");
     }
     if (program.needs_args) {
-        try out.appendSlice(arena, "var __args: []const []const u8 = &.{};\n");
+        try out.appendSlice(arena, "var __lumen_argv: []const []const u8 = &.{};\n");
     }
     if (program.needs_process_api) {
         try out.appendSlice(arena, "var __environ: std.process.Environ = .empty;\n");
@@ -2976,7 +2976,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         try out.appendSlice(arena, "pub fn main(__init: std.process.Init) !void {\n");
         try out.appendSlice(arena, "    __io = __init.io;\n    __alloc = __init.arena.allocator();\n");
         if (program.needs_args) {
-            try out.appendSlice(arena, "    __args = __init.minimal.args.toSlice(__alloc) catch std.process.exit(1);\n");
+            try out.appendSlice(arena, "    __lumen_argv = __init.minimal.args.toSlice(__alloc) catch std.process.exit(1);\n");
         }
         if (program.needs_process_api) {
             try out.appendSlice(arena, "    __environ = __init.minimal.environ;\n");

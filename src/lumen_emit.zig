@@ -269,11 +269,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
             } else if (std.mem.eql(u8, cl.name, "argsCount")) {
-                try w.appendSlice(arena, "@as(i32, @intCast(__args.len))");
+                try w.appendSlice(arena, "@as(i32, @intCast(__lumen_argv.len))");
             } else if (std.mem.eql(u8, cl.name, "arg")) {
                 try w.appendSlice(arena, "(if (@as(usize, @intCast(");
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
-                try w.appendSlice(arena, ")) < __args.len) __args[@as(usize, @intCast(");
+                try w.appendSlice(arena, ")) < __lumen_argv.len) __lumen_argv[@as(usize, @intCast(");
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, "))] else \"\")");
             } else if (std.mem.eql(u8, cl.name, "httpGet")) {
@@ -1130,7 +1130,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "pid")) {
                 try w.appendSlice(arena, "__processPid()");
             } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "argv")) {
-                try w.appendSlice(arena, "__args");
+                try w.appendSlice(arena, "__lumen_argv");
             } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "uptime")) {
                 try w.appendSlice(arena, "__processUptime()");
             } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "hrtime")) {
