@@ -711,6 +711,11 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
     }
 
     if (eq(u8, name, "split")) {
+        // `s.split()` with no separator yields the whole string as one element.
+        if (mc.args.len == 0) {
+            try w.print(arena, "var __parts: std.ArrayListUnmanaged([]const u8) = .empty; __parts.append(__sa(), __s) catch unreachable; break :{s} @as([]const []const u8, __parts.items); }})", .{lbl});
+            return;
+        }
         try w.appendSlice(arena, "const __sep: []const u8 = ");
         try emitExpr(mc.args[0], w, arena);
         try w.appendSlice(arena, "; var __parts: std.ArrayListUnmanaged([]const u8) = .empty; ");

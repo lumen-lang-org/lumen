@@ -962,7 +962,7 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         if (eq(u8, name, "trim")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "trimStart")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "trimEnd")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
-        if (eq(u8, name, "split")) break :blk .{ .min = 1, .max = 2, .kinds = &.{ .string, .int }, .result = types.arrayOf(.string).? };
+        if (eq(u8, name, "split")) break :blk .{ .min = 0, .max = 2, .kinds = &.{ .string, .int }, .result = types.arrayOf(.string).? };
         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
         return null;
     };
