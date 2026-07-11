@@ -385,6 +385,61 @@ pub const __lumen_regex = struct {
         }
     }
 
+    // Backtracking VM variant that reports the end offset of a match starting at
+    // `sp0` (exclusive), or null. Mirrors `__reRun` but propagates the position
+    // reached at the `.match` instruction so callers can compute a match span.
+    fn __reRunEnd(prog: []const Inst, pc0: usize, text: []const u8, sp0: usize, ci: bool) ?usize {
+        var pc = pc0;
+        var sp = sp0;
+        while (true) {
+            switch (prog[pc]) {
+                .match => return sp,
+                .char => |c| {
+                    if (sp < text.len and __reChEq(text[sp], c, ci)) {
+                        pc += 1;
+                        sp += 1;
+                    } else return null;
+                },
+                .any => {
+                    if (sp < text.len and text[sp] != '\n') {
+                        pc += 1;
+                        sp += 1;
+                    } else return null;
+                },
+                .class => |cl| {
+                    if (sp < text.len and __reClassMatch(cl, text[sp], ci)) {
+                        pc += 1;
+                        sp += 1;
+                    } else return null;
+                },
+                .astart => {
+                    if (sp == 0) pc += 1 else return null;
+                },
+                .aend => {
+                    if (sp == text.len) pc += 1 else return null;
+                },
+                .jmp => |x| pc = x,
+                .split => |s| {
+                    if (__reRunEnd(prog, s.x, text, sp, ci)) |e| return e;
+                    pc = s.y;
+                },
+            }
+        }
+    }
+
+    /// A matched span `[start, end)` inside the input.
+    pub const MatchSpan = struct { start: usize, end: usize };
+
+    /// The leftmost match at or after `from`, or null. Scans start positions the
+    /// same way `__reMatchOne` does, returning the first that matches.
+    pub fn __reFind(c: Compiled, input: []const u8, from: usize) ?MatchSpan {
+        var start: usize = from;
+        while (start <= input.len) : (start += 1) {
+            if (__reRunEnd(c.prog, 0, input, start, c.ci)) |e| return .{ .start = start, .end = e };
+        }
+        return null;
+    }
+
     /// Parses `pattern` into its AST (used by the compiler at build time to decide
     /// whether a literal can be specialized into straight-line code). Null if the
     /// pattern is malformed.
@@ -397,7 +452,7 @@ pub const __lumen_regex = struct {
 
     /// A compiled regex: the bytecode program plus the case-insensitive flag. A
     /// regex literal is a constant, so this is built once and reused across matches.
-    pub const Compiled = struct { prog: []const Inst, ci: bool };
+    pub const Compiled = struct { prog: []const Inst, ci: bool, global: bool = false };
 
     /// Compiles `pattern`/`flags` into reusable bytecode (allocated in `a`). Returns
     /// null on a malformed pattern.
@@ -409,10 +464,12 @@ pub const __lumen_regex = struct {
         __reCompile(ast, &prog, a) catch return null;
         _ = __reEmit(&prog, a, .match) catch return null;
         var ci = false;
+        var global = false;
         for (flags) |f| {
             if (f == 'i') ci = true;
+            if (f == 'g') global = true;
         }
-        return .{ .prog = prog.items, .ci = ci };
+        return .{ .prog = prog.items, .ci = ci, .global = global };
     }
 
     /// Does the compiled regex match anywhere in `input` (JS `RegExp.test`)?
@@ -430,6 +487,40 @@ pub const __lumen_regex = struct {
         defer arena.deinit();
         const c = __reCompilePattern(arena.allocator(), pattern, flags) orelse return false;
         return __reMatchOne(c, input);
+    }
+
+    /// Replaces regex matches in `input` with `repl` (allocated in `a`). If the
+    /// pattern has the `g` flag every match is replaced, otherwise just the
+    /// first (JS `String.prototype.replace` with a RegExp and a plain string).
+    /// A zero-width match advances one byte to avoid looping. On a bad pattern
+    /// or allocation failure the input is returned unchanged.
+    pub fn __reReplaceCompiled(a: __re_std.mem.Allocator, c: Compiled, input: []const u8, repl: []const u8) []const u8 {
+        var out: __re_std.ArrayListUnmanaged(u8) = .empty;
+        var i: usize = 0;
+        var replaced = false;
+        while (i <= input.len) {
+            const m = __reFind(c, input, i) orelse break;
+            out.appendSlice(a, input[i..m.start]) catch return input;
+            out.appendSlice(a, repl) catch return input;
+            replaced = true;
+            if (m.end > i) {
+                i = m.end;
+            } else {
+                // Zero-width match: keep the byte at the position and advance.
+                if (m.start < input.len) out.append(a, input[m.start]) catch return input;
+                i = m.start + 1;
+            }
+            if (!c.global) break;
+        }
+        if (!replaced) return input;
+        if (i < input.len) out.appendSlice(a, input[i..]) catch return input;
+        return out.items;
+    }
+
+    /// Compile-and-replace in one call (recompiles each time; for one-shot use).
+    pub fn replaceRegex(a: __re_std.mem.Allocator, pattern: []const u8, flags: []const u8, input: []const u8, repl: []const u8) []const u8 {
+        const c = __reCompilePattern(a, pattern, flags) orelse return input;
+        return __reReplaceCompiled(a, c, input, repl);
     }
 };
 

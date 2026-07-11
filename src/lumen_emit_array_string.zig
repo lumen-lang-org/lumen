@@ -451,6 +451,20 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
         }
     };
 
+    // replace(/re/, repl): route through the regex runtime. The regex literal's
+    // own `g` flag decides first-match-only vs all-matches, so `replaceAll` and
+    // `replace` share this path once the first arg is a regex.
+    if (mc.regex_arg) {
+        try w.print(arena, "break :{s} @as([]const u8, __lumen_regex.replaceRegex(__sa(), (", .{lbl});
+        try emitExpr(mc.args[0], w, arena);
+        try w.appendSlice(arena, ").source, (");
+        try emitExpr(mc.args[0], w, arena);
+        try w.appendSlice(arena, ").flags, __s, ");
+        try emitExpr(mc.args[1], w, arena);
+        try w.print(arena, ")); }})", .{});
+        return;
+    }
+
     if (eq(u8, name, "charAt")) {
         try A.idx("__i", mc.args[0], w, arena);
         try w.print(arena, "break :{s} @as([]const u8, if (__i >= 0 and __i < @as(isize, @intCast(__s.len))) __s[@intCast(__i)..@as(usize, @intCast(__i)) + 1] else \"\"); }})", .{lbl});

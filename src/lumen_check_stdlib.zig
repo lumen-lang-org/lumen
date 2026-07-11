@@ -843,6 +843,22 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
     const name = mc.name;
     const eq = std.mem.eql;
 
+    // replace(pattern: RegExp, repl: string): string -- the regex form. The
+    // string-pattern form is handled by the fixed-arity spec table below.
+    if ((eq(u8, name, "replace") or eq(u8, name, "replaceAll")) and mc.args.len == 2) {
+        const p0 = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (p0 == .regexp) {
+            self.ensureAssignable(program, .string, mc.args[1], line, col) catch {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+            mc.regex_arg = true;
+            program.uses_regex = true;
+            mc.array_result_type = .string;
+            return .string;
+        }
+    }
+
     // concat(...strings): string -- variadic, doesn't fit the fixed-arity spec
     // table below, so validate it directly.
     if (eq(u8, name, "concat")) {
