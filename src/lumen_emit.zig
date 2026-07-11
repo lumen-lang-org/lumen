@@ -1093,7 +1093,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
-            } else if (std.mem.eql(u8, cl.namespace, "time") and std.mem.eql(u8, cl.name, "now")) {
+            } else if ((std.mem.eql(u8, cl.namespace, "time") or std.mem.eql(u8, cl.namespace, "Date")) and std.mem.eql(u8, cl.name, "now")) {
                 try w.appendSlice(arena, "__timeNow(__io)");
             } else if (std.mem.eql(u8, cl.namespace, "time") and std.mem.eql(u8, cl.name, "monotonic")) {
                 try w.appendSlice(arena, "__timeMonotonic(__io)");

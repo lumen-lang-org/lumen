@@ -108,6 +108,7 @@ pub const Checker = struct {
     pub const childProcessCallType = check_stdlib.childProcessCallType;
     pub const assertCallType = check_stdlib.assertCallType;
     pub const timeCallType = check_stdlib.timeCallType;
+    pub const dateCallType = check_stdlib.dateCallType;
     pub const httpCallType = check_stdlib.httpCallType;
     pub const netCallType = check_stdlib.netCallType;
     pub const jsonCallType = check_stdlib.jsonCallType;

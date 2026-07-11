@@ -1009,6 +1009,7 @@ pub fn staticCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     if (std.mem.eql(u8, call.namespace, "readline")) return self.readlineCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Worker")) return self.workerCallType(program, call, line, col);
     if (std.mem.eql(u8, call.namespace, "Number")) return self.numberCallType(program, call, line, col);
+    if (std.mem.eql(u8, call.namespace, "Date")) return self.dateCallType(program, call, line, col);
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
 }
@@ -2897,6 +2898,23 @@ pub fn assertCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         program.needs_assert = true;
         call.checked_type = .void;
         return .void;
+    }
+    _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+/// Date.now(): milliseconds since the Unix epoch, as i64 (promotes to f64 in
+/// float contexts via spec 256). The rest of the Date object is future work.
+pub fn dateCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
+    if (std.mem.eql(u8, call.name, "now")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_time_api = true;
+        call.checked_type = .i64;
+        return .i64;
     }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
