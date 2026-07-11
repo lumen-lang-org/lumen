@@ -62,12 +62,21 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                     spread_src = pf.value;
                     continue;
                 }
-                // Reject explicit fields not declared on the target type.
+                // Reject explicit fields not declared on the target type,
+                // listing what the type does have.
                 var known = false;
                 for (decl.fields) |df| {
                     if (std.mem.eql(u8, df.name, pf.name)) known = true;
                 }
-                if (!known) return self.fail(line, col, "E_TYPE_MISMATCH");
+                if (!known) {
+                    var names: std.ArrayListUnmanaged(u8) = .empty;
+                    for (decl.fields, 0..) |df, fi| {
+                        if (fi > 0) names.appendSlice(self.arena, ", ") catch {};
+                        names.appendSlice(self.arena, df.name) catch {};
+                    }
+                    const msg = std.fmt.allocPrint(self.arena, "object literal has unknown property '{s}' — `{s}` has: {s}", .{ pf.name, type_name, names.items }) catch "E_TYPE_MISMATCH";
+                    return self.fail(line, col, msg);
+                }
             }
             // Build the literal in declared order, filling omitted optional
             // fields with the absent value so emission has every field.
@@ -87,7 +96,9 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                     absent.* = .null_lit;
                     ordered[i] = .{ .name = expected_field.name, .value = absent };
                 } else {
-                    return self.fail(line, col, "E_TYPE_MISMATCH");
+                    const tn = types.tsName(self.arena, expected_field_type) catch "?";
+                    const msg = std.fmt.allocPrint(self.arena, "object literal is missing property '{s}' (`{s}`) required by `{s}`", .{ expected_field.name, tn, type_name }) catch "E_TYPE_MISMATCH";
+                    return self.fail(line, col, msg);
                 }
             }
             value.* = .{ .obj = ordered };

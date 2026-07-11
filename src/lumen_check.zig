@@ -318,6 +318,32 @@ pub const Checker = struct {
         return self.fail(line, col, msg);
     }
 
+    /// Unknown-field diagnostic: did-you-mean over the type's declared field
+    /// names, else the full field list.
+    pub fn failUnknownField(self: *Checker, line: u32, col: u32, type_name: []const u8, name: []const u8, known: []const []const u8) CompileError {
+        const limit: usize = if (name.len <= 4) 1 else 2;
+        var best: ?[]const u8 = null;
+        var best_d: usize = limit + 1;
+        for (known) |k| {
+            const d = editDistance(name, k, limit);
+            if (d < best_d) {
+                best_d = d;
+                best = k;
+            }
+        }
+        if (best_d <= limit) {
+            const msg = std.fmt.allocPrint(self.arena, "`{s}` has no property '{s}' — did you mean '{s}'?", .{ type_name, name, best.? }) catch "unknown field";
+            return self.fail(line, col, msg);
+        }
+        var names: std.ArrayListUnmanaged(u8) = .empty;
+        for (known, 0..) |k, i| {
+            if (i > 0) names.appendSlice(self.arena, ", ") catch {};
+            names.appendSlice(self.arena, k) catch {};
+        }
+        const msg = std.fmt.allocPrint(self.arena, "`{s}` has no property '{s}' — it has: {s}", .{ type_name, name, names.items }) catch "unknown field";
+        return self.fail(line, col, msg);
+    }
+
     /// The closest known name to `name` (in-scope bindings, declared functions,
     /// common globals), or null when nothing is close enough to be helpful.
     fn suggestName(self: *Checker, name: []const u8) ?[]const u8 {

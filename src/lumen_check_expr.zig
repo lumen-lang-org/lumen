@@ -1512,6 +1512,12 @@ pub fn fieldType(self: *Checker, type_name: []const u8, field_name: []const u8, 
             };
         }
     }
-    _ = self.fail(line, col, "unknown field") catch {};
+    // Unknown field: did-you-mean over the type's declared field names.
+    const known = self.arena.alloc([]const u8, decl.fields.len) catch {
+        _ = self.fail(line, col, "unknown field") catch {};
+        return null;
+    };
+    for (decl.fields, 0..) |field, i| known[i] = field.name;
+    _ = self.failUnknownField(line, col, type_name, field_name, known) catch {};
     return null;
 }

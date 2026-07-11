@@ -777,14 +777,22 @@ pub const Parser = struct {
 
         if (eq(u8, kw, "return")) {
             try self.advance();
-            const value = if (self.isOp(';')) null else try self.parseExpr();
+            // Restricted production: a value must start on the `return` line
+            // (`return\nx` returns void, matching JS ASI).
+            const value = if (self.isOp(';') or self.isOp('}') or self.cur == .eof or self.cur_line > self.prev_line)
+                null
+            else
+                try self.parseExpr();
             try self.expectSemi();
             return .{ .return_stmt = .{ .value = value, .line = line, .col = col } };
         }
 
         if (eq(u8, kw, "break")) {
             try self.advance();
-            const lbl = if (self.cur == .ident) blk: {
+            // A label must sit on the same line (JS's restricted production):
+            // `break\ncase 2:` inside a switch ends the statement at the
+            // newline instead of eating `case` as a label.
+            const lbl = if (self.cur == .ident and self.cur_line == self.prev_line) blk: {
                 const n = self.cur.ident;
                 try self.advance();
                 break :blk n;
@@ -795,7 +803,7 @@ pub const Parser = struct {
 
         if (eq(u8, kw, "continue")) {
             try self.advance();
-            const lbl = if (self.cur == .ident) blk: {
+            const lbl = if (self.cur == .ident and self.cur_line == self.prev_line) blk: {
                 const n = self.cur.ident;
                 try self.advance();
                 break :blk n;
