@@ -170,6 +170,7 @@ pub const Checker = struct {
     // Expression type-checking (the core dispatch) lives in lumen_check_expr.zig.
     pub const exprType = check_expr.exprType;
     pub const wrapStringify = check_expr.wrapStringify;
+    pub const wrapFloat = check_expr.wrapFloat;
     pub const checkCbArg = check_expr.checkCbArg;
     pub const fieldType = check_expr.fieldType;
 

@@ -45,6 +45,16 @@ pub fn wrapStringify(self: *Checker, e: *ast.Expr) !*ast.Expr {
     return node;
 }
 
+/// Wraps an integer-typed expression in the runtime Number() conversion so it
+/// participates in float arithmetic (JS-style numeric promotion, spec 255).
+pub fn wrapFloat(self: *Checker, e: *ast.Expr) !*ast.Expr {
+    const args = try self.arena.alloc(*ast.Expr, 1);
+    args[0] = e;
+    const node = try self.arena.create(ast.Expr);
+    node.* = .{ .call = .{ .name = "Number", .args = args, .is_global_parse = true } };
+    return node;
+}
+
 pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, col: u32) ?types.Type {
     return switch (e.*) {
         .var_ref => |*ref| blk: {
@@ -189,8 +199,25 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 bin.checked_type = left_type;
                 return left_type;
             }
+            // JS-style numeric promotion: mixing an integer with a float
+            // promotes the integer side to f64 (`Math.round(x) / 10.0`).
+            if (types.isNumeric(left_type) and types.isNumeric(right_type) and !types.same(left_type, right_type)) {
+                if (left_type == .f64 and types.isInteger(right_type)) {
+                    bin.r = self.wrapFloat(bin.r) catch return null;
+                    bin.checked_type = .f64;
+                    return .f64;
+                }
+                if (right_type == .f64 and types.isInteger(left_type)) {
+                    bin.l = self.wrapFloat(bin.l) catch return null;
+                    bin.checked_type = .f64;
+                    return .f64;
+                }
+            }
             if (!types.isNumeric(left_type) or !types.same(left_type, right_type)) {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                const ln = types.tsName(self.arena, left_type) catch "?";
+                const rn = types.tsName(self.arena, right_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "operator '{c}' cannot combine `{s}` and `{s}`", .{ if (bin.op == 'L') '<' else if (bin.op == 'R') '>' else if (bin.op == 'P') '*' else bin.op, ln, rn }) catch "E_TYPE_MISMATCH";
+                _ = self.fail(line, col, msg) catch {};
                 return null;
             }
             bin.checked_type = left_type;
