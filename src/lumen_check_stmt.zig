@@ -768,7 +768,8 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 }
                 return self.fail(ret.line, ret.col, "E_RETURN_TYPE");
             };
-            self.ensureAssignable(program, expected_return, value, ret.line, ret.col) catch return self.fail(ret.line, ret.col, "E_RETURN_TYPE");
+            // ensureAssignable already recorded a detailed expected/got message.
+            self.ensureAssignable(program, expected_return, value, ret.line, ret.col) catch return error.ParseError;
             ret.checked_type = expected_return;
         },
         .throw_stmt => |throw_stmt| {

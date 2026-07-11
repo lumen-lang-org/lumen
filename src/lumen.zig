@@ -22,8 +22,56 @@ const CompileMode = enum {
     }
 };
 
+/// Human-readable message for a raw `E_*` diagnostic code. Diagnostics that
+/// already carry a formatted message pass through unchanged.
+fn humanizeDiag(code: []const u8) []const u8 {
+    const eq = std.mem.eql;
+    if (eq(u8, code, "E_TYPE_MISMATCH")) return "type mismatch [E_TYPE_MISMATCH]";
+    if (eq(u8, code, "E_ARG_COUNT")) return "wrong number of arguments [E_ARG_COUNT]";
+    if (eq(u8, code, "E_TYPE_ARG_COUNT")) return "wrong number of type arguments [E_TYPE_ARG_COUNT]";
+    if (eq(u8, code, "E_MISSING_RETURN")) return "not all code paths return a value [E_MISSING_RETURN]";
+    if (eq(u8, code, "E_RETURN_TYPE")) return "returned value does not match the declared return type [E_RETURN_TYPE]";
+    if (eq(u8, code, "E_RETURN_OUTSIDE_FUNCTION")) return "'return' outside a function [E_RETURN_OUTSIDE_FUNCTION]";
+    if (eq(u8, code, "E_CONST_ASSIGNMENT")) return "cannot assign to a 'const' binding [E_CONST_ASSIGNMENT]";
+    if (eq(u8, code, "E_READONLY_ASSIGNMENT")) return "cannot assign to a 'readonly' field [E_READONLY_ASSIGNMENT]";
+    if (eq(u8, code, "E_DUPLICATE_BINDING")) return "duplicate declaration of this name [E_DUPLICATE_BINDING]";
+    if (eq(u8, code, "E_BREAK_OUTSIDE_LOOP")) return "'break' outside a loop or switch [E_BREAK_OUTSIDE_LOOP]";
+    if (eq(u8, code, "E_CONTINUE_OUTSIDE_LOOP")) return "'continue' outside a loop [E_CONTINUE_OUTSIDE_LOOP]";
+    if (eq(u8, code, "E_MISSING_MEMBER")) return "missing required member [E_MISSING_MEMBER]";
+    if (eq(u8, code, "E_MISSING_SUPER")) return "constructor of a derived class must call super(...) [E_MISSING_SUPER]";
+    if (eq(u8, code, "E_PRIVATE_ACCESS")) return "member is private [E_PRIVATE_ACCESS]";
+    if (eq(u8, code, "E_PROTECTED_ACCESS")) return "member is protected [E_PROTECTED_ACCESS]";
+    if (eq(u8, code, "E_THROW_TYPE")) return "only Error values can be thrown [E_THROW_TYPE]";
+    if (eq(u8, code, "E_VOID_VALUE")) return "a void expression cannot be used as a value [E_VOID_VALUE]";
+    if (eq(u8, code, "E_SPREAD_TARGET")) return "spread argument only allowed for a rest parameter [E_SPREAD_TARGET]";
+    if (eq(u8, code, "E_REST_NOT_LAST")) return "a rest parameter must be last [E_REST_NOT_LAST]";
+    if (eq(u8, code, "E_REST_NOT_ARRAY")) return "a rest parameter must have an array type [E_REST_NOT_ARRAY]";
+    if (eq(u8, code, "E_REQUIRED_AFTER_OPTIONAL")) return "a required parameter cannot follow an optional one [E_REQUIRED_AFTER_OPTIONAL]";
+    if (eq(u8, code, "E_CAPTURED_MUTATION")) return "cannot mutate a variable captured by an arrow function [E_CAPTURED_MUTATION]";
+    if (eq(u8, code, "E_DYNAMIC_PROPERTY_WRITE")) return "record fields are immutable; build a new object instead [E_DYNAMIC_PROPERTY_WRITE]";
+    if (eq(u8, code, "E_AWAIT_OUTSIDE_ASYNC")) return "'await' outside an async function [E_AWAIT_OUTSIDE_ASYNC]";
+    if (eq(u8, code, "E_AWAIT_NOT_PROMISE")) return "'await' operand is not a Promise [E_AWAIT_NOT_PROMISE]";
+    if (eq(u8, code, "E_ASYNC_RETURN")) return "an async function must declare a Promise<...> return type [E_ASYNC_RETURN]";
+    if (eq(u8, code, "E_UNSUPPORTED_NESTED_FUNCTION")) return "nested function declarations are not supported; use an arrow function [E_UNSUPPORTED_NESTED_FUNCTION]";
+    if (eq(u8, code, "E_UNSUPPORTED_OPTIONAL_CALL")) return "optional method call (a?.m()) is not supported [E_UNSUPPORTED_OPTIONAL_CALL]";
+    if (eq(u8, code, "E_UNSUPPORTED_STD")) return "unsupported standard-library call [E_UNSUPPORTED_STD]";
+    if (eq(u8, code, "E_UNSUPPORTED_COMMONJS")) return "CommonJS (require/module.exports) is not supported; use import/export [E_UNSUPPORTED_COMMONJS]";
+    if (eq(u8, code, "E_UNSUPPORTED_EVAL")) return "eval is not supported [E_UNSUPPORTED_EVAL]";
+    if (eq(u8, code, "E_UNSUPPORTED_PROTOTYPE")) return "prototype manipulation is not supported [E_UNSUPPORTED_PROTOTYPE]";
+    if (eq(u8, code, "E_UNTERMINATED_COMMENT")) return "unterminated comment [E_UNTERMINATED_COMMENT]";
+    if (eq(u8, code, "E_UNTERMINATED_REGEX")) return "unterminated regex literal [E_UNTERMINATED_REGEX]";
+    if (eq(u8, code, "E_INVALID_NUMBER")) return "invalid number literal [E_INVALID_NUMBER]";
+    if (eq(u8, code, "E_TYPE_INFER")) return "cannot infer type here; add an annotation [E_TYPE_INFER]";
+    if (eq(u8, code, "E_NOT_DISPOSABLE")) return "'using' target has no dispose method [E_NOT_DISPOSABLE]";
+    if (eq(u8, code, "E_REF_ARG")) return "a Ref<T> parameter needs a mutable variable argument [E_REF_ARG]";
+    if (eq(u8, code, "E_REF_TARGET")) return "invalid Ref<T> target type [E_REF_TARGET]";
+    if (eq(u8, code, "E_FFI_TYPE")) return "type not supported across the FFI boundary [E_FFI_TYPE]";
+    if (eq(u8, code, "E_UNKNOWN_MATCHER")) return "unknown test matcher [E_UNKNOWN_MATCHER]";
+    return code;
+}
+
 fn printDiag(err: *std.Io.Writer, source: []const u8, file: []const u8, diag: compiler.Diag) !void {
-    try err.print("{s}:{d}:{d}: error: {s}\n", .{ file, diag.line, diag.col, diag.msg });
+    try err.print("{s}:{d}:{d}: error: {s}\n", .{ file, diag.line, diag.col, humanizeDiag(diag.msg) });
     var it = std.mem.splitScalar(u8, source, '\n');
     var n: u32 = 1;
     while (it.next()) |line| : (n += 1) {

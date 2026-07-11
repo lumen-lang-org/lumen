@@ -213,7 +213,6 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             return null;
         }
         self.ensureAssignable(program, elem, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         if (mc.args.len == 2) {
@@ -273,7 +272,6 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             return null;
         }
         self.ensureAssignable(program, elem, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         for (mc.args[1..]) |arg| {
@@ -301,7 +299,6 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             return null;
         }
         self.ensureAssignable(program, elem, mc.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         mc.array_result_type = obj_type;
@@ -317,7 +314,6 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         }
         for (mc.args) |arg| {
             self.ensureAssignable(program, obj_type, arg, line, col) catch {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             };
         }
@@ -401,7 +397,6 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         }
         if (mc.args.len == 1) {
             self.ensureAssignable(program, .string, mc.args[0], line, col) catch {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             };
         }
@@ -434,11 +429,9 @@ pub fn mapMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             return null;
         }
         self.ensureAssignable(program, key, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, value, mc.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .void;
@@ -449,7 +442,6 @@ pub fn mapMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             return null;
         }
         self.ensureAssignable(program, key, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         const inner = self.arena.create(types.Type) catch return null;
@@ -462,7 +454,6 @@ pub fn mapMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             return null;
         }
         self.ensureAssignable(program, key, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .bool;
@@ -526,7 +517,6 @@ pub fn setMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             return null;
         }
         self.ensureAssignable(program, elem, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .void;
@@ -537,7 +527,6 @@ pub fn setMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             return null;
         }
         self.ensureAssignable(program, elem, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .bool;
@@ -595,7 +584,6 @@ pub fn eventEmitterMethod(self: *Checker, program: *ast.Program, mc: anytype, ob
         }
         const want = self.makeFuncType(&.{payload}, .void) orelse return null;
         self.ensureAssignable(program, want, mc.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .void;
@@ -611,7 +599,6 @@ pub fn eventEmitterMethod(self: *Checker, program: *ast.Program, mc: anytype, ob
             return null;
         }
         self.ensureAssignable(program, payload, mc.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .void;
@@ -772,7 +759,6 @@ pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
             return null;
         }
         self.ensureAssignable(program, .string, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .string;
@@ -809,7 +795,6 @@ pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
             return null;
         }
         self.ensureAssignable(program, .buffer_type, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .bool;
@@ -884,7 +869,6 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         const p0 = self.exprType(program, mc.args[0], line, col) orelse return null;
         if (p0 == .regexp) {
             self.ensureAssignable(program, .string, mc.args[1], line, col) catch {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             };
             mc.regex_arg = true;
@@ -927,7 +911,6 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         }
         for (mc.args) |arg| {
             self.ensureAssignable(program, .string, arg, line, col) catch {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             };
         }
@@ -974,7 +957,6 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
     for (mc.args, 0..) |arg, i| {
         switch (spec.kinds[i]) {
             .string => self.ensureAssignable(program, .string, arg, line, col) catch {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             },
             .int => {
@@ -1936,7 +1918,6 @@ pub fn fsCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
         }
         const want = self.makeFuncType(&.{ .string, .string }, .void) orelse return null;
         self.ensureAssignable(program, want, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.needs_fs_watch = true;
@@ -2103,7 +2084,6 @@ pub fn pathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         }
         registerLumenPathParts(self) orelse return null;
         self.ensureAssignable(program, .{ .named = "__LumenPathParts" }, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.uses_io = true;
@@ -2537,11 +2517,9 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
             return null;
         }
         self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.uses_io = true;
@@ -2557,7 +2535,6 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         }
         for (call.args) |arg| {
             self.ensureAssignable(program, .buffer_type, arg, line, col) catch {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             };
         }
@@ -2573,19 +2550,15 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
             return null;
         }
         self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .i32, call.args[2], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .i32, call.args[3], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.needs_crypto_api = true;
@@ -2599,15 +2572,12 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
             return null;
         }
         self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .i32, call.args[2], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.needs_crypto_api = true;
@@ -2621,11 +2591,9 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
             return null;
         }
         self.ensureAssignable(program, .buffer_type, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.needs_crypto_api = true;
@@ -2639,7 +2607,6 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
             return null;
         }
         self.ensureAssignable(program, .string, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.needs_buffer = true;
@@ -2653,11 +2620,9 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
             return null;
         }
         self.ensureAssignable(program, .string, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         self.ensureAssignable(program, .buffer_type, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.needs_buffer = true;
@@ -2682,7 +2647,6 @@ pub fn hashMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: 
             return null;
         }
         self.ensureAssignable(program, .buffer_type, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .hash_type; // returns self, for chaining
@@ -2712,7 +2676,6 @@ pub fn hmacMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: 
             return null;
         }
         self.ensureAssignable(program, .buffer_type, mc.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         return .hmac_type; // returns self, for chaining
@@ -2806,7 +2769,6 @@ pub fn urlCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall,
         }
         registerLumenUrlParts(self) orelse return null;
         self.ensureAssignable(program, .{ .named = "__LumenUrlParts" }, call.args[0], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.uses_io = true;
@@ -3002,7 +2964,6 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         registerLumenHttpResponse(self) orelse return null;
         const want = self.makeFuncType(&.{.{ .named = "__LumenHttpRequest" }}, .{ .named = "__LumenHttpResponse" }) orelse return null;
         self.ensureAssignable(program, want, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.uses_io = true;
@@ -3089,7 +3050,6 @@ pub fn netCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall,
         }
         const want = self.makeFuncType(&.{.socket_type}, .void) orelse return null;
         self.ensureAssignable(program, want, call.args[1], line, col) catch {
-            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };
         program.uses_io = true;

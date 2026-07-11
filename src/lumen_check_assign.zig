@@ -28,7 +28,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 return self.fail(line, col, "E_TYPE_MISMATCH");
             }
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .int_literal_union => |type_name| {
             const decl = self.type_decls.get(type_name) orelse return self.fail(line, col, "unknown type name");
@@ -40,12 +40,12 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 return self.fail(line, col, "E_TYPE_MISMATCH");
             }
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .named => |type_name| {
             if (value.* != .obj) {
                 const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-                if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+                if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
                 return;
             }
             const decl = self.type_decls.get(type_name) orelse return self.fail(line, col, "unknown type name");
@@ -130,7 +130,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
         .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array => {
             if (value.* != .array) {
                 const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-                if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+                if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
                 return;
             }
             const elem_type = types.arrayElem(expected) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
@@ -156,7 +156,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 .tuple_lit => |t| t.items,
                 else => {
                     const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-                    if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+                    if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
                     return;
                 },
             };
@@ -179,7 +179,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // into an i64 slot, matching every other integer width here.
             if (value.* == .num) return;
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .f64 => {
             // Same gap as .i64 above, hit by the same review pass:
@@ -190,7 +190,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // this is purely a checker-side gap, not an emit-side one.
             if (value.* == .num) return;
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         .func_type => |fsig| {
             // An untyped arrow argument to a function-typed parameter borrows the
@@ -204,11 +204,11 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 return;
             }
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
         else => {
             const actual_type = self.exprType(program, value, line, col) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
-            if (!types.same(expected, actual_type)) return self.fail(line, col, "E_TYPE_MISMATCH");
+            if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
     }
 }

@@ -526,6 +526,67 @@ pub fn isRefScalar(t: Type) bool {
     };
 }
 
+/// The user-facing TypeScript-syntax name of a type, for diagnostics
+/// ("i32", "string", "string[]", "Map<string, i32>", "(i32) => bool", ...).
+/// Never leaks Zig spellings like `[]const u8`.
+pub fn tsName(arena: std.mem.Allocator, t: Type) ![]const u8 {
+    return switch (t) {
+        .i32 => "i32",
+        .i64 => "i64",
+        .f64 => "number",
+        .bool => "boolean",
+        .regexp => "RegExp",
+        .string => "string",
+        .void => "void",
+        .error_obj => "Error",
+        .i32_array => "i32[]",
+        .i64_array => "i64[]",
+        .f64_array => "number[]",
+        .bool_array => "boolean[]",
+        .string_array => "string[]",
+        .string_literal_union => "string",
+        .int_literal_union => "i32",
+        .named => |name| name,
+        .named_array => |name| try std.fmt.allocPrint(arena, "{s}[]", .{name}),
+        .union_type => |name| name,
+        .enum_type => |e| e.name,
+        .optional => |inner| try std.fmt.allocPrint(arena, "{s} | null", .{try tsName(arena, inner.*)}),
+        .none => "null",
+        .func_type => |sig| blk: {
+            var buf: std.ArrayListUnmanaged(u8) = .empty;
+            try buf.append(arena, '(');
+            for (sig.params, 0..) |pt, i| {
+                if (i > 0) try buf.appendSlice(arena, ", ");
+                try buf.appendSlice(arena, try tsName(arena, pt));
+            }
+            try buf.appendSlice(arena, ") => ");
+            try buf.appendSlice(arena, try tsName(arena, sig.ret.*));
+            break :blk buf.items;
+        },
+        .class_type => |name| name,
+        .map_type => |m| try std.fmt.allocPrint(arena, "Map<{s}, {s}>", .{ try tsName(arena, m.key.*), try tsName(arena, m.value.*) }),
+        .set_type => |elem| try std.fmt.allocPrint(arena, "Set<{s}>", .{try tsName(arena, elem.*)}),
+        .event_emitter_type => "EventEmitter",
+        .readable_stream_type => "ReadableStream",
+        .writable_stream_type => "WritableStream",
+        .socket_type => "Socket",
+        .buffer_type => "Buffer",
+        .hash_type => "Hash",
+        .hmac_type => "Hmac",
+        .promise_type => |inner| try std.fmt.allocPrint(arena, "Promise<{s}>", .{try tsName(arena, inner.*)}),
+        .tuple_type => |elems| blk: {
+            var buf: std.ArrayListUnmanaged(u8) = .empty;
+            try buf.append(arena, '[');
+            for (elems, 0..) |et, i| {
+                if (i > 0) try buf.appendSlice(arena, ", ");
+                try buf.appendSlice(arena, try tsName(arena, et));
+            }
+            try buf.append(arena, ']');
+            break :blk buf.items;
+        },
+    };
+}
+
 pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
     return switch (t) {
         .i32 => "i32",

@@ -235,6 +235,16 @@ pub const Checker = struct {
         return self.fail(line, col, msg);
     }
 
+    /// A type-mismatch diagnostic carrying the expected and actual types in
+    /// TypeScript syntax: "type mismatch: expected `i32`, got `string`".
+    pub fn failTypeMismatch(self: *Checker, line: u32, col: u32, expected: types.Type, actual: types.Type) CompileError {
+        const en = types.tsName(self.arena, expected) catch return self.fail(line, col, "E_TYPE_MISMATCH");
+        const an = types.tsName(self.arena, actual) catch return self.fail(line, col, "E_TYPE_MISMATCH");
+        const msg = std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}`", .{ en, an }) catch
+            return self.fail(line, col, "E_TYPE_MISMATCH");
+        return self.fail(line, col, msg);
+    }
+
     pub fn undefined_(self: *Checker, name: []const u8, line: u32, col: u32) CompileError {
         self.last_err = std.fmt.allocPrint(self.arena, "undefined variable '{s}'", .{name}) catch "undefined variable";
         self.last_line = line;
@@ -718,7 +728,6 @@ pub const Checker = struct {
             };
             if (i < args.len) {
                 self.ensureAssignable(program, pt, args[i], line, col) catch {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 };
                 out.append(self.arena, args[i]) catch return null;
@@ -763,12 +772,10 @@ pub const Checker = struct {
                         a.spread = from_call;
                     }
                     self.ensureAssignable(program, rest_type, a.spread, line, col) catch {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
                     };
                 } else {
                     self.ensureAssignable(program, elem_type, a, line, col) catch {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
                     };
                 }

@@ -316,7 +316,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 }
                 self.ensureAssignable(program, typed_type, empty_expr, line, col) catch {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 };
                 return typed_type;
@@ -340,7 +339,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             };
             if (narrow_else) self.narrowed.items.len -= 1;
             if (!types.same(then_type, else_type)) {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                _ = self.failTypeMismatch(line, col, then_type, else_type) catch {};
                 return null;
             }
             return then_type;
@@ -896,7 +895,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
                 for (mc.args, rm.method.params) |arg, p| {
                     self.ensureAssignable(program, p.checked_type orelse return null, arg, line, col) catch {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
                     };
                 }
@@ -946,7 +944,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 }
                 self.ensureAssignable(program, .string, mc.args[0], line, col) catch {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 };
                 mc.container_type = .regexp; // sentinel for codegen
@@ -1004,7 +1001,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             for (mc.args, rm.method.params) |arg, p| {
                 self.ensureAssignable(program, p.checked_type orelse return null, arg, line, col) catch {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 };
             }
@@ -1032,7 +1028,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             for (sc.args, rm.method.params) |arg, p| {
                 self.ensureAssignable(program, p.checked_type orelse return null, arg, line, col) catch {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 };
             }
@@ -1114,7 +1109,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             for (oc.args, sig.params) |arg, pt| {
                 self.ensureAssignable(program, pt, arg, line, col) catch {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 };
             }
@@ -1358,7 +1352,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 for (call.args, info.params) |arg, param| {
                     const pt = param.checked_type orelse return null;
                     self.ensureAssignable(program, pt, arg, line, col) catch {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
                     };
                 }
@@ -1376,7 +1369,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         }
                         for (call.args, sig.params) |arg, pt| {
                             self.ensureAssignable(program, pt, arg, line, col) catch {
-                                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                                 return null;
                             };
                         }
@@ -1456,7 +1448,6 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 // value is a type error) rather than a representation-only
                 // assertion. Documented as a divergence.
                 self.ensureAssignable(program, target, c.inner, line, col) catch {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 };
                 c.checked_type = target;
