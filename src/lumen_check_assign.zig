@@ -144,7 +144,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                     try self.ensureAssignable(program, elem_type, item, line, col);
                 }
             }
-            if (has_spread) value.array.elem_type = elem_type;
+            if (has_spread) value.array.elem_type = elem_type else value.array.heap_elem = elem_type;
         },
         .tuple_type => |elems| {
             // A tuple is written as an array literal of matching length whose

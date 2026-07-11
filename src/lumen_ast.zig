@@ -518,7 +518,7 @@ pub const Expr = union(enum) {
     str: []const u8,
     regex: struct { source: []const u8, flags: []const u8 }, // `/pattern/flags` literal
     null_lit, // null / undefined
-    array: struct { items: []*Expr, elem_type: ?types.Type = null }, // `[a, b, ...rest]`; elem_type is filled by the checker when a spread element is present
+    array: struct { items: []*Expr, elem_type: ?types.Type = null, heap_elem: ?types.Type = null }, // `[a, b, ...rest]`; elem_type is filled by the checker when a spread element is present; heap_elem is the element type of a spread-free literal, so it can heap-allocate (and safely escape a `return`) instead of pointing at a stack tuple
     spread: *Expr, // `...expr` element inside an array literal or call argument list
     tuple_lit: struct { items: []*Expr, tuple_type: ?types.Type = null }, // [a, b] checked against a tuple type
     var_ref: struct { name: []const u8, emit_name: ?[]const u8 = null, unwrap: bool = false, is_func_ref: bool = false, capture: bool = false, func_sig: ?*const types.FuncSig = null, deref: bool = false, is_accumulator: bool = false, builtin_const: ?[]const u8 = null }, // deref: a scalar `Ref<T>` parameter read, emitted as `name.*`; is_accumulator: read of a string-builder local, emitted as `name.items`

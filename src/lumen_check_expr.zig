@@ -444,7 +444,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             };
-            if (has_spread) arr.elem_type = elem_type;
+            if (has_spread) arr.elem_type = elem_type else arr.heap_elem = elem_type;
             return result;
         },
         .tuple_lit => |t| t.tuple_type,

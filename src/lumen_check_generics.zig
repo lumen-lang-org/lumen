@@ -355,7 +355,7 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
         .array => |a| blk: {
             const c = self.arena.alloc(*ast.Expr, a.items.len) catch return error.OutOfMemory;
             for (a.items, 0..) |it, i| c[i] = try self.cloneExpr(it);
-            break :blk .{ .array = .{ .items = c, .elem_type = a.elem_type } };
+            break :blk .{ .array = .{ .items = c, .elem_type = a.elem_type, .heap_elem = a.heap_elem } };
         },
         .tuple_lit => |t| blk: {
             const c = self.arena.alloc(*ast.Expr, t.items.len) catch return error.OutOfMemory;

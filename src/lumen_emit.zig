@@ -159,6 +159,21 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     }
                 }
                 try w.appendSlice(arena, " }) catch unreachable)");
+            } else if (arr.heap_elem) |het| {
+                // A spread-free literal: heap-allocate the elements (page
+                // allocator, allocate-and-leak) so the slice can escape a
+                // `return` or be stored, rather than pointing at a stack tuple
+                // (`&.{...}`) that dangles once the enclosing frame returns.
+                const ez = try types.zigName(arena, het);
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__arl{d}: {{ const __r = __sa().alloc({s}, {d}) catch unreachable; ", .{ s, ez, arr.items.len });
+                for (arr.items, 0..) |item, i| {
+                    try w.print(arena, "__r[{d}] = ", .{i});
+                    try emitExpr(item, w, arena);
+                    try w.appendSlice(arena, "; ");
+                }
+                try w.print(arena, "break :__arl{d} @as([]const {s}, __r); }})", .{ s, ez });
             } else {
                 try w.appendSlice(arena, "&.{ ");
                 for (arr.items, 0..) |item, i| {
