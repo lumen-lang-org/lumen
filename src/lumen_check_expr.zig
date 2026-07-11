@@ -1391,6 +1391,16 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return func.return_type;
         },
         .static_call => |*call| {
+            // The parser treats `name.method(...)` as a namespace call whenever
+            // `name` is a known std namespace (fs/path/os/...), but a local
+            // binding of that name shadows the namespace. Re-route to an instance
+            // method call on the variable in that case.
+            if (call.type_args.len == 0 and self.bindingPtr(call.namespace) != null) {
+                const obj = self.arena.create(ast.Expr) catch return null;
+                obj.* = .{ .var_ref = .{ .name = call.namespace } };
+                e.* = .{ .method_call = .{ .obj = obj, .name = call.name, .args = call.args } };
+                return self.exprType(program, e, line, col);
+            }
             return self.staticCallType(program, call, line, col);
         },
         .cast => |*c| {
