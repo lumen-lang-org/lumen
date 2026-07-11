@@ -341,11 +341,14 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     }
 
     if (eq(u8, name, "concat")) {
-        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        // Variadic: concatenate the receiver and every argument array.
+        try w.print(arena, "({s}: {{ break :{s} @as([]const {s}, std.mem.concat(__sa(), {s}, &.{{ ", .{ lbl, lbl, elem_zig, elem_zig });
         try emitArrayObj(mc, w, arena);
-        try w.appendSlice(arena, "; const __other = ");
-        try emitSliceExpr(mc.args[0], elem, w, arena);
-        try w.print(arena, "; const __r = __sa().alloc({s}, __arr.len + __other.len) catch unreachable; @memcpy(__r[0..__arr.len], __arr); @memcpy(__r[__arr.len..], __other); break :{s} @as([]const {s}, __r); }})", .{ elem_zig, lbl, elem_zig });
+        for (mc.args) |arg| {
+            try w.appendSlice(arena, ", ");
+            try emitSliceExpr(arg, elem, w, arena);
+        }
+        try w.appendSlice(arena, " }) catch unreachable); })");
         return;
     }
 
