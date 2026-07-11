@@ -933,8 +933,18 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             }
         },
         .expr_stmt => |expr_stmt| {
-            _ = self.exprType(program, expr_stmt.value, expr_stmt.line, expr_stmt.col) orelse
+            const et = self.exprType(program, expr_stmt.value, expr_stmt.line, expr_stmt.col) orelse
                 return self.inferenceFail(expr_stmt.line, expr_stmt.col, "cannot infer expression type");
+            // A pure transform used as a statement silently does nothing —
+            // Lumen arrays/strings are immutable, so `names.sort()` returns a
+            // new value the caller must keep (spec 271).
+            if (et != .void and expr_stmt.value.* == .method_call) {
+                const mc = expr_stmt.value.method_call;
+                if (!mc.is_console and (mc.array_result_type != null or mc.string_method)) {
+                    const msg = std.fmt.allocPrint(self.arena, "result of '.{s}()' is discarded — it returns a new value (the receiver is immutable); assign it: `x = x.{s}(...)`", .{ mc.name, mc.name }) catch "discarded result";
+                    self.warnings.append(self.arena, .{ .line = expr_stmt.line, .col = expr_stmt.col, .msg = msg }) catch {};
+                }
+            }
         },
         .return_stmt => |*ret| {
             const expected_return = self.current_return_type orelse
