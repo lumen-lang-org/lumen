@@ -291,6 +291,15 @@ pub const Parser = struct {
                 const mc = try self.node(.{ .method_call = .{ .obj = this_e, .name = member, .args = try args.toOwnedSlice(self.arena) } });
                 return .{ .expr_stmt = .{ .value = mc, .line = line, .col = col } };
             }
+            // `this.x++;` / `this.x--;` as a statement — the postfix value is
+            // discarded here, so lower to `this.x += 1` / `this.x -= 1`.
+            if (self.cur == .op2 and (eq(u8, self.cur.op2, "++") or eq(u8, self.cur.op2, "--"))) {
+                const is_inc = eq(u8, self.cur.op2, "++");
+                try self.advance();
+                try self.expectOp(';');
+                const one = try self.node(.{ .num = 1 });
+                return .{ .member_assign = .{ .field = member, .op = if (is_inc) "+=" else "-=", .value = one, .line = line, .col = col } };
+            }
             var op: []const u8 = "=";
             if (self.isOp('=')) {
                 try self.advance();
