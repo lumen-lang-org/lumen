@@ -358,6 +358,16 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return obj_type;
     }
 
+    // toString(): string -- comma-joined, identical to `join()`.
+    if (eq(u8, name, "toString")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        mc.array_result_type = .string;
+        return .string;
+    }
+
     // join(sep?: string): string
     if (eq(u8, name, "join")) {
         if (mc.args.len > 1) {

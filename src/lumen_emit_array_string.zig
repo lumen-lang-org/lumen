@@ -403,7 +403,7 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
-    if (eq(u8, name, "join")) {
+    if (eq(u8, name, "join") or eq(u8, name, "toString")) {
         const spec = switch (elem) {
             .string, .string_literal_union => "{s}",
             .bool => "{}",
