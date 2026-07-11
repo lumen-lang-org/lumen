@@ -812,7 +812,7 @@ fn fileHash(arena: std.mem.Allocator, io: std.Io, path: []const u8) u64 {
     return std.hash.Wyhash.hash(0, data);
 }
 
-const Action = enum { build_exe, run_test };
+const Action = enum { build_exe, run_test, check_only };
 
 /// The ambient declarations that make Lumen `.ts` sources type-check under plain
 /// tsc/editors. Embedded from the repo's canonical `/lumen.d.ts` so `lumen init`
@@ -1131,6 +1131,12 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         return 1;
     };
 
+    // `lumen check`: diagnostics only — stop before writing or building anything.
+    if (action == .check_only) {
+        try err.print("{s}: no errors\n", .{path});
+        return 0;
+    }
+
     // `--reactor`: surface the entry file's `export function`s as callable wasm
     // exports (string in/out via linear memory) so an embedder instantiates once
     // and calls them repeatedly, instead of re-running the program per call.
@@ -1202,6 +1208,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             try argv.appendSlice(arena, &.{ "zig", "build-exe", gen_path, "-O", mode.zigName(), emit });
         },
         .run_test => try argv.appendSlice(arena, &.{ "zig", "test", gen_path }),
+        .check_only => unreachable, // returned before codegen
     }
     if (wasm) {
         // wasm C FFI: link the prebuilt archive(s) named by `// @wasm-link`, plus
@@ -1356,12 +1363,12 @@ pub fn main(init: std.process.Init) !void {
     };
 
     if (args.len < 2) {
-        try err.writeAll("usage: lumen init [dir]\n       lumen compile [--release-fast] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen watch [--no-run] <file.ts>\n       lumen test <file.ts>\n");
+        try err.writeAll("usage: lumen init [dir]\n       lumen compile [--release-fast] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen check <file.ts>\n       lumen watch [--no-run] <file.ts>\n       lumen test <file.ts>\n");
         try err.flush();
         std.process.exit(2);
     }
 
-    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--link <lib>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
+    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--link <lib>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen check <file.ts>\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
     const code = if (std.mem.eql(u8, args[1], "init")) blk: {
         if (args.len > 3) {
             try err.writeAll(usage);
@@ -1375,6 +1382,14 @@ pub fn main(init: std.process.Init) !void {
             break :blk 2;
         }
         break :blk try compileFile(arena, io, args[2], .release_safe, .run_test, &.{}, false, false, err);
+    } else if (std.mem.eql(u8, args[1], "check")) blk: {
+        // `lumen check <file.ts>`: parse + type-check only (fast feedback for
+        // editors and CI); no code is generated or built.
+        if (args.len < 3) {
+            try err.writeAll("usage: lumen check <file.ts>\n");
+            break :blk 2;
+        }
+        break :blk try compileFile(arena, io, args[2], .release_safe, .check_only, &.{}, false, false, err);
     } else if (std.mem.eql(u8, args[1], "watch")) blk: {
         if (args.len < 3) {
             try err.writeAll("usage: lumen watch [--no-run] [--release-fast] <file.ts>\n");
