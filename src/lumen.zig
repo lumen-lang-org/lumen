@@ -1320,12 +1320,12 @@ pub fn main(init: std.process.Init) !void {
     const err = &err_fw.interface;
 
     if (args.len < 2) {
-        try err.writeAll("usage: lumen init [dir]\n       lumen compile [--release-fast] <file.ts>\n       lumen watch [--no-run] <file.ts>\n       lumen test <file.ts>\n");
+        try err.writeAll("usage: lumen init [dir]\n       lumen compile [--release-fast] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen watch [--no-run] <file.ts>\n       lumen test <file.ts>\n");
         try err.flush();
         std.process.exit(2);
     }
 
-    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--link <lib>] <file.ts>\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
+    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--link <lib>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
     const code = if (std.mem.eql(u8, args[1], "init")) blk: {
         if (args.len > 3) {
             try err.writeAll(usage);
@@ -1367,6 +1367,59 @@ pub fn main(init: std.process.Init) !void {
             try err.writeAll("usage: lumen watch [--no-run] [--release-fast] <file.ts>\n");
             break :blk 2;
         }, mode, run, err);
+    } else if (std.mem.eql(u8, args[1], "run")) blk: {
+        // `lumen run <file.ts> [args...]`: compile, then execute the produced
+        // binary with inherited stdio, forwarding any trailing arguments.
+        if (args.len < 3) {
+            try err.writeAll("usage: lumen run [--release-fast] <file.ts> [args...]\n");
+            break :blk 2;
+        }
+        var mode: CompileMode = .release_safe;
+        var source_arg: ?[]const u8 = null;
+        var i: usize = 2;
+        while (i < args.len) : (i += 1) {
+            const arg = args[i];
+            if (source_arg == null and std.mem.eql(u8, arg, "--release-fast")) {
+                mode = .release_fast;
+            } else if (source_arg == null) {
+                source_arg = arg;
+                i += 1;
+                break;
+            }
+        }
+        const src = source_arg orelse {
+            try err.writeAll("usage: lumen run [--release-fast] <file.ts> [args...]\n");
+            break :blk 2;
+        };
+        const compile_code = try compileFile(arena, io, src, mode, .build_exe, &.{}, false, false, err);
+        if (compile_code != 0) break :blk compile_code;
+        try err.flush();
+        // Execute ./<stem> forwarding trailing args.
+        const stem = std.fs.path.stem(src);
+        const exe_rel = if (@import("builtin").os.tag == .windows)
+            try std.fmt.allocPrint(arena, "./{s}.exe", .{stem})
+        else
+            try std.fmt.allocPrint(arena, "./{s}", .{stem});
+        var run_argv: std.ArrayListUnmanaged([]const u8) = .empty;
+        try run_argv.append(arena, exe_rel);
+        while (i < args.len) : (i += 1) try run_argv.append(arena, args[i]);
+        var child = std.process.spawn(io, .{
+            .argv = run_argv.items,
+            .stdin = .inherit,
+            .stdout = .inherit,
+            .stderr = .inherit,
+        }) catch {
+            try err.print("error: could not run {s}\n", .{exe_rel});
+            break :blk 2;
+        };
+        const term = child.wait(io) catch {
+            try err.print("error: {s} was interrupted\n", .{exe_rel});
+            break :blk 2;
+        };
+        break :blk switch (term) {
+            .exited => |c| c,
+            else => 1,
+        };
     } else if (std.mem.eql(u8, args[1], "compile")) blk: {
         if (args.len < 3) {
             try err.writeAll(usage);
