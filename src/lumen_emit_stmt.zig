@@ -811,6 +811,10 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.appendSlice(arena, if (!emitted_branch) "    {\n" else "    else {\n");
                 try emitBody(default_body, decls, body, arena, throw_target, label_target, options);
                 try body.appendSlice(arena, "    }\n");
+            } else if (switch_stmt.exhaustive and emitted_branch) {
+                // The checker proved every union member is covered; tell Zig's
+                // flow analysis the fall-through is impossible (spec 266).
+                try body.appendSlice(arena, "    else unreachable;\n");
             }
             try body.appendSlice(arena, "    }\n");
         },

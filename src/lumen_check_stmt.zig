@@ -313,8 +313,9 @@ pub fn stmtReturns(stmt: ast.Stmt) bool {
         // every case either returns or is an empty fall-through to the next
         // clause (which the fall-through lowering routes to a returning branch).
         .switch_stmt => |sw| blk: {
-            const dflt = sw.default_body orelse break :blk false;
-            if (!blockReturns(dflt)) break :blk false;
+            if (sw.default_body) |dflt| {
+                if (!blockReturns(dflt)) break :blk false;
+            } else if (!sw.exhaustive) break :blk false;
             for (sw.cases) |c| {
                 if (c.body.len != 0 and !blockReturns(c.body)) break :blk false;
             }
@@ -902,6 +903,28 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 try self.checkBlock(program, case.body);
             }
             if (switch_stmt.default_body) |default_body| try self.checkBlock(program, default_body);
+            // Exhaustiveness over a literal union: every member covered by a
+            // case (spec 266).
+            if (switch_stmt.default_body == null) {
+                const lits: ?[]const []const u8 = switch (switch_type) {
+                    .string_literal_union => |tn| if (self.type_decls.get(tn)) |d| d.string_literals else null,
+                    else => null,
+                };
+                if (lits) |literals| {
+                    var all = true;
+                    for (literals) |lit| {
+                        var covered = false;
+                        for (switch_stmt.cases) |c| {
+                            if (c.value.* == .str and std.mem.eql(u8, c.value.str, lit)) covered = true;
+                        }
+                        if (!covered) {
+                            all = false;
+                            break;
+                        }
+                    }
+                    switch_stmt.exhaustive = all;
+                }
+            }
         },
         .expr_stmt => |expr_stmt| {
             _ = self.exprType(program, expr_stmt.value, expr_stmt.line, expr_stmt.col) orelse

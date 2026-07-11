@@ -324,6 +324,10 @@ pub const SwitchStmt = struct {
     cases: []SwitchCase,
     default_body: ?[]Stmt = null,
     checked_type: ?types.Type = null,
+    // True when the switch is over a literal union and the cases cover every
+    // member (spec 266): counts as returning-on-all-paths without a default,
+    // and emits a trailing `else unreachable`.
+    exhaustive: bool = false,
     line: u32,
     col: u32,
 };

@@ -34,8 +34,9 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             if (self.cur != .str) return error.ParseError;
             try literals.append(self.arena, self.cur.str);
             try self.advance();
-            if (self.isOp(';')) break;
-            if (self.cur != .cmp or !std.mem.eql(u8, self.cur.cmp, "|")) return error.ParseError;
+            // The union ends at anything that isn't `|` — a `;`, a newline
+            // (ASI), `}`, or EOF; expectSemi validates it below.
+            if (self.cur != .cmp or !std.mem.eql(u8, self.cur.cmp, "|")) break;
             try self.advance();
         }
         try self.expectSemi();
@@ -47,8 +48,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             if (self.cur != .num) return error.ParseError;
             try int_literals.append(self.arena, self.cur.num);
             try self.advance();
-            if (self.isOp(';')) break;
-            if (self.cur != .cmp or !std.mem.eql(u8, self.cur.cmp, "|")) return error.ParseError;
+            if (self.cur != .cmp or !std.mem.eql(u8, self.cur.cmp, "|")) break;
             try self.advance();
         }
         try self.expectSemi();
