@@ -1983,6 +1983,9 @@ pub const CompileOptions = struct {
     // When set, non-fatal diagnostics (unused variables, ...) are appended here
     // for the caller to render after the compile.
     warnings: ?*std.ArrayListUnmanaged(@import("lumen_diag.zig").Diag) = null,
+    // Merged-line origins from import inlining; when non-empty the generated
+    // runtime remaps panic positions and stack frames to the original files.
+    line_map: []const @import("lumen_diag.zig").LineOrigin = &.{},
     // Threaded down from the CLI's `--wasm` flag (spec 049): wasm32-wasi has
     // no real OS threads, and the CLI's own libxev-wiring gate hard-fails any
     // wasm build whose generated source textually contains `@import("xev")`

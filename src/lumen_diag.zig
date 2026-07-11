@@ -5,3 +5,7 @@ pub const CompileError = error{ ParseError, OutOfMemory };
 /// continues past a failed statement, capped, so one compile can report
 /// several errors).
 pub const Diag = struct { line: u32 = 0, col: u32 = 0, msg: []const u8 = "syntax error", extra: []const Diag = &.{} };
+
+/// Origin of one line of a merged (import-inlined) source: the file the user
+/// wrote and the line within it.
+pub const LineOrigin = struct { file: []const u8, line: u32 };

@@ -532,9 +532,7 @@ fn appendTransformed(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
     }
 }
 
-/// Origin of one line of the merged (import-inlined) source: which file and
-/// which line within it, so diagnostics point at the file the user wrote.
-const LineOrigin = struct { file: []const u8, line: u32 };
+const LineOrigin = compiler.LineOrigin;
 
 fn appendExpandedSource(
     arena: std.mem.Allocator,
@@ -1225,6 +1223,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .runtime_locations = mode.runtimeLocations(),
         .wasm = wasm,
         .warnings = &warnings,
+        .line_map = expanded.line_map,
     }) catch {
         try printDiag(err, source, path, diag);
         try printWarnings(err, source, path, warnings.items, diag);

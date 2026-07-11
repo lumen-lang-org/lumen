@@ -93,6 +93,7 @@ const types = @import("lumen_types.zig");
 
 pub const CompileError = diag_mod.CompileError;
 pub const Diag = diag_mod.Diag;
+pub const LineOrigin = diag_mod.LineOrigin;
 
 const Lexer = lexer.Lexer;
 
@@ -319,6 +320,37 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             }
         }
         try out.appendSlice(arena, ";\n");
+        // Origin table for import-inlined programs: maps a merged-source line
+        // back to the file/line the user wrote, so runtime errors and stack
+        // frames report real positions. Identity when there are no imports.
+        try out.appendSlice(arena, "const __LumenOrigin = struct { file: []const u8, line: u32 };\n");
+        if (options.line_map.len > 0) {
+            try out.appendSlice(arena, "const __lumen_origins = [_]__LumenOrigin{\n");
+            for (options.line_map) |o| {
+                const safe_file = try arena.dupe(u8, o.file);
+                for (safe_file) |*ch| if (ch.* == '\\' or ch.* == '"') {
+                    ch.* = '/';
+                };
+                var display: []const u8 = safe_file;
+                while (std.mem.startsWith(u8, display, "./")) display = display[2..];
+                try out.print(arena, "    .{{ .file = \"{s}\", .line = {d} }},\n", .{ display, o.line });
+            }
+            try out.appendSlice(arena, "};\n");
+            try out.appendSlice(arena,
+                \\fn __lumenOrigin(line: u32) __LumenOrigin {
+                \\    if (line >= 1 and line - 1 < __lumen_origins.len) return __lumen_origins[line - 1];
+                \\    return .{ .file = __lumen_file, .line = line };
+                \\}
+                \\
+            );
+        } else {
+            try out.appendSlice(arena,
+                \\fn __lumenOrigin(line: u32) __LumenOrigin {
+                \\    return .{ .file = __lumen_file, .line = line };
+                \\}
+                \\
+            );
+        }
         // Custom panic handler -> map the native runtime error back to the .ts source: file:line:col +
         // the offending source line + a caret.
         try out.appendSlice(arena,
@@ -329,12 +361,13 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    const __cg: []const u8 = if (__lumen_color) "\x1b[32m" else "";
             \\    const __cd: []const u8 = if (__lumen_color) "\x1b[2m" else "";
             \\    const __c0: []const u8 = if (__lumen_color) "\x1b[0m" else "";
-            \\    std.debug.print("\n{s}{s}:{d}:{d}:{s} {s}{s}:{s} {s}\n", .{ __cc, __lumen_file, __lumen_line, __lumen_col, __c0, __cr, __kind, __c0, msg });
+            \\    const __org = __lumenOrigin(__lumen_line);
+            \\    std.debug.print("\n{s}{s}:{d}:{d}:{s} {s}{s}:{s} {s}\n", .{ __cc, __org.file, __org.line, __lumen_col, __c0, __cr, __kind, __c0, msg });
             \\    var __it = std.mem.splitScalar(u8, __lumen_src, '\n');
             \\    var __n: u32 = 1;
             \\    while (__it.next()) |__l| : (__n += 1) {
             \\        if (__n == __lumen_line) {
-            \\            std.debug.print("{s}  {d} |{s} {s}\n{s}    |{s} ", .{ __cd, __lumen_line, __c0, __l, __cd, __c0 });
+            \\            std.debug.print("{s}  {d} |{s} {s}\n{s}    |{s} ", .{ __cd, __org.line, __c0, __l, __cd, __c0 });
             \\            var __k: u32 = 1;
             \\            while (__k < __lumen_col) : (__k += 1) std.debug.print(" ", .{});
             \\            std.debug.print("{s}^{s}\n", .{ __cg, __c0 });
@@ -353,11 +386,13 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\        }
             \\        while (__k > 0) {
             \\            __k -= 1;
-            \\            std.debug.print("    at {s} ({s}:{d}:{d})\n", .{ __lumen_stack[__k].name, __lumen_file, __loc_line, __loc_col });
+            \\            const __fo = __lumenOrigin(__loc_line);
+            \\            std.debug.print("    at {s} ({s}:{d}:{d})\n", .{ __lumen_stack[__k].name, __fo.file, __fo.line, __loc_col });
             \\            __loc_line = __lumen_stack[__k].line;
             \\            __loc_col = __lumen_stack[__k].col;
             \\        }
-            \\        std.debug.print("    at <main> ({s}:{d}:{d})\n", .{ __lumen_file, __loc_line, __loc_col });
+            \\        const __mo = __lumenOrigin(__loc_line);
+            \\        std.debug.print("    at <main> ({s}:{d}:{d})\n", .{ __mo.file, __mo.line, __loc_col });
             \\    }
             \\    std.process.exit(1);
             \\}
