@@ -111,7 +111,7 @@ console.log(`distance² = ${distanceSq(origin, p)}`);  // distance² = 25</code>
     <div class="card"><h3>Array methods</h3><p><code>map</code>, <code>filter</code>, <code>reduce</code>, <code>forEach</code>, <code>find</code>, <code>some</code>, <code>every</code>, <code>includes</code>, <code>indexOf</code>, <code>join</code>.</p></div>
     <div class="card"><h3>Generics</h3><p>Generic functions, classes, and interfaces with <code>Array&lt;T&gt;</code>, monomorphized at compile time, no boxing.</p></div>
     <div class="card"><h3>Type aliases &amp; unions</h3><p><code>type</code> aliases, discriminated unions narrowed by a literal tag, <code>as</code> assertions, <code>satisfies</code>, and <code>readonly</code> arrays.</p></div>
-    <div class="card"><h3>Error handling</h3><p><code>try</code>/<code>catch</code>/<code>finally</code> and <code>throw</code>, with a readable <code>.message</code> on the caught error; optional catch binding (<code>catch { }</code>).</p></div>
+    <div class="card"><h3>Error handling</h3><p><code>try</code>/<code>catch</code>/<code>finally</code> and <code>throw</code>, propagating across functions, methods, and constructors; readable <code>.message</code>, optional catch binding, and full stack traces on uncaught errors.</p></div>
     <div class="card"><h3>Operators</h3><p>Full arithmetic, bitwise, and shift set, with every compound-assignment form (<code>+=</code>, <code>&amp;&amp;=</code>, <code>??=</code>, <code>&lt;&lt;=</code>, <code>**=</code>, and more).</p></div>
     <div class="card"><h3>Maps, Sets &amp; tuples</h3><p><code>Map&lt;K, V&gt;</code>, <code>Set&lt;T&gt;</code>, and fixed-shape tuple types like <code>[int, string]</code>.</p></div>
     <div class="card"><h3>EventEmitter</h3><p>Statically-typed <code>EventEmitter&lt;T&gt;</code>, one payload type per instance. <strong>~3.5&times; faster than Node's native EventEmitter</strong> on a tight emit loop (10M emits, one listener).</p></div>
@@ -241,22 +241,53 @@ console.log(await total());   // 42</code></pre>
 
 <section class="wrap" id="errors">
   <h2>Errors with try / catch / finally</h2>
-  <p class="sub">Throw an error, catch it with a readable message, and run cleanup on every path.</p>
-<pre><code class="lumen">function checkAge(n: int): void {
-  try {
-    if (n &lt; 0) {
-      throw Error("age cannot be negative");
-    }
-    console.log("age ok");
-  } catch (e) {
-    console.log("error: " + e.message);
-  } finally {
-    console.log("checked");
+  <p class="sub">Exceptions propagate across calls &mdash; through functions, methods, and constructors &mdash; and <code>finally</code> runs on every path. All compiled to native code, no unwinder runtime.</p>
+<pre><code class="lumen">function parsePort(s: string): int {
+  const n: int = parseInt(s) ?? 0;
+  if (n &lt; 1 || n &gt; 65535) {
+    throw new Error("bad port: " + s);
   }
+  return n;
 }
 
-checkAge(30);   // age ok / checked
-checkAge(-1);   // error: age cannot be negative / checked</code></pre>
+function connect(s: string): void {
+  console.log("connecting to " + String(parsePort(s)));  // may throw
+}
+
+try {
+  connect("8080");     // connecting to 8080
+  connect("99999");
+} catch (e) {
+  console.log("error: " + e.message);   // error: bad port: 99999
+} finally {
+  console.log("done");
+}</code></pre>
+</section>
+
+<section class="wrap" id="dx">
+  <h2>Errors that explain themselves</h2>
+  <p class="sub">Compile errors say what's wrong and how to fix it &mdash; expected/got types, did&#8209;you&#8209;mean suggestions, caret underlines, and color. Uncaught runtime errors print a real stack trace with your file and line, even across imports.</p>
+<pre><code>$ lumen check main.ts
+main.ts:4:1: error: 'add' expects 2 arguments, got 1
+main.ts:6:1: error: `string` has no method 'toUperCase' — did you mean 'toUpperCase'?
+main.ts:8:1: error: 'r' (`string | null`) may be null — check `!= null`
+  before reading '.length', or use optional chaining `?.length`
+main.ts:9:1: error: `if` condition must be `boolean`, got `i32` —
+  truthiness is not supported; write `x != 0`
+
+$ lumen run app.ts
+util.ts:2:14: Uncaught Error: negative input
+  2 |   if (n < 0) throw new Error("negative input")
+    |              ^
+    at risky (util.ts:2:14)
+    at process (app.ts:7:3)
+    at &lt;main&gt; (app.ts:12:1)
+
+$ lumen test app.ts
+ok adds
+FAIL rounds — expected 4, found 3
+    at app.ts:21
+1 passed, 1 failed</code></pre>
 </section>
 
 <section class="wrap" id="ffi">
