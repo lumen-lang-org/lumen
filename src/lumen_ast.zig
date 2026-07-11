@@ -401,6 +401,7 @@ pub const StaticCall = struct {
     checked_type: ?types.Type = null,
     checked_arg_type: ?types.Type = null,
     cb_wants_index: bool = false, // Array.from(src, (v, i) => ...) — the map callback takes the element index
+    object_keys: ?[]const []const u8 = null, // Object.keys(record): the static field-name list (spec 264)
 };
 
 pub const Stmt = union(enum) {

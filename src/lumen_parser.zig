@@ -186,7 +186,7 @@ pub const Parser = struct {
         return p;
     }
     pub fn isStdNamespace(name: []const u8) bool {
-        return std.mem.eql(u8, name, "Math") or std.mem.eql(u8, name, "String") or std.mem.eql(u8, name, "Array") or std.mem.eql(u8, name, "fs") or std.mem.eql(u8, name, "Promise") or std.mem.eql(u8, name, "path") or std.mem.eql(u8, name, "process") or std.mem.eql(u8, name, "os") or std.mem.eql(u8, name, "crypto") or std.mem.eql(u8, name, "url") or std.mem.eql(u8, name, "child_process") or std.mem.eql(u8, name, "assert") or std.mem.eql(u8, name, "time") or std.mem.eql(u8, name, "http") or std.mem.eql(u8, name, "JSON") or std.mem.eql(u8, name, "net") or std.mem.eql(u8, name, "zlib") or std.mem.eql(u8, name, "Buffer") or std.mem.eql(u8, name, "readline") or std.mem.eql(u8, name, "Worker") or std.mem.eql(u8, name, "Number") or std.mem.eql(u8, name, "Date");
+        return std.mem.eql(u8, name, "Math") or std.mem.eql(u8, name, "String") or std.mem.eql(u8, name, "Array") or std.mem.eql(u8, name, "fs") or std.mem.eql(u8, name, "Promise") or std.mem.eql(u8, name, "path") or std.mem.eql(u8, name, "process") or std.mem.eql(u8, name, "os") or std.mem.eql(u8, name, "crypto") or std.mem.eql(u8, name, "url") or std.mem.eql(u8, name, "child_process") or std.mem.eql(u8, name, "assert") or std.mem.eql(u8, name, "time") or std.mem.eql(u8, name, "http") or std.mem.eql(u8, name, "JSON") or std.mem.eql(u8, name, "net") or std.mem.eql(u8, name, "zlib") or std.mem.eql(u8, name, "Buffer") or std.mem.eql(u8, name, "readline") or std.mem.eql(u8, name, "Worker") or std.mem.eql(u8, name, "Number") or std.mem.eql(u8, name, "Date") or std.mem.eql(u8, name, "Object");
     }
     pub fn parseBlock(self: *Parser) CompileError![]Stmt {
         try self.expectOp('{');

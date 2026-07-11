@@ -1093,6 +1093,19 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ", ");
                 try emitExpr(cl.args[1], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Object") and std.mem.eql(u8, cl.name, "keys")) {
+                // Static key list; evaluate (and discard) the receiver so an
+                // otherwise-unused local still counts as referenced.
+                g_global_pred_seq += 1;
+                const seq = g_global_pred_seq;
+                try w.print(arena, "(__ok{d}: {{ _ = &(", .{seq});
+                try emitExpr(cl.args[0], w, arena);
+                try w.print(arena, "); break :__ok{d} @as([]const []const u8, &.{{ ", .{seq});
+                for (cl.object_keys orelse &.{}, 0..) |k, i| {
+                    if (i > 0) try w.appendSlice(arena, ", ");
+                    try emitStrLit(w, arena, k);
+                }
+                try w.appendSlice(arena, " }); })");
             } else if ((std.mem.eql(u8, cl.namespace, "time") or std.mem.eql(u8, cl.namespace, "Date")) and std.mem.eql(u8, cl.name, "now")) {
                 try w.appendSlice(arena, "__timeNow(__io)");
             } else if (std.mem.eql(u8, cl.namespace, "time") and std.mem.eql(u8, cl.name, "monotonic")) {

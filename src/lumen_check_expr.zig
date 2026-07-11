@@ -1556,6 +1556,35 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // `name` is a known std namespace (fs/path/os/...), but a local
             // binding of that name shadows the namespace. Re-route to an instance
             // method call on the variable in that case.
+            // Object.keys(record): record shapes are static, so the key list
+            // is a compile-time string array — rewrite the call into an array
+            // literal of the type's field names (spec 264).
+            if (std.mem.eql(u8, call.namespace, "Object") and self.bindingPtr("Object") == null) {
+                if (!std.mem.eql(u8, call.name, "keys")) {
+                    _ = self.fail(line, col, "only Object.keys is supported — records have static shapes, so read fields directly") catch {};
+                    return null;
+                }
+                if (call.args.len != 1) {
+                    _ = self.fail(line, col, "'Object.keys' expects 1 argument") catch {};
+                    return null;
+                }
+                const at = self.exprType(program, call.args[0], line, col) orelse return null;
+                if (at != .named) {
+                    const tn = types.tsName(self.arena, at) catch "?";
+                    const msg = std.fmt.allocPrint(self.arena, "Object.keys needs a record type, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                    _ = self.fail(line, col, msg) catch {};
+                    return null;
+                }
+                const decl = self.type_decls.get(at.named) orelse {
+                    _ = self.fail(line, col, "unknown type name") catch {};
+                    return null;
+                };
+                const names = self.arena.alloc([]const u8, decl.fields.len) catch return null;
+                for (decl.fields, 0..) |f, i| names[i] = f.name;
+                call.object_keys = names;
+                call.checked_type = .string_array;
+                return .string_array;
+            }
             if (call.type_args.len == 0 and self.bindingPtr(call.namespace) != null) {
                 const obj = self.arena.create(ast.Expr) catch return null;
                 obj.* = .{ .var_ref = .{ .name = call.namespace } };
