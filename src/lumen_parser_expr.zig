@@ -165,7 +165,34 @@ pub fn parseTypeAnnotation(self: *Parser) CompileError![]const u8 {
             self.cur = save_cur;
         }
     }
-    if (self.isOp('(')) return self.parseFunctionType();
+    if (self.isOp('(')) {
+        // Disambiguate a function type `(a: T) => R` from a parenthesized type
+        // `(T | null)[]` (spec 296): try the function form; on failure, restore
+        // and parse the parenthesized type, honoring a trailing `[]` suffix.
+        const save_lex = self.lex;
+        const save_cur = self.cur;
+        const save_line = self.cur_line;
+        const save_col = self.cur_col;
+        const save_prev = self.prev_line;
+        if (self.parseFunctionType()) |ft| {
+            return ft;
+        } else |_| {
+            self.lex = save_lex;
+            self.cur = save_cur;
+            self.cur_line = save_line;
+            self.cur_col = save_col;
+            self.prev_line = save_prev;
+            try self.advance(); // '('
+            var inner = try self.parseTypeAnnotation();
+            try self.expectOp(')');
+            while (self.isOp('[')) {
+                try self.advance();
+                try self.expectOp(']');
+                inner = std.fmt.allocPrint(self.arena, "{s}[]", .{inner}) catch return error.OutOfMemory;
+            }
+            return inner;
+        }
+    }
     if (self.isOp('[')) return self.parseTupleType();
     if (self.isOp('{')) {
         self.last_err = "inline object types are not supported — declare a named type (`type T = { ... }`) and use its name";

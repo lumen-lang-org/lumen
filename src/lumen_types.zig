@@ -420,14 +420,17 @@ pub fn arrayOf(t: Type) ?Type {
 /// i32[][]`) by heap-allocating the inner Type (spec 289). Needs an arena.
 pub fn arrayOfAlloc(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?Type {
     if (arrayOf(t)) |a| return a;
-    // An array whose element is itself an array or a tuple (spec 289/291):
-    // both need a heap-allocated inner Type.
-    if (isArray(t) or t == .tuple_type) {
-        const p = try arena.create(Type);
-        p.* = t;
-        return Type{ .nested_array = p };
+    // An array whose element needs a heap-allocated inner Type: another array
+    // (spec 289), a tuple (spec 291), or an optional (spec 296). `void`/`none`
+    // have no array form.
+    switch (t) {
+        .void, .none => return null,
+        else => {
+            const p = try arena.create(Type);
+            p.* = t;
+            return Type{ .nested_array = p };
+        },
     }
-    return null;
 }
 
 /// Render a resolved type back to a canonical source annotation string. The

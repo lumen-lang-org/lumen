@@ -739,15 +739,6 @@ pub const Checker = struct {
         }
         // A discriminated union name resolves to its union type.
         if (self.unions.get(annotation) != null) return .{ .union_type = annotation };
-        // Nested array `T[][]` (spec 289): the element is itself an array, which
-        // needs a heap-allocated inner Type (arena-less `fromAnnotation` can't
-        // build it). A single-level `T[]` falls through to the enumerated forms.
-        if (std.mem.endsWith(u8, annotation, "[]") and std.mem.endsWith(u8, annotation[0 .. annotation.len - 2], "[]")) {
-            const base_ty = try self.typeFromAnnotation(annotation[0 .. annotation.len - 2], line, col);
-            const p = self.arena.create(types.Type) catch return error.OutOfMemory;
-            p.* = base_ty;
-            return .{ .nested_array = p };
-        }
         // `Buffer` (spec 056): a bare built-in type, resolved directly (unlike
         // `ReadableStream`/`WritableStream`, which have no case here today and
         // fall through to a plain `.named` that never matches the real
@@ -799,41 +790,15 @@ pub const Checker = struct {
             p.* = inner;
             return .{ .optional = p };
         }
-        // Tuple array `[A, B][]` (spec 291): a leading `[` whose matching `]`
-        // is followed by one or more `[]` suffixes. Resolve the tuple, then
-        // wrap it in an array per suffix.
-        if (annotation.len >= 4 and annotation[0] == '[' and std.mem.endsWith(u8, annotation, "[]")) {
-            var depth: usize = 0;
-            var close: usize = 0;
-            for (annotation, 0..) |ch, i| {
-                if (ch == '[') depth += 1 else if (ch == ']') {
-                    depth -= 1;
-                    if (depth == 0) {
-                        close = i;
-                        break;
-                    }
-                }
-            }
-            if (close > 0 and close < annotation.len - 1) {
-                // Everything after the tuple's `]` must be `[]` suffixes.
-                const suffix = annotation[close + 1 ..];
-                if (suffix.len % 2 == 0 and suffix.len > 0) {
-                    var all_brackets = true;
-                    var k: usize = 0;
-                    while (k < suffix.len) : (k += 2) {
-                        if (suffix[k] != '[' or suffix[k + 1] != ']') all_brackets = false;
-                    }
-                    if (all_brackets) {
-                        var t = try self.typeFromAnnotation(annotation[0 .. close + 1], line, col);
-                        var levels = suffix.len / 2;
-                        while (levels > 0) : (levels -= 1) {
-                            t = (types.arrayOfAlloc(self.arena, t) catch return error.OutOfMemory) orelse
-                                return self.fail(line, col, "E_TYPE_MISMATCH");
-                        }
-                        return t;
-                    }
-                }
-            }
+        // General array suffix `T[]` (spec 296): strip one `[]`, resolve the
+        // element, and wrap it. Runs after the function-type check above so a
+        // function returning an array (`(i32)=>i32[]`) isn't misread. Handles
+        // every element kind — scalars/named via `arrayOf`, and arrays (289),
+        // tuples (291), and optionals (296) via a heap-allocated inner Type.
+        if (std.mem.endsWith(u8, annotation, "[]")) {
+            const base_ty = try self.typeFromAnnotation(annotation[0 .. annotation.len - 2], line, col);
+            return (types.arrayOfAlloc(self.arena, base_ty) catch return error.OutOfMemory) orelse
+                self.fail(line, col, "E_TYPE_MISMATCH");
         }
         // Tuple type `[A, B, ...]` — a bracketed, comma-separated positional list.
         // (Array element annotations end with `[]` and are handled by
