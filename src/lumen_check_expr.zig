@@ -1233,7 +1233,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (std.mem.eql(u8, mc.name, "fill") and mc.args.len == 1) {
                 const n_expr: ?*ast.Expr = blk: {
                     if (mc.obj.* == .new_expr and std.mem.eql(u8, mc.obj.new_expr.class_name, "Array") and
-                        self.classes.get("Array") == null and mc.obj.new_expr.type_args.len == 0 and
+                        self.classes.get("Array") == null and mc.obj.new_expr.type_args.len <= 1 and
                         mc.obj.new_expr.args.len == 1) break :blk mc.obj.new_expr.args[0];
                     if (mc.obj.* == .call and std.mem.eql(u8, mc.obj.call.name, "Array") and
                         self.bindingPtr("Array") == null and mc.obj.call.args.len == 1) break :blk mc.obj.call.args[0];
