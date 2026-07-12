@@ -173,6 +173,16 @@ pub fn inferTypeArgs(self: *Checker, program: *ast.Program, type_params: []const
             if (annotationMentions(tp, p.annotation)) mentions = true;
         }
         if (!mentions) continue;
+        // A rest param `...items: T[]` unifies its element pattern (`T`)
+        // against every remaining argument (spec 304).
+        if (p.is_rest and std.mem.endsWith(u8, p.annotation, "[]")) {
+            const elem_pat = p.annotation[0 .. p.annotation.len - 2];
+            for (args[idx..]) |a| {
+                const at = self.exprType(program, a, line, col) orelse return self.fail(line, col, "E_TYPE_INFER");
+                try self.unifyAnnotation(type_params, found, elem_pat, at, line, col);
+            }
+            break;
+        }
         const arg_type = self.exprType(program, args[idx], line, col) orelse return self.fail(line, col, "E_TYPE_INFER");
         try self.unifyAnnotation(type_params, found, p.annotation, arg_type, line, col);
     }

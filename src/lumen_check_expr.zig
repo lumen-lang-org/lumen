@@ -1622,16 +1622,10 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     (self.inferTypeArgs(program, gdecl.type_params, gdecl.params, call.args, line, col) catch return null);
                 const spec = self.specializeFunction(gdecl, type_args, line, col) catch return null;
                 const info = self.funcs.get(spec.name) orelse return null;
-                if (call.args.len != info.params.len) {
-                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
-                    return null;
-                }
-                for (call.args, info.params) |arg, param| {
-                    const pt = param.checked_type orelse return null;
-                    self.ensureAssignable(program, pt, arg, line, col) catch {
-                        return null;
-                    };
-                }
+                // Route through the shared arg checker so a specialized function
+                // honors rest params, defaults, and optional params (spec 304).
+                const callee_disp = std.fmt.allocPrint(self.arena, "'{s}'", .{call.name}) catch "function";
+                call.args = self.checkCallArgs(program, callee_disp, info.params, call.args, line, col) orelse return null;
                 call.emit_name = spec.name;
                 return spec.ret;
             }
