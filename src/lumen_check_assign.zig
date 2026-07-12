@@ -263,6 +263,13 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
         },
         else => {
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
+            // An enum member assigns to its backing type (spec 294): a numeric
+            // enum to `i32`, a string enum to `string` — the enum lowers to
+            // exactly that value at runtime.
+            if (actual_type == .enum_type) {
+                if (expected == .i32 and !actual_type.enum_type.is_string) return;
+                if (expected == .string and actual_type.enum_type.is_string) return;
+            }
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
     }

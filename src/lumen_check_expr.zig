@@ -45,6 +45,13 @@ pub fn wrapStringify(self: *Checker, e: *ast.Expr) !*ast.Expr {
     return node;
 }
 
+/// The backing type of an enum (numeric enum -> i32, string enum -> string),
+/// or the type itself when it is not an enum (spec 294).
+fn enumBacking(t: types.Type) types.Type {
+    if (t == .enum_type) return if (t.enum_type.is_string) .string else .i32;
+    return t;
+}
+
 /// Wraps an integer-typed expression in the runtime Number() conversion so it
 /// participates in float arithmetic (JS-style numeric promotion, spec 255).
 pub fn wrapFloat(self: *Checker, e: *ast.Expr) !*ast.Expr {
@@ -185,8 +192,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return operand_type.promise_type.*;
         },
         .bin => |*bin| {
-            const left_type = self.exprType(program, bin.l, line, col) orelse return null;
-            const right_type = self.exprType(program, bin.r, line, col) orelse return null;
+            const left_raw = self.exprType(program, bin.l, line, col) orelse return null;
+            const right_raw = self.exprType(program, bin.r, line, col) orelse return null;
+            // An enum operand acts as its backing type in arithmetic/concat
+            // (spec 294) — it already lowers to that value at emit.
+            const left_type = enumBacking(left_raw);
+            const right_type = enumBacking(right_raw);
             if (bin.op == '+' and types.same(.string, left_type) and types.same(.string, right_type)) {
                 bin.checked_type = .string;
                 return .string;
