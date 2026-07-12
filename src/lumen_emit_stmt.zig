@@ -747,6 +747,23 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try body.appendSlice(arena, "    }\n    }\n");
                 return;
             }
+            // `for (const i of arr.keys())` — index-only loop over the receiver.
+            if (loop.is_array_keys) {
+                const kn = loop.binding_emit_name orelse loop.binding;
+                const len_name = try std.fmt.allocPrint(arena, "__lumen_ky_len_{d}_{d}", .{ loop.line, loop.col });
+                const idx = try std.fmt.allocPrint(arena, "__lumen_ky_idx_{d}_{d}", .{ loop.line, loop.col });
+                try body.appendSlice(arena, "    {\n");
+                try body.print(arena, "    const {s}: usize = (", .{len_name});
+                try emitExpr(loop.iterable, body, arena);
+                try body.appendSlice(arena, ").len;\n");
+                try body.print(arena, "    var {s}: usize = 0;\n", .{idx});
+                try body.print(arena, "    {s}while ({s} < {s}) : ({s} += 1) {{\n", .{ try labelPrefix(arena, loop.label, loop.body), idx, len_name, idx });
+                try body.print(arena, "    const {s}: i32 = @intCast({s});\n", .{ kn, idx });
+                if (!std.mem.eql(u8, kn, "_")) try body.print(arena, "    _ = &{s};\n", .{kn});
+                try emitBody(loop.body, decls, body, arena, throw_target, null, options);
+                try body.appendSlice(arena, "    }\n    }\n");
+                return;
+            }
             const elem_ty = loop.elem_type orelse return error.ParseError;
             const seq = try std.fmt.allocPrint(arena, "__lumen_of_seq_{d}_{d}", .{ loop.line, loop.col });
             const idx = try std.fmt.allocPrint(arena, "__lumen_of_idx_{d}_{d}", .{ loop.line, loop.col });

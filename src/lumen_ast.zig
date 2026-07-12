@@ -291,6 +291,7 @@ pub const ForOfStmt = struct {
     binding_emit_name: ?[]const u8 = null,
     is_pair: bool = false, // `for (const [k, v] of map)` — binding is the key, value_binding the value
     is_array_entries: bool = false, // `for (const [i, v] of arr.entries())` — binding is the index (i32), value the element; iterable is rewritten to the receiver array
+    is_array_keys: bool = false, // `for (const i of arr.keys())` — binding is the index (i32); iterable is rewritten to the receiver array
     is_tuple_pairs: bool = false, // `for (const [a, b] of pairs)` over a `[A, B][]` — binding is element[0], value_binding element[1] (spec 291)
     value_binding: []const u8 = "",
     iterable: *Expr,

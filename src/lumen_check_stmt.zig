@@ -843,6 +843,36 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     loop.iterable = recv;
                 }
             }
+            // `for (const i of arr.keys())` / `for (const v of arr.values())` —
+            // like `.entries()`, these exist only as for-of iterables. `values()`
+            // is the array itself; `keys()` iterates the indices as i32.
+            if (!loop.is_pair and loop.iterable.* == .method_call and
+                (std.mem.eql(u8, loop.iterable.method_call.name, "keys") or
+                    std.mem.eql(u8, loop.iterable.method_call.name, "values")))
+            {
+                const recv = loop.iterable.method_call.obj;
+                if (self.exprType(program, recv, loop.line, loop.col)) |recv_ty| {
+                    if (types.isArray(recv_ty)) {
+                        if (loop.iterable.method_call.args.len != 0) return self.fail(loop.line, loop.col, "E_ARG_COUNT");
+                        if (std.mem.eql(u8, loop.iterable.method_call.name, "keys")) {
+                            loop.is_array_keys = true;
+                            loop.iterable = recv;
+                            loop.iter_type = recv_ty;
+                            try self.pushScope();
+                            defer self.popScope();
+                            const kn = try self.freshEmitName(loop.binding);
+                            loop.binding_emit_name = kn;
+                            self.currentScope().put(self.arena, loop.binding, .{ .ty = .i32, .mutable = loop.mutable, .emit_name = kn }) catch return error.OutOfMemory;
+                            self.loop_depth += 1;
+                            defer self.loop_depth -= 1;
+                            try self.checkBlock(program, loop.body);
+                            return;
+                        }
+                        // values(): identical to iterating the array itself.
+                        loop.iterable = recv;
+                    }
+                }
+            }
             const iter_type = self.exprType(program, loop.iterable, loop.line, loop.col) orelse
                 return self.inferenceFail(loop.line, loop.col, "cannot infer for-of iterable type");
             loop.iter_type = iter_type;
