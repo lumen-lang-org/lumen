@@ -534,14 +534,31 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         body_type = null;
                     }
                 } else {
-                    self.current_return_type = .void;
-                    body_type = .void;
+                    // No return annotation: infer the return type from the first
+                    // value `return <expr>` (params are already in scope), the
+                    // same as a named function (spec 310). A body that returns no
+                    // value stays `void`.
+                    var inferred: types.Type = .void;
+                    if (check_stmt.firstReturnExpr(block)) |rexpr| {
+                        if (self.exprType(program, rexpr, line, col)) |t| {
+                            if (t != .void) inferred = t;
+                        }
+                    }
+                    const saved_uninferable = self.current_return_uninferable;
+                    self.current_return_uninferable = inferred == .void and check_stmt.firstReturnExpr(block) != null;
+                    self.current_return_type = inferred;
+                    body_type = inferred;
                     for (block) |*stmt| {
                         self.checkStmt(program, stmt) catch {
                             body_type = null;
                             break;
                         };
                     }
+                    if (body_type != null and inferred != .void and !check_stmt.blockReturns(block)) {
+                        _ = self.fail(line, col, "E_MISSING_RETURN") catch {};
+                        body_type = null;
+                    }
+                    self.current_return_uninferable = saved_uninferable;
                 }
                 self.current_return_type = saved_ret;
             } else if (arrow.return_annotation.len > 0) {
