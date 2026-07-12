@@ -130,7 +130,10 @@ pub fn parseOptionalMember(self: *Parser) CompileError![]const u8 {
     try self.expectOp(':');
     const annotation = try self.parseTypeAnnotation();
     if (opt and !std.mem.endsWith(u8, annotation, "?")) {
-        return std.fmt.allocPrint(self.arena, "{s}?", .{annotation}) catch error.OutOfMemory;
+        // Parenthesize so the optional applies to the whole type, not just its
+        // tail: `greet?: () => string` must be `(() => string) | null`, not a
+        // function returning `string | null`.
+        return std.fmt.allocPrint(self.arena, "({s})?", .{annotation}) catch error.OutOfMemory;
     }
     return annotation;
 }
