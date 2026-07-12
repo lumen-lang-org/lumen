@@ -1009,6 +1009,35 @@ pub const Checker = struct {
     }
 
     pub fn checkCallArgs(self: *Checker, program: *ast.Program, callee: []const u8, params: []const ast.FunctionParam, args: []const *ast.Expr, line: u32, col: u32) ?[]*ast.Expr {
+        // Expand a fixed-tuple spread into positional element accesses:
+        // `f(...args)` where `args: [A, B]` becomes `f(args[0], args[1])`, so a
+        // tuple can feed exactly-matching positional parameters. Non-tuple
+        // spreads (into a rest parameter) are left for the normal path.
+        for (args) |a| {
+            if (a.* == .spread) {
+                const st = self.exprType(program, a.spread, line, col) orelse continue;
+                if (st == .tuple_type) {
+                    var expanded: std.ArrayListUnmanaged(*ast.Expr) = .empty;
+                    for (args) |b| {
+                        if (b.* == .spread) {
+                            const bt = self.exprType(program, b.spread, line, col);
+                            if (bt != null and bt.? == .tuple_type) {
+                                for (0..bt.?.tuple_type.len) |i| {
+                                    const iv = self.arena.create(ast.Expr) catch return null;
+                                    iv.* = .{ .num = @intCast(i) };
+                                    const idx = self.arena.create(ast.Expr) catch return null;
+                                    idx.* = .{ .index = .{ .obj = b.spread, .value = iv } };
+                                    expanded.append(self.arena, idx) catch return null;
+                                }
+                                continue;
+                            }
+                        }
+                        expanded.append(self.arena, b) catch return null;
+                    }
+                    return self.checkCallArgs(program, callee, params, expanded.toOwnedSlice(self.arena) catch return null, line, col);
+                }
+            }
+        }
         const has_rest = params.len > 0 and params[params.len - 1].is_rest;
         const fixed_count = if (has_rest) params.len - 1 else params.len;
 
