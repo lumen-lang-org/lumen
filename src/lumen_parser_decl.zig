@@ -62,6 +62,14 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             if (self.cur != .ident) return error.ParseError;
             const fname = self.cur.ident;
             try self.advance();
+            // Method signature shorthand `name(params): R` — recorded as a
+            // function-typed member, same as in `interface` (spec 254/288).
+            if (self.isOp('(')) {
+                const ann = try parseMethodSigAnnotation(self);
+                try fields.append(self.arena, .{ .name = fname, .annotation = ann });
+                if (self.isOp(',') or self.isOp(';')) try self.advance();
+                continue;
+            }
             const annotation = try self.parseOptionalMember();
             try fields.append(self.arena, .{ .name = fname, .annotation = annotation });
             if (self.isOp(',')) try self.advance() else break;
@@ -156,6 +164,27 @@ pub fn parseExternDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     return .{ .extern_decl = .{ .name = name, .params = try params.toOwnedSlice(self.arena), .return_annotation = return_annotation, .line = line, .col = col } };
 }
 
+/// Parse a method-signature member `(params): R` (cursor at `(`) into a
+/// function-type annotation string `(T,...)=>R`. Shared by `type` object
+/// bodies and `interface` bodies (spec 254/288).
+fn parseMethodSigAnnotation(self: *Parser) CompileError![]const u8 {
+    const params = try self.parseParamList();
+    var ret_ann: []const u8 = "void";
+    if (self.isOp(':')) {
+        try self.advance();
+        ret_ann = try self.parseTypeAnnotation();
+    }
+    var ann: std.ArrayListUnmanaged(u8) = .empty;
+    try ann.append(self.arena, '(');
+    for (params, 0..) |param, i| {
+        if (i > 0) try ann.append(self.arena, ',');
+        try ann.appendSlice(self.arena, param.annotation);
+    }
+    try ann.appendSlice(self.arena, ")=>");
+    try ann.appendSlice(self.arena, ret_ann);
+    return ann.items;
+}
+
 /// `interface Name { field: T; field2: U }` — a synonym for an object `type`.
 /// Accepts `;` or `,` (or newline) between members.
 pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
@@ -173,21 +202,8 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
         // Method signature shorthand `name(params): R` — recorded as a
         // function-typed member `(T,...)=>R` (spec 254).
         if (self.isOp('(')) {
-            const params = try self.parseParamList();
-            var ret_ann: []const u8 = "void";
-            if (self.isOp(':')) {
-                try self.advance();
-                ret_ann = try self.parseTypeAnnotation();
-            }
-            var ann: std.ArrayListUnmanaged(u8) = .empty;
-            try ann.append(self.arena, '(');
-            for (params, 0..) |param, i| {
-                if (i > 0) try ann.append(self.arena, ',');
-                try ann.appendSlice(self.arena, param.annotation);
-            }
-            try ann.appendSlice(self.arena, ")=>");
-            try ann.appendSlice(self.arena, ret_ann);
-            try fields.append(self.arena, .{ .name = fname, .annotation = ann.items });
+            const ann = try parseMethodSigAnnotation(self);
+            try fields.append(self.arena, .{ .name = fname, .annotation = ann });
             if (self.isOp(',') or self.isOp(';')) try self.advance();
             continue;
         }
