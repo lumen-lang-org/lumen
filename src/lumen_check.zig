@@ -799,6 +799,42 @@ pub const Checker = struct {
             p.* = inner;
             return .{ .optional = p };
         }
+        // Tuple array `[A, B][]` (spec 291): a leading `[` whose matching `]`
+        // is followed by one or more `[]` suffixes. Resolve the tuple, then
+        // wrap it in an array per suffix.
+        if (annotation.len >= 4 and annotation[0] == '[' and std.mem.endsWith(u8, annotation, "[]")) {
+            var depth: usize = 0;
+            var close: usize = 0;
+            for (annotation, 0..) |ch, i| {
+                if (ch == '[') depth += 1 else if (ch == ']') {
+                    depth -= 1;
+                    if (depth == 0) {
+                        close = i;
+                        break;
+                    }
+                }
+            }
+            if (close > 0 and close < annotation.len - 1) {
+                // Everything after the tuple's `]` must be `[]` suffixes.
+                const suffix = annotation[close + 1 ..];
+                if (suffix.len % 2 == 0 and suffix.len > 0) {
+                    var all_brackets = true;
+                    var k: usize = 0;
+                    while (k < suffix.len) : (k += 2) {
+                        if (suffix[k] != '[' or suffix[k + 1] != ']') all_brackets = false;
+                    }
+                    if (all_brackets) {
+                        var t = try self.typeFromAnnotation(annotation[0 .. close + 1], line, col);
+                        var levels = suffix.len / 2;
+                        while (levels > 0) : (levels -= 1) {
+                            t = (types.arrayOfAlloc(self.arena, t) catch return error.OutOfMemory) orelse
+                                return self.fail(line, col, "E_TYPE_MISMATCH");
+                        }
+                        return t;
+                    }
+                }
+            }
+        }
         // Tuple type `[A, B, ...]` — a bracketed, comma-separated positional list.
         // (Array element annotations end with `[]` and are handled by
         // fromAnnotation, so a leading `[` with matching `]` is always a tuple.)

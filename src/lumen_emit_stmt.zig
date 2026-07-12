@@ -662,6 +662,20 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             const iter_ty = loop.iter_type orelse return error.ParseError;
             // `for (const [k, v] of map)` — iterate the map's keys and values in
             // parallel.
+            // `for (const [a, b] of pairs)` over a `[A, B][]` — destructure each
+            // tuple element into the two bindings (spec 291).
+            if (loop.is_tuple_pairs) {
+                const kn = loop.binding_emit_name orelse loop.binding;
+                const vn = loop.value_binding;
+                const elem_zig = try types.zigName(arena, loop.elem_type orelse return error.ParseError);
+                try body.appendSlice(arena, "    {\n    const __tp = ");
+                try emitExpr(loop.iterable, body, arena);
+                try body.print(arena, ";\n    for (__tp) |__te| {{\n    const {s} = __te.@\"0\"; const {s} = __te.@\"1\";\n", .{ kn, vn });
+                try body.print(arena, "    _ = &{s}; _ = &{s}; _ = @as({s}, __te);\n", .{ kn, vn, elem_zig });
+                try emitBody(loop.body, decls, body, arena, throw_target, null, options);
+                try body.appendSlice(arena, "    }\n    }\n");
+                return;
+            }
             if (loop.is_pair and !loop.is_array_entries) {
                 const kn = loop.binding_emit_name orelse loop.binding;
                 const vn = loop.value_binding;

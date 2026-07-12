@@ -730,6 +730,30 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             loop.iter_type = iter_type;
             // `for (const [k, v] of map)` — pair destructuring over a Map.
             if (loop.is_pair) {
+                // `for (const [a, b] of pairs)` over a `[A, B][]` — bind a to
+                // element[0], b to element[1] (spec 291).
+                if (types.isArray(iter_type)) {
+                    const elem = types.arrayElem(iter_type) orelse return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
+                    if (elem != .tuple_type or elem.tuple_type.len != 2) {
+                        return self.fail(loop.line, loop.col, "destructuring `for...of` over an array needs a two-element tuple element type (`[A, B][]`)");
+                    }
+                    try self.pushScope();
+                    defer self.popScope();
+                    const scope = self.currentScope();
+                    const kn = try self.freshEmitName(loop.binding);
+                    const vn = try self.freshEmitName(loop.value_binding);
+                    loop.binding_emit_name = kn;
+                    loop.is_tuple_pairs = true;
+                    loop.iter_type = iter_type;
+                    loop.elem_type = elem;
+                    scope.put(self.arena, loop.binding, .{ .ty = elem.tuple_type[0], .mutable = loop.mutable, .emit_name = kn }) catch return error.OutOfMemory;
+                    scope.put(self.arena, loop.value_binding, .{ .ty = elem.tuple_type[1], .mutable = loop.mutable, .emit_name = vn }) catch return error.OutOfMemory;
+                    loop.value_binding = vn;
+                    self.loop_depth += 1;
+                    defer self.loop_depth -= 1;
+                    try self.checkBlock(program, loop.body);
+                    return;
+                }
                 if (iter_type != .map_type) return self.fail(loop.line, loop.col, "E_TYPE_MISMATCH");
                 try self.pushScope();
                 defer self.popScope();
