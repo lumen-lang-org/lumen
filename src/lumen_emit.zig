@@ -1616,6 +1616,19 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             }
         },
         .ternary => |ternary| {
+            // When a branch is `null`, both branches are cast to `?T` so Zig's
+            // peer-type resolution keeps the whole expression optional (spec 303).
+            if (ternary.result_type) |rt| {
+                const rz = try types.zigName(arena, rt);
+                try w.appendSlice(arena, "(if (");
+                try emitExpr(ternary.cond, w, arena);
+                try w.print(arena, ") @as({s}, ", .{rz});
+                try emitExpr(ternary.then_expr, w, arena);
+                try w.print(arena, ") else @as({s}, ", .{rz});
+                try emitExpr(ternary.else_expr, w, arena);
+                try w.appendSlice(arena, "))");
+                return;
+            }
             try w.appendSlice(arena, "(if (");
             try emitExpr(ternary.cond, w, arena);
             try w.appendSlice(arena, ") ");

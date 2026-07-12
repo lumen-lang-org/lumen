@@ -400,7 +400,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             cmp.checked_operand_type = left_type;
             return .bool;
         },
-        .ternary => |ternary| {
+        .ternary => |*ternary| {
             const cond_type = self.exprType(program, ternary.cond, line, col) orelse return null;
             if (!types.same(.bool, cond_type)) {
                 _ = self.failCondition(line, col, "`?:`", cond_type) catch {};
@@ -460,6 +460,19 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             };
             if (narrow_else) self.narrowed.items.len -= 1;
             if (!types.same(then_type, else_type)) {
+                // `cond ? value : null` (or the reverse) yields `T | null`
+                // (spec 303): one branch is a bare null, the other a value.
+                if (then_type == .optional or else_type == .optional or then_type == .none or else_type == .none) {
+                    // Determine the non-null value type.
+                    const val_ty: ?types.Type = if (then_type == .none) (if (else_type == .optional) else_type.optional.* else else_type) else if (else_type == .none) (if (then_type == .optional) then_type.optional.* else then_type) else null;
+                    if (val_ty) |vt| {
+                        const p = self.arena.create(types.Type) catch return null;
+                        p.* = vt;
+                        const opt = types.Type{ .optional = p };
+                        ternary.result_type = opt; // emit casts both branches to ?T
+                        return opt;
+                    }
+                }
                 _ = self.failTypeMismatch(line, col, then_type, else_type) catch {};
                 return null;
             }

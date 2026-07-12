@@ -561,7 +561,7 @@ pub const Expr = union(enum) {
     bin: struct { op: u8, l: *Expr, r: *Expr, checked_type: ?types.Type = null }, // + - * / % & | ^ and L=<< R=>> P=**
     bool_bin: struct { op: []const u8, l: *Expr, r: *Expr }, // && ||
     cmp: struct { op: []const u8, l: *Expr, r: *Expr, checked_operand_type: ?types.Type = null, opt_cmp: u8 = 0 }, // < > <= >= == !=; opt_cmp: 1=left optional vs value, 2=right optional vs value
-    ternary: struct { cond: *Expr, then_expr: *Expr, else_expr: *Expr },
+    ternary: struct { cond: *Expr, then_expr: *Expr, else_expr: *Expr, result_type: ?types.Type = null }, // result_type set when a branch is `null` so both cast to `?T` at emit (spec 303)
     coalesce: struct { l: *Expr, r: *Expr, result_type: ?types.Type = null }, // a ?? b; result_type is the checked result (optional for a chained `a ?? b ?? d`)
     arrow: *ArrowExpr, // (x: T) => expr
     this_expr, // `this` inside a method/constructor
