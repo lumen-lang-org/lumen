@@ -316,6 +316,10 @@ pub fn collectSuperInExpr(c: *const ast.ClassDecl, e: *const Expr, decls: *std.A
                     var copy = m;
                     copy.name = try std.fmt.allocPrint(arena, "__super_{s}_{s}", .{ owner, sc.name });
                     try emitClassMethod(c.name, copy, decls, arena, throw_target, switch_break_target, options);
+                    // The copied ancestor method may itself call `super.x()`
+                    // (a deeper level of the chain); emit those copies too so a
+                    // 3+-level `super` chain resolves (spec 352).
+                    try emitSuperCopies(c, m.body, decls, arena, seen, throw_target, switch_break_target, options);
                     return;
                 }
             }
