@@ -45,6 +45,36 @@ pub fn wrapStringify(self: *Checker, e: *ast.Expr) !*ast.Expr {
     return node;
 }
 
+/// Whether an expression is side-effect free, so it can be evaluated more than
+/// once (e.g. the receiver of `a?.m()` in the guard and the call). Variable and
+/// field/index access over pure subexpressions qualify; anything that calls or
+/// constructs does not.
+fn isPureReceiver(e: *const ast.Expr) bool {
+    return switch (e.*) {
+        .var_ref, .this_expr => true,
+        .field => |f| isPureReceiver(f.obj),
+        .index => |idx| isPureReceiver(idx.obj) and isPureReceiver(idx.value),
+        .non_null => |nn| isPureReceiver(nn.inner),
+        else => false,
+    };
+}
+
+/// Deep-copy a pure receiver expression so the guard and the call in a desugared
+/// `a?.m()` use distinct nodes (narrowing marks per-node unwrap flags, which
+/// must not be shared between the optional guard and the unwrapped call).
+fn clonePure(self: *Checker, e: *const ast.Expr) ?*ast.Expr {
+    const c = self.arena.create(ast.Expr) catch return null;
+    switch (e.*) {
+        .var_ref => |r| c.* = .{ .var_ref = .{ .name = r.name } },
+        .this_expr => c.* = .{ .this_expr = {} },
+        .field => |f| c.* = .{ .field = .{ .obj = clonePure(self, f.obj) orelse return null, .name = f.name, .optional_chain = f.optional_chain } },
+        .index => |idx| c.* = .{ .index = .{ .obj = clonePure(self, idx.obj) orelse return null, .value = clonePure(self, idx.value) orelse return null, .optional_chain = idx.optional_chain } },
+        .non_null => |nn| c.* = .{ .non_null = .{ .inner = clonePure(self, nn.inner) orelse return null } },
+        else => return null,
+    }
+    return c;
+}
+
 /// The backing type of an enum (numeric enum -> i32, string enum -> string),
 /// or the type itself when it is not an enum (spec 294).
 fn enumBacking(t: types.Type) types.Type {
@@ -814,6 +844,15 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 var field_type: types.Type = undefined;
                 if (inner == .named) {
                     field_type = self.fieldType(inner.named, field.name, line, col) orelse return null;
+                } else if (inner == .class_type) {
+                    // `instance?.field` on an optional class instance.
+                    const rf = self.resolveField(inner.class_type, field.name) orelse {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    };
+                    if (!self.visibilityOk(rf.field.visibility, rf.owner, line, col)) return null;
+                    field.class_name = rf.owner;
+                    field_type = rf.field.checked_type orelse return null;
                 } else if ((types.isStringLike(inner) or types.isArray(inner)) and eql(u8, field.name, "length")) {
                     // `s?.length` / `xs?.length` — the builtin length under an
                     // optional chain yields `i32 | null`.
@@ -1116,6 +1155,25 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // would need a disproportionate refactor. Rejected cleanly for
             // now (optional field `a?.b` and optional index `a?.[i]` work).
             if (mc.optional_chain) {
+                // `a?.m(args)` desugars to `a != null ? a.m(args) : null` when
+                // the receiver is side-effect free (so evaluating it twice — in
+                // the guard and the call — is safe). The narrowing in the
+                // ternary's then-branch unwraps the optional receiver.
+                if (isPureReceiver(mc.obj)) {
+                    const null_node = self.arena.create(ast.Expr) catch return null;
+                    null_node.* = .{ .null_lit = {} };
+                    // The guard uses a distinct copy of the receiver so narrowing
+                    // marks only the call's receiver as unwrapped.
+                    const guard_recv = clonePure(self, mc.obj) orelse return null;
+                    const cond = self.arena.create(ast.Expr) catch return null;
+                    cond.* = .{ .cmp = .{ .op = "!=", .l = guard_recv, .r = null_node } };
+                    const then_call = self.arena.create(ast.Expr) catch return null;
+                    then_call.* = .{ .method_call = .{ .obj = mc.obj, .name = mc.name, .args = mc.args, .optional_chain = false } };
+                    const else_null = self.arena.create(ast.Expr) catch return null;
+                    else_null.* = .{ .null_lit = {} };
+                    e.* = .{ .ternary = .{ .cond = cond, .then_expr = then_call, .else_expr = else_null } };
+                    return self.exprType(program, e, line, col);
+                }
                 _ = self.fail(line, col, "E_UNSUPPORTED_OPTIONAL_CALL") catch {};
                 return null;
             }
