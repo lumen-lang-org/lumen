@@ -3143,7 +3143,11 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     if (program.uses_io) {
         try out.appendSlice(arena, "pub fn main(__init: std.process.Init) !void {\n");
         try out.appendSlice(arena, "    __io = __init.io;\n    __alloc = __init.arena.allocator();\n");
-        try out.appendSlice(arena, "    __lumen_color = (__init.environ_map.get(\"NO_COLOR\") == null) and (std.Io.File.stderr().isTty(__init.io) catch false);\n");
+        // `__lumen_color` only exists when runtime location/diagnostic globals are
+        // emitted (release-fast omits them), so gate its initialization to match.
+        if (options.runtime_locations) {
+            try out.appendSlice(arena, "    __lumen_color = (__init.environ_map.get(\"NO_COLOR\") == null) and (std.Io.File.stderr().isTty(__init.io) catch false);\n");
+        }
         if (program.needs_args) {
             try out.appendSlice(arena, "    __lumen_argv = __init.minimal.args.toSlice(__alloc) catch std.process.exit(1);\n");
         }
