@@ -347,6 +347,24 @@ pub fn parseTypeParams(self: *Parser) CompileError![][]const u8 {
         if (self.cur != .ident) return error.ParseError;
         try params.append(self.arena, self.cur.ident);
         try self.advance();
+        // A constraint `T extends <type>` is parsed and ignored: Lumen
+        // monomorphizes generics, so each specialization's actual usage is
+        // already type-checked against the concrete type. Skip a balanced type
+        // expression up to the next `,` or the closing `>`.
+        if (self.isKw("extends")) {
+            try self.advance();
+            var depth: i32 = 0;
+            while (true) {
+                if (self.cur == .eof) return error.ParseError;
+                if (depth == 0 and (self.isCmp(">") or self.isOp(','))) break;
+                if (self.isOp('{') or self.isOp('[') or self.isCmp("<")) {
+                    depth += 1;
+                } else if (self.isOp('}') or self.isOp(']') or self.isCmp(">")) {
+                    depth -= 1;
+                }
+                try self.advance();
+            }
+        }
         if (self.isOp(',')) try self.advance() else break;
     }
     if (!self.isCmp(">")) return error.ParseError;
