@@ -313,7 +313,7 @@ pub fn specializeClass(self: *Checker, decl: *const ast.ClassDecl, type_args: []
     // Register and fill member types so uses see the concrete shape, then
     // queue for full body checking + emission.
     self.classes.put(self.arena, mname, .{ .fields = spec.fields, .methods = spec.methods, .ctor_params = spec.ctor_params, .has_ctor = spec.has_ctor }) catch return error.OutOfMemory;
-    try self.fillClassTypes(spec);
+    try self.fillClassTypes(null, spec);
     // Reflect the filled member types back into the registry entry.
     self.classes.put(self.arena, mname, .{ .fields = spec.fields, .methods = spec.methods, .ctor_params = spec.ctor_params, .has_ctor = spec.has_ctor }) catch return error.OutOfMemory;
     const stmt_ptr = self.arena.create(ast.Stmt) catch return error.OutOfMemory;

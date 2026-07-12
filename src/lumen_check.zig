@@ -1173,7 +1173,7 @@ pub const Checker = struct {
             }
         }
         for (program.stmts) |*stmt| {
-            if (stmt.* == .class_decl and stmt.class_decl.type_params.len == 0) try self.fillClassTypes(&stmt.class_decl);
+            if (stmt.* == .class_decl and stmt.class_decl.type_params.len == 0) try self.fillClassTypes(program, &stmt.class_decl);
         }
         for (program.stmts) |*stmt| {
             if (stmt.* == .extern_decl) try self.declareExtern(&stmt.extern_decl);
@@ -1213,7 +1213,7 @@ pub const Checker = struct {
 
     /// True for a generic template declaration (skipped by the main check loop
     /// and the emitter; only its specializations are checked/emitted).
-    pub fn fillClassTypes(self: *Checker, c: *ast.ClassDecl) CompileError!void {
+    pub fn fillClassTypes(self: *Checker, program: ?*ast.Program, c: *ast.ClassDecl) CompileError!void {
         for (c.fields) |*field| {
             field.checked_type = try self.typeFromAnnotation(field.annotation, c.line, c.col);
         }
@@ -1225,7 +1225,24 @@ pub const Checker = struct {
         }
         for (c.methods) |*m| {
             for (m.params) |*param| try self.resolveParam(param, m.line, m.col);
-            m.checked_return_type = try self.typeFromAnnotation(m.return_annotation, m.line, m.col);
+            var ret = try self.typeFromAnnotation(m.return_annotation, m.line, m.col);
+            // Infer an omitted method return type from the body's first value
+            // `return <expr>` (params in scope), the same as free functions
+            // (spec 310). A `this`-based return is not inferable here (the class
+            // fields aren't queryable yet) and falls to the annotate-guidance.
+            if (program) |prog| {
+                if (m.infer_return and !m.is_async and ret == .void) {
+                    if (check_stmt.firstReturnExpr(m.body)) |rexpr| {
+                        try self.pushScope();
+                        defer self.popScope();
+                        for (m.params) |param| self.declareParam(param, m.line, m.col) catch {};
+                        if (self.exprType(prog, rexpr, m.line, m.col)) |inferred| {
+                            if (inferred != .void) ret = inferred;
+                        }
+                    }
+                }
+            }
+            m.checked_return_type = ret;
         }
     }
 

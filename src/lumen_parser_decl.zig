@@ -517,15 +517,18 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             // method (or accessor)
             const params = try self.parseParamList();
             var return_annotation: []const u8 = "void";
+            var infer_return = true;
             if (self.isOp(':')) {
                 try self.advance();
                 return_annotation = try self.parseTypeAnnotation();
+                infer_return = false;
             }
             const body = try self.parseBlock();
             try methods.append(self.arena, .{
                 .name = member,
                 .params = params,
                 .return_annotation = return_annotation,
+                .infer_return = infer_return,
                 .body = body,
                 .visibility = visibility,
                 .is_static = is_static,

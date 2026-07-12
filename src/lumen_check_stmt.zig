@@ -1040,7 +1040,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 return self.fail(ret.line, ret.col, "E_RETURN_TYPE");
             };
             if (expected_return == .void and self.current_return_uninferable) {
-                return self.fail(ret.line, ret.col, "could not infer this function's return type — add an explicit `: T` return annotation (inference does not yet cover returns of loop/local variables, forward-referenced functions, or record types)");
+                return self.fail(ret.line, ret.col, "could not infer this function's return type — add an explicit `: T` return annotation (inference does not yet cover returns of loop/local variables, `this`/class fields, forward-referenced functions, or record types)");
             }
             // ensureAssignable already recorded a detailed expected/got message.
             self.ensureAssignable(program, expected_return, value, ret.line, ret.col) catch return error.ParseError;
