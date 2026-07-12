@@ -1,73 +1,105 @@
 # HTTP server benchmark — Lumen vs Node
 
 Plaintext "Hello, World!" server, hit by a keep-alive load client. Same client
-(`load.mjs`, Node) drives both servers, so the comparison is apples-to-apples
-even though the client itself is single-threaded and forms a shared ceiling.
+(`load.mjs`, Node) drives both servers.
+
+**Important measurement note:** a single Node load client is single-threaded and
+tops out near ~10k req/sec — it under-drives a fast server. To find real server
+capacity, saturate with several clients in parallel and sum their throughput.
 
 ## Run
 
 ```sh
-# Lumen server (port 8081)
 lumen compile --release-fast server.ts && mv server lumen-server
-./lumen-server &
-node load.mjs 8081 50 6      # port, connections, seconds
+./lumen-server &                              # port 8081
+node server.mjs &                             # port 8082 (Node baseline)
 
-# Node server (port 8082)
-node server.mjs &
-node load.mjs 8082 50 6
+# single client (under-drives — client-bound near 10k):
+node load.mjs 8081 50 5                        # port, connections, seconds
+
+# saturated (4 clients, sum the numbers) — this is the real ceiling:
+for i in 1 2 3 4; do node load.mjs 8081 25 4 & done; wait
 ```
 
-## Results (this machine, req/sec)
+## Diagnosis — why the Lumen server was slow
 
-| connections | Lumen  | Node   | Lumen / Node |
-|-------------|--------|--------|--------------|
-| 10          | ~9,500 | ~14,100| 0.67×        |
-| 50          | ~10,000| ~14,700| 0.68×        |
-| 100         | ~9,570 | ~11,070| 0.86×        |
-| 200         | ~8,660 | ~11,700| 0.74×        |
+Two structural problems in the generated server (both now fixed):
 
-**Node is faster on this workload.** Two structural reasons:
+### 1. Pool sized for CPU parallelism, not I/O concurrency → starvation
 
-1. **Concurrency model.** Node runs one libuv epoll event loop; Lumen's server
-   (spec 049) is thread-per-connection with a blocking `accept` loop. At high
-   connection counts the per-thread overhead shows (Lumen dips at 200 conns
-   while Node holds flat).
-2. **Parser.** Node ships llhttp, a hand-tuned C HTTP parser. Lumen's request
-   parsing is straightforward Zig, not micro-optimized.
+The server schedules one `xev.ThreadPool` task per accepted connection, and that
+task occupies its worker for the connection's **whole keep-alive lifetime** —
+blocked on a socket read between requests. The pool defaulted to
+`max_threads = getCpuCount()` (4 on this box). So only ~4 connections ever made
+progress; every connection beyond that was accepted, queued, and **starved**
+until an active one closed.
 
-The single-threaded Node *client* caps both around 10–15k req/sec, so these
-numbers understate each server's true ceiling; the *ratio* is the signal.
+Measured, two load clients against the old server:
+
+```
+client A: 9819 req/sec
+client B:   31 req/sec   <- starved: A's 50 keep-alive conns held all 4 workers
+```
+
+Throughput was flat ~9.5k regardless of connection count (10 / 100 / 200 conns
+all the same) — the signature of a fixed worker-count ceiling, not real
+concurrency.
+
+**Fix:** size the pool for I/O concurrency — `max_threads = max(256, cpus*32)`,
+with a modest 512 KB per-thread stack so idle workers cost almost nothing. HTTP
+serving is I/O-bound (workers mostly wait), so oversubscription is correct, the
+same shape Node's epoll loop and Go's scheduler use.
+
+After the fix, the same two-client test:
+
+```
+client A: 10797 req/sec
+client B: 10814 req/sec   <- fair; both connections' work makes progress
+```
+
+### 2. mmap / munmap per request
+
+Each request built its scratch arena with `ArenaAllocator.init(page_allocator)`
+and `deinit()`d it at the end — an `mmap` + `munmap` syscall pair on **every
+request**, in the hot path.
+
+**Fix:** one arena per connection, `reset(.retain_capacity)` between keep-alive
+requests. Steady state does zero allocation syscalls per request. This roughly
+**doubled** saturated throughput (~14k → ~27k req/sec).
+
+## Results after both fixes (this machine, 4 cores, req/sec)
+
+Saturated (4 parallel clients, summed), median of 3 runs:
+
+| server | req/sec |
+|--------|---------|
+| Lumen  | ~27,000 |
+| Node   | ~25,000 |
+
+Lumen now matches or slightly beats Node's `http.createServer` on this
+plaintext workload — up from ~9.5k while starving connections before the fixes.
 
 ## Did this session's compiler work change server throughput?
 
-**No — and it wasn't expected to.** This session shipped escape analysis
-(stack-allocate non-escaping class instances) and generic inference. Those
-optimize *user CPU compute* — object churn, tight arithmetic loops — where
-Lumen already beats or ties Node (see `../bench.ts`, `../bench2.ts`). They do
-not touch the socket accept path, the request parser, or the response writer,
-so HTTP throughput is unchanged. The server is I/O- and parser-bound, not
-compute-bound; the wins from this session live on a different axis.
-
-To close the HTTP gap needs work on the server itself: an epoll/kqueue event
-loop (Lumen already links libxev, which provides exactly this) instead of
-thread-per-connection, and a faster request-line/header parser. That is a
-separate, server-scoped effort — not something the compute optimizations reach.
+**No.** The HTTP wins here came from fixing the *server runtime codegen* (pool
+sizing + arena reuse), not from the escape-analysis / generic-inference work.
+Those optimize *user CPU compute* (object churn, arithmetic loops — see
+`../bench.ts`, `../bench2.ts`) and never touch the socket path. Different axis.
 
 ## Where should a body parser live? — contrib, not stdlib
 
 Structured request-body parsing (JSON already available via `JSON.parse` on
 `req.body`; urlencoded forms; multipart) belongs in a **contrib package**
-imported by URL, not the native stdlib. Reasons:
+imported by URL, not the native stdlib:
 
 - **Node's own precedent.** Core `http` exposes the raw body only; `body-parser`
-  is userland (Express middleware), never built in. Lumen already matches this:
-  `req.body` is a plain string.
-- **Policy-heavy, evolvable.** Body parsing carries choices — size limits,
-  content-type dispatch, charset handling, multipart boundaries — that should
-  evolve in versioned userland, not the frozen, compiled-in stdlib surface.
-- **Keeps the stdlib lean.** The compiled stdlib is the thing every binary pays
-  for; convenience parsers that only some servers need fit the "a package is
-  just a URL" model.
+  is userland (Express), never built in. Lumen already matches — `req.body` is a
+  plain string.
+- **Policy-heavy, evolvable.** Size limits, content-type dispatch, charset
+  handling, multipart boundaries — choices that should evolve in versioned
+  userland, not the frozen compiled-in stdlib surface.
+- **Keeps the stdlib lean.** Every binary pays for stdlib; convenience parsers
+  only some servers need fit the "a package is just a URL" model.
 
-stdlib keeps exposing the raw `req.body` string (and `JSON.parse` for the common
-JSON case); form/multipart decoding ships as `std-contrib` when built.
+stdlib keeps the raw `req.body` string + `JSON.parse`; form/multipart ships as
+`std-contrib`.

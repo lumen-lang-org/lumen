@@ -2281,14 +2281,24 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
                 \\    _ = alloc;
                 \\    const addr = std.Io.net.IpAddress.parse("0.0.0.0", @intCast(port)) catch std.process.exit(1);
                 \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
-                \\    // `ThreadPool.init` reads the CPU count via a runtime syscall
-                \\    // (`std.Thread.getCpuCount`) when `max_threads` isn't set --
-                \\    // not comptime-known, so this can't be a container-level
-                \\    // initializer (`var x = ThreadPool.init(.{})` at file scope
-                \\    // fails to compile: "initializer of container-level variable
-                \\    // must be comptime-known"). Initialized here instead, once,
-                \\    // before the accept loop starts.
-                \\    __http_pool = xev.ThreadPool.init(.{});
+                \\    // One connection task occupies a worker for the connection's
+                \\    // whole keep-alive lifetime, blocked on socket reads between
+                \\    // requests. So the pool must be sized for I/O concurrency (how
+                \\    // many connections may be in flight), NOT CPU parallelism: the
+                \\    // default `max_threads = getCpuCount()` caps concurrent
+                \\    // connections at the core count, and every connection beyond
+                \\    // that starves in the queue until an active one closes. HTTP
+                \\    // serving is I/O-bound (workers mostly wait, not compute), so a
+                \\    // large pool is the right shape here (as Node's epoll loop and
+                \\    // Go's scheduler are). A modest per-thread stack keeps the
+                \\    // virtual-memory cost of many idle workers negligible.
+                \\    // Initialized here (not at file scope) because `getCpuCount`
+                \\    // and the `@max` below are runtime values, not comptime-known.
+                \\    const __http_cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
+                \\    __http_pool = xev.ThreadPool.init(.{
+                \\        .max_threads = @max(256, __http_cpus * 32),
+                \\        .stack_size = 512 * 1024,
+                \\    });
                 \\    const Handler = @TypeOf(handler);
                 \\    const Conn = struct {
                 \\        task: xev.ThreadPool.Task = .{ .callback = run },
@@ -2307,10 +2317,17 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
                 \\            var write_buf: [16 * 1024]u8 = undefined;
                 \\            var writer = stream.writer(io2, &write_buf);
                 \\            const w = &writer.interface;
+                \\            // One arena for the whole connection, reset (not freed)
+                \\            // between keep-alive requests: a fresh
+                \\            // `ArenaAllocator.init`/`deinit` per request would mmap +
+                \\            // munmap on every request, two syscalls in the hot path.
+                \\            // `.retain_capacity` keeps the backing pages so steady
+                \\            // state does zero allocation syscalls per request.
+                \\            var conn_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+                \\            defer conn_arena.deinit();
+                \\            const carena = conn_arena.allocator();
                 \\            conn: while (true) {
-                \\                var conn_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-                \\                defer conn_arena.deinit();
-                \\                const carena = conn_arena.allocator();
+                \\                _ = conn_arena.reset(.retain_capacity);
                 \\                const first = r.takeDelimiterInclusive('\n') catch break :conn;
                 \\                const line = std.mem.trimEnd(u8, first, "\r\n");
                 \\                var it = std.mem.tokenizeScalar(u8, line, ' ');
