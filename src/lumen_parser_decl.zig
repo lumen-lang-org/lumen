@@ -625,7 +625,9 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 .visibility = visibility,
                 .is_static = is_static,
                 .is_readonly = is_readonly,
-                .init = if (annotation.len == 0) init_expr else null,
+                // Keep the initializer for type inference (un-annotated instance
+                // fields) and for static-field storage initialization.
+                .init = init_expr,
             });
             if (self.isOp(';') or self.isOp(',')) try self.advance();
         }

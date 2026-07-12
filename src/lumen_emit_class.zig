@@ -81,7 +81,15 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     for (c.fields) |field| {
         if (!field.is_static) continue;
         const ty = field.checked_type orelse return error.ParseError;
-        try decls.print(arena, "    var __static_{s}_{s}: {s} = {s};\n", .{ c.name, field.name, try types.zigName(arena, ty), zeroValue(ty) });
+        try decls.print(arena, "    var __static_{s}_{s}: {s} = ", .{ c.name, field.name, try types.zigName(arena, ty) });
+        // Use the declared initializer (a literal in the common case); a field
+        // without one gets the type's zero value.
+        if (field.init) |ie| {
+            try emitExpr(ie, decls, arena);
+        } else {
+            try decls.appendSlice(arena, zeroValue(ty));
+        }
+        try decls.appendSlice(arena, ";\n");
     }
 
     // Constructor: resolve the nearest ctor among the chain that the most
@@ -130,7 +138,10 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
             try decls.print(arena, "{s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
         }
         try decls.print(arena, ") {s} {{\n", .{c.name});
-        try decls.print(arena, "    var self: {s} = undefined;\n", .{c.name});
+        // A ctor that writes fields needs `var self`; one that never touches
+        // `this` (fieldless/empty ctor) leaves it unmutated, so use `const` to
+        // avoid Zig's "local variable is never mutated" error.
+        try decls.print(arena, "    {s} self: {s} = undefined;\n", .{ if (bodyUsesThis(ctor_owner.ctor_body)) "var" else "const", c.name });
         {
             const saved_can_error = emit_mod.g_fn_can_error;
             emit_mod.g_fn_can_error = false;
