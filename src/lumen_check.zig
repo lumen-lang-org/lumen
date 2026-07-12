@@ -1238,6 +1238,11 @@ pub const Checker = struct {
                         for (m.params) |param| self.declareParam(param, m.line, m.col) catch {};
                         if (self.exprType(prog, rexpr, m.line, m.col)) |inferred| {
                             if (inferred != .void) ret = inferred;
+                        } else if (thisFieldType(c, rexpr)) |ft| {
+                            // A getter-style `return this.<field>` resolves against
+                            // the class's own fields even though `this` is not yet
+                            // in scope for the general inference path.
+                            ret = ft;
                         }
                     }
                 }
@@ -1266,6 +1271,22 @@ pub const Checker = struct {
 /// If `annotation` is the by-reference marker `Ref<T>`, returns the inner `T`
 /// annotation (trimmed); otherwise null. `Ref` is reserved as a built-in marker,
 /// so it is matched here before the generics machinery resolves type references.
+/// The declared type of `this.<field>` for a class's own fields or property
+/// constructor params, or null when `expr` is not such a field access. Used to
+/// infer a getter-style method's return type before `this` is in scope.
+fn thisFieldType(c: *const ast.ClassDecl, expr: *const ast.Expr) ?types.Type {
+    if (expr.* != .field) return null;
+    const fa = expr.field;
+    if (fa.obj.* != .this_expr) return null;
+    for (c.fields) |f| {
+        if (std.mem.eql(u8, f.name, fa.name)) return f.checked_type;
+    }
+    for (c.ctor_params) |p| {
+        if (p.is_property and std.mem.eql(u8, p.name, fa.name)) return p.checked_type;
+    }
+    return null;
+}
+
 pub fn refInner(annotation: []const u8) ?[]const u8 {
     const a = std.mem.trim(u8, annotation, " ");
     if (!std.mem.startsWith(u8, a, "Ref<")) return null;
