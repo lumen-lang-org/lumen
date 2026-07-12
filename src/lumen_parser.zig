@@ -443,13 +443,21 @@ pub const Parser = struct {
                     if (is_object and self.isOp(':')) {
                         try self.advance();
                         if (self.cur != .ident) return error.ParseError;
-                        try bindings.append(self.arena, .{ .name = self.cur.ident, .field_name = first_name });
+                        const local = self.cur.ident;
                         try self.advance();
-                    } else {
-                        // Array element default `[a = 1, b = 2]` — the value used
-                        // when the source array is shorter than the pattern.
+                        // Renamed object binding default `{ field: local = 1 }`.
                         var default_expr: ?*ast.Expr = null;
-                        if (!is_object and !is_rest and self.isOp('=')) {
+                        if (self.isOp('=')) {
+                            try self.advance();
+                            default_expr = try self.parseExpr();
+                        }
+                        try bindings.append(self.arena, .{ .name = local, .field_name = first_name, .default = default_expr });
+                    } else {
+                        // Element/property default: `[a = 1]` (array, used when the
+                        // source is shorter) or `{ x = 1 }` (object, used when an
+                        // optional property is absent).
+                        var default_expr: ?*ast.Expr = null;
+                        if (!is_rest and self.isOp('=')) {
                             try self.advance();
                             default_expr = try self.parseExpr();
                         }

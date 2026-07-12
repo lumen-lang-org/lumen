@@ -528,7 +528,17 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 const bname = b.emit_name orelse b.name;
                 try body.print(arena, "    const {s}: {s} = ", .{ bname, try types.zigName(arena, bty) });
                 if (d.is_object) {
-                    try body.print(arena, "{s}.{s};\n", .{ src, b.field_name orelse b.name });
+                    if (b.default_unwraps) {
+                        // `{ x = default }` where `x` is optional: an absent
+                        // property falls back to the default.
+                        try body.print(arena, "{s}.{s} orelse ", .{ src, b.field_name orelse b.name });
+                        try emitExpr(b.default.?, body, arena);
+                        try body.appendSlice(arena, ";\n");
+                    } else {
+                        // Required property (always present): the default, if any,
+                        // is dead; the field value passes through.
+                        try body.print(arena, "{s}.{s};\n", .{ src, b.field_name orelse b.name });
+                    }
                 } else if (d.is_tuple) {
                     // A tuple lowers to a positional struct: read field `.@"i"`.
                     try body.print(arena, "{s}.@\"{d}\";\n", .{ src, i });

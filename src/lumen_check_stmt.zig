@@ -474,12 +474,20 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 };
                 for (d.bindings) |*b| {
                     const field_type = self.fieldType(type_name, b.field_name orelse b.name, d.line, d.col) orelse return error.ParseError;
-                    b.checked_type = field_type;
+                    // A default (`{ x = 1 }`) supplies the value when an optional
+                    // property is absent, so the binding takes the non-optional
+                    // element type and the default must be assignable to it.
+                    const bind_type = if (b.default != null) types.unwrapOptional(field_type) else field_type;
+                    if (b.default) |dv| {
+                        try self.ensureAssignable(program, bind_type, dv, d.line, d.col);
+                        b.default_unwraps = types.isOptional(field_type);
+                    }
+                    b.checked_type = bind_type;
                     const scope = self.currentScope();
                     if (scope.get(b.name) != null) return self.fail(d.line, d.col, "E_DUPLICATE_BINDING");
                     const emit_name = try self.freshEmitName(b.name);
                     b.emit_name = emit_name;
-                    scope.put(self.arena, b.name, .{ .ty = field_type, .mutable = d.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
+                    scope.put(self.arena, b.name, .{ .ty = bind_type, .mutable = d.mutable, .emit_name = emit_name }) catch return error.OutOfMemory;
                 }
             } else if (src_type == .tuple_type) {
                 // `const [a, b] = tupleValue`: each binding takes the matching
