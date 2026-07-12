@@ -1791,7 +1791,14 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 c.checked_type = target;
                 return target;
             }
-            const source = self.exprType(program, c.inner, line, col) orelse return null;
+            const source = self.exprType(program, c.inner, line, col) orelse {
+                // An object or array literal can't be typed on its own; `as T`
+                // supplies the target type, so check the literal against it
+                // structurally (the same as `satisfies`).
+                self.ensureAssignable(program, target, c.inner, line, col) catch return null;
+                c.checked_type = target;
+                return target;
+            };
             if (!self.castAllowed(source, target)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
