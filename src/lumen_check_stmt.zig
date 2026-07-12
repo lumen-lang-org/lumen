@@ -275,7 +275,12 @@ pub fn checkMemberAssign(self: *Checker, program: *ast.Program, ma: *ast.MemberA
         }
         // Records and other non-class shapes are immutable in V1: writing a
         // field on them is a dynamic property write.
-        if (obj_type != .class_type) return self.fail(ma.line, ma.col, "E_DYNAMIC_PROPERTY_WRITE");
+        if (obj_type != .class_type) {
+            if (types.isArray(obj_type)) {
+                return self.fail(ma.line, ma.col, "array elements are immutable — build a new array instead (`a = a.map(...)`, `a = [...a.slice(0, i), v, ...a.slice(i + 1)]`)");
+            }
+            return self.fail(ma.line, ma.col, "E_DYNAMIC_PROPERTY_WRITE");
+        }
         const cls = obj_type.class_type;
         // Setter property write: `obj.prop = value`.
         if (self.resolveField(cls, ma.field) == null) {

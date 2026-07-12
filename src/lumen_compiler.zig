@@ -158,7 +158,7 @@ fn rejectUnsupportedDynamic(source: []const u8, diag: *Diag) CompileError!void {
             .op => |ch| {
                 if (bracket_depth > 0 and ch != '[' and ch != ']') bracket_has_content = true;
                 if (ch == '=' and pending_dynamic_write_line != 0) {
-                    return setDiag(diag, pending_dynamic_write_line, pending_dynamic_write_col, "E_DYNAMIC_PROPERTY_WRITE");
+                    return setDiag(diag, pending_dynamic_write_line, pending_dynamic_write_col, "indexed assignment (`x[i] = ...`) is not supported — arrays and records are immutable; build a new value instead (e.g. `a = [...a.slice(0, i), v, ...a.slice(i + 1)]`)");
                 }
                 if (ch == '[' and prev_was_ident and bracket_depth == 0) {
                     bracket_candidate_line = lex.tok_line;
