@@ -1799,7 +1799,14 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // literal types, so it is an identity assertion: keep the operand's
             // own type instead of resolving `const` as a (nonexistent) type.
             if (std.mem.eql(u8, std.mem.trim(u8, c.annotation, " \t"), "const")) {
-                const src = self.exprType(program, c.inner, line, col) orelse return null;
+                const src = self.exprType(program, c.inner, line, col) orelse {
+                    // An object/array literal can't self-type, and `as const`
+                    // names no target to check it against.
+                    if (c.inner.* == .obj) {
+                        _ = self.fail(line, col, "`as const` cannot type an object literal on its own — declare a named record type (`type T = { ... }`) and annotate `const x: T = { ... }`") catch {};
+                    }
+                    return null;
+                };
                 c.checked_type = src;
                 return src;
             }
