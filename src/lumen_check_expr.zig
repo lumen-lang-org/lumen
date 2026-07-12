@@ -1300,6 +1300,31 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return null;
             }
             const cls = obj_type.class_type;
+            // Calling a function-typed field: `this.handler()` / `obj.handler()`
+            // where `handler` is a field (or property parameter) of function
+            // type and not a method. Rewrite to a value call on the field access,
+            // mirroring the record-field path above.
+            if (self.resolveMethod(cls, mc.name) == null and !mc.optional_chain) {
+                var ff: ?types.Type = null;
+                var fcur: ?[]const u8 = cls;
+                while (fcur) |cname| {
+                    const info = self.classes.get(cname) orelse break;
+                    for (info.fields) |f| {
+                        if (std.mem.eql(u8, f.name, mc.name)) ff = f.checked_type;
+                    }
+                    for (info.ctor_params) |p| {
+                        if (p.is_property and std.mem.eql(u8, p.name, mc.name)) ff = p.checked_type;
+                    }
+                    if (ff != null) break;
+                    fcur = info.parent;
+                }
+                if (ff != null and ff.? == .func_type) {
+                    const fld = self.arena.create(ast.Expr) catch return null;
+                    fld.* = .{ .field = .{ .obj = mc.obj, .name = mc.name } };
+                    e.* = .{ .optional_call = .{ .callee = fld, .args = mc.args, .optional_chain = false } };
+                    return self.exprType(program, e, line, col);
+                }
+            }
             const rm = self.resolveMethod(cls, mc.name) orelse {
                 // Collect the class's (and ancestors') instance method names
                 // for a did-you-mean.
