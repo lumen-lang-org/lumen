@@ -2276,12 +2276,15 @@ pub fn findClass(name: []const u8) ?*const ast.ClassDecl {
     return null;
 }
 
-/// A scalar type whose top-level binding can be safely promoted to a module
-/// global (initialized in `main`) so functions can reference it.
+/// A type whose top-level binding can be promoted to a module global
+/// (declared `undefined`, initialized in `main`) so functions can reference it.
+/// Its initializer must emit as a self-contained expression — true for scalars,
+/// arrays, records, tuples, maps/sets, and optionals. Function/closure values
+/// (which carry captures) and value-less types are excluded.
 fn promotableType(t: types.Type) bool {
     return switch (t) {
-        .i32, .i64, .f64, .bool, .string, .enum_type => true,
-        else => false,
+        .func_type, .void, .none => false,
+        else => true,
     };
 }
 
