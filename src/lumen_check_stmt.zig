@@ -156,10 +156,16 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
 
     // Validate the parent reference and reject inheritance cycles.
     if (c.parent) |pname| {
-        if (self.classes.get(pname) == null) return self.fail(c.line, c.col, "E_TYPE_MISMATCH");
+        if (self.classes.get(pname) == null) {
+            const msg = std.fmt.allocPrint(self.arena, "class `{s}` extends `{s}`, but `{s}` is not a known class", .{ c.name, pname, pname }) catch "E_TYPE_MISMATCH";
+            return self.fail(c.line, c.col, msg);
+        }
         var cur: ?[]const u8 = pname;
         while (cur) |name| {
-            if (std.mem.eql(u8, name, c.name)) return self.fail(c.line, c.col, "E_TYPE_MISMATCH");
+            if (std.mem.eql(u8, name, c.name)) {
+                const msg = std.fmt.allocPrint(self.arena, "class `{s}` cannot inherit from itself (inheritance cycle)", .{c.name}) catch "E_TYPE_MISMATCH";
+                return self.fail(c.line, c.col, msg);
+            }
             cur = (self.classes.get(name) orelse break).parent;
         }
     }

@@ -492,6 +492,12 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
         // public `x`. Fields only this pass; `#` methods are out of scope.
         if (member.len > 0 and member[0] == '#') visibility = .private;
         try self.advance();
+        // A method with its own type parameters (`map<U>(...)`) is not
+        // supported yet; guide toward the working alternatives (spec 306).
+        if (self.isCmp("<")) {
+            self.last_err = "generic methods (with their own type parameter) are not supported yet — make the whole class generic (`class C<T>`), or use a generic free function";
+            return error.ParseError;
+        }
         if (accessor == .none and std.mem.eql(u8, member, "constructor")) {
             ctor_params = try self.parseParamList();
             ctor_body = try self.parseBlock();

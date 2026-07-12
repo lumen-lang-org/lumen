@@ -856,7 +856,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         },
         .this_expr => blk: {
             const cls = self.current_class orelse {
-                _ = self.fail(line, col, "E_RETURN_OUTSIDE_FUNCTION") catch {};
+                _ = self.fail(line, col, "'this' is only valid inside a class method") catch {};
                 return null;
             };
             break :blk .{ .class_type = cls };
@@ -1000,7 +1000,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return null;
             }
             const info = self.classes.get(ne.class_name) orelse {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                const msg = std.fmt.allocPrint(self.arena, "'new' needs a class, but `{s}` is not a class", .{ne.class_name}) catch "E_TYPE_MISMATCH";
+                _ = self.fail(line, col, msg) catch {};
                 return null;
             };
             // Resolve the effective constructor: the class's own, else the
