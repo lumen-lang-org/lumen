@@ -1199,7 +1199,7 @@ pub const Checker = struct {
                     var merged: std.ArrayListUnmanaged(ast.TypeField) = .empty;
                     for (stmt.type_decl.parents) |pname| {
                         const pinfo = self.type_decls.get(pname) orelse {
-                            const msg = std.fmt.allocPrint(self.arena, "interface `{s}` extends `{s}`, but `{s}` is not a known interface or record type", .{ stmt.type_decl.name, pname, pname }) catch "E_TYPE_MISMATCH";
+                            const msg = std.fmt.allocPrint(self.arena, "`{s}` references `{s}`, but `{s}` is not a known interface or record type", .{ stmt.type_decl.name, pname, pname }) catch "E_TYPE_MISMATCH";
                             return self.fail(stmt.type_decl.line, stmt.type_decl.col, msg);
                         };
                         for (pinfo.fields) |pf| {

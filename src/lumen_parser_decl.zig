@@ -95,6 +95,16 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     // over named record variants. Collect `|`-separated members first.
     var members: std.ArrayListUnmanaged([]const u8) = .empty;
     try members.append(self.arena, try self.parseTypeMember());
+    // Intersection of named record types: `type C = A & B` — modelled like an
+    // interface extending A and B (their fields are merged in the checker).
+    if (self.isOp('&')) {
+        while (self.isOp('&')) {
+            try self.advance();
+            try members.append(self.arena, try self.parseTypeMember());
+        }
+        try self.expectSemi();
+        return .{ .type_decl = .{ .name = tname, .parents = try members.toOwnedSlice(self.arena), .fields = &.{}, .line = line, .col = col } };
+    }
     while (self.isCmp("|")) {
         try self.advance();
         try members.append(self.arena, try self.parseTypeMember());
