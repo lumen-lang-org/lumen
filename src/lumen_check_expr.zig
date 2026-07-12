@@ -1145,15 +1145,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 };
                 if (!self.visibilityOk(rm.method.visibility, rm.owner, line, col)) return null;
-                if (mc.args.len != rm.method.params.len) {
-                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
-                    return null;
-                }
-                for (mc.args, rm.method.params) |arg, p| {
-                    self.ensureAssignable(program, p.checked_type orelse return null, arg, line, col) catch {
-                        return null;
-                    };
-                }
+                const callee_disp = std.fmt.allocPrint(self.arena, "'{s}.{s}'", .{ cname, mc.name }) catch "method";
+                const new_args = self.checkCallArgs(program, callee_disp, rm.method.params, mc.args, line, col) orelse return null;
+                mc.args = new_args;
                 mc.is_static = true;
                 mc.class_name = rm.owner;
                 return rm.method.checked_return_type orelse return null;
@@ -1306,17 +1300,11 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return null;
             };
             if (!self.visibilityOk(rm.method.visibility, rm.owner, line, col)) return null;
-            if (mc.args.len != rm.method.params.len) {
-                const callee_disp = std.fmt.allocPrint(self.arena, "'{s}.{s}'", .{ cls, mc.name }) catch "method";
-                const msg = std.fmt.allocPrint(self.arena, "{s} expects {d} argument{s}, got {d}", .{ callee_disp, rm.method.params.len, if (rm.method.params.len == 1) "" else "s", mc.args.len }) catch "E_ARG_COUNT";
-                _ = self.fail(line, col, msg) catch {};
-                return null;
-            }
-            for (mc.args, rm.method.params) |arg, p| {
-                self.ensureAssignable(program, p.checked_type orelse return null, arg, line, col) catch {
-                    return null;
-                };
-            }
+            // Route through the shared arg checker so default/optional/rest
+            // parameters work on methods, and defaults are filled into the call.
+            const callee_disp = std.fmt.allocPrint(self.arena, "'{s}.{s}'", .{ cls, mc.name }) catch "method";
+            const new_args = self.checkCallArgs(program, callee_disp, rm.method.params, mc.args, line, col) orelse return null;
+            mc.args = new_args;
             // Methods are emitted on the most-derived struct (flattened), so
             // the call dispatches on the static receiver class.
             mc.class_name = cls;
