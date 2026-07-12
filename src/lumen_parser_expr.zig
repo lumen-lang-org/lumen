@@ -453,6 +453,12 @@ pub fn parseUnary(self: *Parser) CompileError!*Expr {
         try self.advance();
         return self.node(.{ .neg = try self.parseUnary() });
     }
+    // Unary plus `+x` — a no-op on a numeric operand (JS identity for numbers);
+    // parse and return the operand directly (spec 305).
+    if (self.isOp('+')) {
+        try self.advance();
+        return self.parseUnary();
+    }
     if (self.isOp('!')) {
         try self.advance();
         return self.node(.{ .not = try self.parseUnary() });
