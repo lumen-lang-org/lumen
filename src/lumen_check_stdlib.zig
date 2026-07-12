@@ -175,7 +175,12 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             }
             break :blk_acc (self.exprType(program, mc.args[1], line, col) orelse return null);
         };
-        const cb_type = self.checkCbArg(program, mc.args[0], &.{ acc, elem, .i32 }, line, col) orelse return null;
+        // The callback returns the accumulator type; hint it so an object/array
+        // literal body (`(a, x) => ({ ...a })`) types against it.
+        self.arrow_return_hint = acc;
+        const cb_type_opt = self.checkCbArg(program, mc.args[0], &.{ acc, elem, .i32 }, line, col);
+        self.arrow_return_hint = null;
+        const cb_type = cb_type_opt orelse return null;
         const p = if (cb_type == .func_type) cb_type.func_type.params else &[_]types.Type{};
         const shape_ok = (p.len == 2 or p.len == 3) and
             types.same(p[0], acc) and types.same(p[1], elem) and

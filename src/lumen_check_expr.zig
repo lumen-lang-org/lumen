@@ -483,6 +483,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // clear them so a nested arrow in the body doesn't reuse them.
             const hint = self.arrow_param_hint;
             self.arrow_param_hint = null;
+            const ret_hint = self.arrow_return_hint;
+            self.arrow_return_hint = null;
             for (arrow.params, 0..) |*p, i| {
                 if (p.annotation.len == 0) {
                     if (hint != null and i < hint.?.len) {
@@ -585,6 +587,16 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
             } else {
                 body_type = self.exprType(program, arrow.body_expr.?, line, col);
+                // An object/array-literal body can't self-type; if the caller
+                // supplied an expected return type (e.g. a `reduce` accumulator),
+                // check the body against it.
+                if (body_type == null) {
+                    if (ret_hint) |rh| {
+                        if (self.ensureAssignable(program, rh, arrow.body_expr.?, line, col)) |_| {
+                            body_type = rh;
+                        } else |_| {}
+                    }
+                }
             }
             self.in_async = saved_in_async;
             self.in_function = saved_in_function;

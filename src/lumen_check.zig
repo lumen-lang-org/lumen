@@ -233,6 +233,11 @@ pub const Checker = struct {
     // it sets these hints before checking the callback so a bare untyped param
     // (`v => ...`) can infer its type positionally. Consumed once by the arrow.
     arrow_param_hint: ?[]const types.Type = null,
+    // The expected return type of the next arrow to be checked (a callback whose
+    // caller knows the result type, e.g. `reduce`'s accumulator). Lets an
+    // expression-body arrow whose body is an object/array literal type against
+    // it. Consumed (cleared) on arrow entry so nested arrows don't inherit it.
+    arrow_return_hint: ?types.Type = null,
     current_captures: ?*std.ArrayListUnmanaged(ast.Capture) = null,
     last_line: u32 = 1,
     last_col: u32 = 1,
