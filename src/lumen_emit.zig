@@ -2276,8 +2276,54 @@ pub fn findClass(name: []const u8) ?*const ast.ClassDecl {
     return null;
 }
 
+/// A scalar type whose top-level binding can be safely promoted to a module
+/// global (initialized in `main`) so functions can reference it.
+fn promotableType(t: types.Type) bool {
+    return switch (t) {
+        .i32, .i64, .f64, .bool, .string, .enum_type => true,
+        else => false,
+    };
+}
+
+/// Whether any function/method/constructor body references `name` (so a
+/// top-level binding of that name must live at module scope, not in `main`).
+fn referencedByFunction(program: *const Program, name: []const u8) bool {
+    for (program.stmts) |*stmt| {
+        switch (stmt.*) {
+            .function_decl => |*f| if (bodyUsesName(f.body, name)) return true,
+            .class_decl => |*c| {
+                for (c.methods) |m| if (bodyUsesName(m.body, name)) return true;
+                if (bodyUsesName(c.ctor_body, name)) return true;
+            },
+            else => {},
+        }
+    }
+    return false;
+}
+
 pub fn emitProgram(program: *const Program, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions) CompileError!void {
     g_program = program;
     g_options = options;
-    for (program.stmts) |*stmt| try emitStmt(stmt, decls, body, arena, options);
+    for (program.stmts) |*stmt| {
+        // A top-level scalar binding referenced from within a function can't be
+        // a `main` local (Zig functions don't see them); emit it as a module
+        // global declared `undefined` and assigned at its top-level position in
+        // `main`, preserving evaluation order and side effects.
+        if (stmt.* == .var_decl) {
+            const d = &stmt.var_decl;
+            if (d.checked_type) |t| {
+                if (promotableType(t) and !d.is_accumulator and referencedByFunction(program, d.name)) {
+                    const nm = d.emit_name orelse d.name;
+                    try decls.print(arena, "var {s}: {s} = undefined;\n", .{ nm, try types.zigName(arena, t) });
+                    if (!d.no_init) {
+                        try body.print(arena, "    {s} = ", .{nm});
+                        try emitExpr(d.init, body, arena);
+                        try body.appendSlice(arena, ";\n");
+                    }
+                    continue;
+                }
+            }
+        }
+        try emitStmt(stmt, decls, body, arena, options);
+    }
 }
