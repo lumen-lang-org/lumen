@@ -334,6 +334,15 @@ pub fn parseCmp(self: *Parser) CompileError!*Expr {
 }
 pub fn parseRelational(self: *Parser) CompileError!*Expr {
     var left = try self.parseShift();
+    // `x instanceof ClassName` -> bool (spec 292). The right side is a class
+    // name, not an expression.
+    if (self.isKw("instanceof")) {
+        try self.advance();
+        if (self.cur != .ident) return error.ParseError;
+        const cname = self.cur.ident;
+        try self.advance();
+        return self.node(.{ .instanceof_expr = .{ .value = left, .class_name = cname } });
+    }
     if (self.cur == .cmp and (std.mem.eql(u8, self.cur.cmp, "<") or std.mem.eql(u8, self.cur.cmp, ">") or
         std.mem.eql(u8, self.cur.cmp, "<=") or std.mem.eql(u8, self.cur.cmp, ">=")))
     {

@@ -203,6 +203,7 @@ pub fn inferExprType(e: *const ast.Expr) ?Type {
         .neg => |inner| inferExprType(inner),
         .inc_dec => |id| id.checked_type orelse .i32,
         .typeof_expr => .string,
+        .instanceof_expr => .bool,
         .not => .bool,
         .bnot => |inner| inferExprType(inner),
         .bin => .i32,

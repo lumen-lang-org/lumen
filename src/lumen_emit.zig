@@ -1458,6 +1458,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try emitStrLit(w, arena, to.result orelse "object");
             try w.appendSlice(arena, "); })");
         },
+        .instanceof_expr => |io| {
+            // Compile-time verdict; evaluate (discard) the operand.
+            g_global_pred_seq += 1;
+            const s = g_global_pred_seq;
+            try w.print(arena, "(__iof{d}: {{ _ = &(", .{s});
+            try emitExpr(io.value, w, arena);
+            try w.print(arena, "); break :__iof{d} {s}; }})", .{ s, if (io.result orelse false) "true" else "false" });
+        },
         .not => |inner| {
             try w.appendSlice(arena, "!(");
             try emitExpr(inner, w, arena);

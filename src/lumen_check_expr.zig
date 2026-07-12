@@ -138,6 +138,19 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             };
             return .string;
         },
+        .instanceof_expr => |*io| {
+            // Classes are non-polymorphic (spec 270): a value's class is known
+            // statically, so `x instanceof C` is a compile-time bool.
+            const t = self.exprType(program, io.value, line, col) orelse return null;
+            if (self.classes.get(io.class_name) == null) {
+                const msg = std.fmt.allocPrint(self.arena, "`instanceof` needs a class name, `{s}` is not a class", .{io.class_name}) catch "E_TYPE_MISMATCH";
+                _ = self.fail(line, col, msg) catch {};
+                return null;
+            }
+            io.result = t == .class_type and
+                (std.mem.eql(u8, t.class_type, io.class_name) or self.isSubclassOf(t.class_type, io.class_name));
+            return .bool;
+        },
         .not => |inner| {
             const inner_type = self.exprType(program, inner, line, col) orelse return null;
             if (!types.same(.bool, inner_type)) {
