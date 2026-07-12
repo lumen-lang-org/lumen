@@ -635,8 +635,20 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     // Prepend field initializers to the constructor body (synthesizing an empty
     // constructor when the class declares none), so every instance gets them.
     if (field_inits.items.len > 0) {
-        try field_inits.appendSlice(self.arena, ctor_body);
-        ctor_body = try field_inits.toOwnedSlice(self.arena);
+        // In a derived class the body opens with `super(...)`; the field inits
+        // (including property-parameter assignments) must run *after* it, since
+        // `this` is only valid once the base is initialized. Splice them in after
+        // a leading `super(...)` rather than ahead of it.
+        if (ctor_body.len > 0 and ctor_body[0] == .super_ctor) {
+            var merged: std.ArrayListUnmanaged(Stmt) = .empty;
+            try merged.append(self.arena, ctor_body[0]);
+            try merged.appendSlice(self.arena, field_inits.items);
+            try merged.appendSlice(self.arena, ctor_body[1..]);
+            ctor_body = try merged.toOwnedSlice(self.arena);
+        } else {
+            try field_inits.appendSlice(self.arena, ctor_body);
+            ctor_body = try field_inits.toOwnedSlice(self.arena);
+        }
         has_ctor = true;
     }
     return .{ .class_decl = .{

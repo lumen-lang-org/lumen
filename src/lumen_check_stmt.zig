@@ -468,6 +468,9 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 }
                 cur = pinfo.parent;
             }
+            // No ancestor declares a constructor: `super()` is a no-op. Null the
+            // parent so the emitter skips the (nonexistent) `__superctor_` call.
+            if (!has_ctor) sc.parent = null;
             const want: usize = if (has_ctor) ctor_params.len else 0;
             if (sc.args.len != want) return self.fail(sc.line, sc.col, "E_ARG_COUNT");
             for (sc.args, 0..) |arg, i| {
