@@ -1284,6 +1284,10 @@ pub const Checker = struct {
         for (self.pending_specializations.items) |spec| {
             program.stmts = self.appendStmt(program.stmts, spec.*) catch return error.OutOfMemory;
         }
+        // Escape analysis (spec 344): mark non-escaping `new C(...)` locals for
+        // stack allocation. Runs last, after all method return types (including
+        // specializations) are resolved.
+        @import("lumen_escape.zig").analyze(self, program);
     }
 
     /// True for a generic template declaration (skipped by the main check loop

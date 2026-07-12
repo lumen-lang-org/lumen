@@ -16,10 +16,28 @@ stays in range, making the output **bit-identical** on both runtimes.
 |---|---|---|---|
 | **Startup** — trivial `console.log` | ~3 ms | ~53 ms | **Lumen ~17× faster** |
 | **Allocation-free compute** — `bench2`, 100M iters (arithmetic + method dispatch, one reused instance) | ~929 ms | ~1124 ms | **Lumen ~1.2× faster** |
-| **Allocation-heavy** — `bench`, 20M iters (2 short-lived `new Vec` per iter) | ~1.3–3.5 s | ~0.38 s | **Node ~3–9× faster** |
+| **Object churn, escape-analyzable** — `bench3`, 20M iters (one `new P` per iter, used only as a method receiver) | **~280 ms** | ~360 ms | **Lumen ~1.3× faster** |
+| **Object churn, partial escape** — `bench`, 20M iters (two `new Vec` per iter; one is passed as an argument, so it stays on the heap) | ~0.65 s | ~0.39 s | Node ~1.7× faster |
 
-All three produce identical output on both runtimes
-(`bench` → 516810114, `bench2` → 18723).
+Outputs are identical on both runtimes (`bench` → 516810114, `bench2` → 18723,
+`bench3` → 144999087).
+
+## Escape analysis (spec 344)
+
+`bench3` and `bench` both allocate short-lived objects — historically Lumen's
+weak spot (no GC; the arena grows and never frees within a run). **Escape
+analysis** now proves when a `new C(...)` never leaves its function and builds it
+on the stack instead:
+
+- `bench3`'s temp is used only as a method receiver → **fully stack-allocated,
+  zero heap in the hot loop**. It went from ~all-heap (~1.5 s, memory-growing) to
+  **~280 ms, beating Node** — and with no GC jitter (280/280/281 ms vs Node's
+  variance).
+- `bench`'s second temp is passed as an argument (`a.dot(b)`), which the
+  conservative analysis treats as escaping, so it stays on the heap. Still a
+  ~2–4× improvement over the pre-analysis heap-everything path. Interprocedural
+  analysis (does the callee actually store the argument?) would recover this
+  case.
 
 ## Reading the results
 

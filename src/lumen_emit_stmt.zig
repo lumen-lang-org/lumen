@@ -45,6 +45,22 @@ fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: s
         // `var`: an uninitialized binding is meant to be assigned before use).
         const final_zty = decl.checked_type orelse return error.ParseError;
         try body.print(arena, "    var {s}: {s} = undefined;\n", .{ decl.emit_name orelse decl.name, try types.zigName(arena, final_zty) });
+    } else if (decl.stack_alloc and decl.init.* == .new_expr and
+        !(analysis.g_method_arena != null and analysis.ctorThrows(analysis.g_method_arena.?, decl.init.new_expr.class_name)))
+    {
+        // Escape analysis proved this instance never leaves the frame: build it
+        // on the stack by value and bind the name to its address (no heap alloc,
+        // spec 344). A throwing ctor falls through to the heap `__init` path.
+        const ne = decl.init.new_expr;
+        const cname = ne.class_name;
+        const vname = decl.emit_name orelse decl.name;
+        const stk = try std.fmt.allocPrint(arena, "__stk_{s}_{d}_{d}", .{ vname, decl.line, decl.col });
+        try body.print(arena, "    var {s}: {s} = {s}.__initv(", .{ stk, cname, cname });
+        for (ne.args, 0..) |arg, i| {
+            if (i > 0) try body.appendSlice(arena, ", ");
+            try emitExpr(arg, body, arena);
+        }
+        try body.print(arena, ");\n    const {s} = &{s};\n", .{ vname, stk });
     } else {
         const final_zty = decl.checked_type orelse return error.ParseError;
         try body.print(arena, "    {s} {s}: {s} = ", .{ if (decl.mutable and decl.reassigned) "var" else "const", decl.emit_name orelse decl.name, try types.zigName(arena, final_zty) });

@@ -119,6 +119,28 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     }
     try decls.appendSlice(arena, "    return self;\n    }\n");
 
+    // Value-returning constructor for stack allocation (spec 344): builds the
+    // instance in place and returns it by value, so a non-escaping `new C(...)`
+    // can live on the caller's stack (`var s = C.__initv(...); &s`). Only for a
+    // non-throwing ctor chain (throwing ctors keep the heap `__init` path).
+    if (!ctor_throws) {
+        try decls.print(arena, "    fn __initv(", .{});
+        for (ctor_owner.ctor_params, 0..) |param, i| {
+            if (i > 0) try decls.appendSlice(arena, ", ");
+            try decls.print(arena, "{s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
+        }
+        try decls.print(arena, ") {s} {{\n", .{c.name});
+        try decls.print(arena, "    var self: {s} = undefined;\n", .{c.name});
+        {
+            const saved_can_error = emit_mod.g_fn_can_error;
+            emit_mod.g_fn_can_error = false;
+            defer emit_mod.g_fn_can_error = saved_can_error;
+            try emitUnusedParamDiscards(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
+            try emit_stmt.emitBody(ctor_owner.ctor_body, decls, decls, arena, throw_target, switch_break_target, options);
+        }
+        try decls.appendSlice(arena, "    return self;\n    }\n");
+    }
+
     // Instance methods, getters, setters: most-derived definition wins. Walk the
     // chain root-first; a later (more derived) definition overwrites an earlier
     // one by emitting under the same name, so emit only the resolved definition.

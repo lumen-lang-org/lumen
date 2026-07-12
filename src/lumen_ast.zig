@@ -179,6 +179,7 @@ pub const VarDecl = struct {
     line: u32,
     col: u32,
     is_accumulator: bool = false, // string-builder local: emitted as a growable ArrayList(u8)
+    stack_alloc: bool = false, // `const v = new C(...)` whose instance never escapes: construct on the stack (no heap alloc) and bind `v` to its address (escape analysis, spec 344)
 };
 
 /// `using NAME = EXPR;` — a TypeScript 5.2 resource declaration. The bound value
