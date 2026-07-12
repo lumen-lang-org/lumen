@@ -293,7 +293,12 @@ pub fn specializeClass(self: *Checker, decl: *const ast.ClassDecl, type_args: []
             .name = m.name,
             .params = mparams,
             .return_annotation = try self.substCur(m.return_annotation),
+            .infer_return = m.infer_return,
             .body = try self.cloneBody(m.body),
+            .visibility = m.visibility,
+            .is_static = m.is_static,
+            .accessor = m.accessor,
+            .is_async = m.is_async,
             .line = m.line,
             .col = m.col,
         };

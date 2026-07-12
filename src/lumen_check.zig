@@ -1236,19 +1236,20 @@ pub const Checker = struct {
             // `return <expr>` (params in scope), the same as free functions
             // (spec 310). A `this`-based return is not inferable here (the class
             // fields aren't queryable yet) and falls to the annotate-guidance.
-            if (program) |prog| {
-                if (m.infer_return and !m.is_async and ret == .void) {
-                    if (check_stmt.firstReturnExpr(m.body)) |rexpr| {
+            if (m.infer_return and !m.is_async and ret == .void) {
+                if (check_stmt.firstReturnExpr(m.body)) |rexpr| {
+                    // A getter-style `return this.<field>` resolves against the
+                    // class's own fields directly (no expression typing needed),
+                    // so it also works for generic-class specializations where
+                    // `program` is not threaded through.
+                    if (thisFieldType(c, rexpr)) |ft| {
+                        ret = ft;
+                    } else if (program) |prog| {
                         try self.pushScope();
                         defer self.popScope();
                         for (m.params) |param| self.declareParam(param, m.line, m.col) catch {};
                         if (self.exprType(prog, rexpr, m.line, m.col)) |inferred| {
                             if (inferred != .void) ret = inferred;
-                        } else if (thisFieldType(c, rexpr)) |ft| {
-                            // A getter-style `return this.<field>` resolves against
-                            // the class's own fields even though `this` is not yet
-                            // in scope for the general inference path.
-                            ret = ft;
                         }
                     }
                 }
