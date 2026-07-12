@@ -296,6 +296,15 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     (right_type == .enum_type and right_type.enum_type.is_string)) .string else .i32;
                 return .bool;
             }
+            // Two values of the same numeric enum compare (relational and
+            // equality) as their i32 backing, so `Level.High >= Level.Low` works.
+            if (left_type == .enum_type and right_type == .enum_type and
+                std.mem.eql(u8, left_type.enum_type.name, right_type.enum_type.name) and
+                !left_type.enum_type.is_string)
+            {
+                cmp.checked_operand_type = .i32;
+                return .bool;
+            }
             if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and types.isStringLike(left_type) and types.isStringLike(right_type)) {
                 cmp.checked_operand_type = .string;
                 return .bool;
