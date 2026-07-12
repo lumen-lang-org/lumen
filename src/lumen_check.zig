@@ -733,6 +733,23 @@ pub const Checker = struct {
         if (annotation.len >= 2 and annotation[0] == '"' and annotation[annotation.len - 1] == '"') {
             return .string;
         }
+        // Redundant grouping parens `(X)` -> X (spec 297): only when the leading
+        // `(` matches the final `)`, so `(i32)=>i32` (a function type, whose `(`
+        // closes mid-string) is left for the function-type handler below.
+        if (annotation.len >= 2 and annotation[0] == '(' and annotation[annotation.len - 1] == ')') {
+            var depth: u32 = 0;
+            var matches_last = true;
+            for (annotation, 0..) |ch, i| {
+                if (ch == '(') depth += 1 else if (ch == ')') {
+                    depth -= 1;
+                    if (depth == 0 and i != annotation.len - 1) {
+                        matches_last = false;
+                        break;
+                    }
+                }
+            }
+            if (matches_last) return self.typeFromAnnotation(annotation[1 .. annotation.len - 1], line, col);
+        }
         // Resolve `type X = <annotation>;` aliases transitively (bounded depth).
         if (self.aliases.get(annotation)) |target| {
             return self.resolveAlias(target, line, col);

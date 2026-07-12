@@ -185,10 +185,16 @@ pub fn parseTypeAnnotation(self: *Parser) CompileError![]const u8 {
             try self.advance(); // '('
             var inner = try self.parseTypeAnnotation();
             try self.expectOp(')');
-            while (self.isOp('[')) {
-                try self.advance();
-                try self.expectOp(']');
-                inner = std.fmt.allocPrint(self.arena, "{s}[]", .{inner}) catch return error.OutOfMemory;
+            if (self.isOp('[')) {
+                // Preserve the grouping parens so `((i32)=>i32)[]` (array of
+                // functions) stays distinct from `(i32)=>i32[]` (function
+                // returning an array) in the annotation string (spec 297).
+                inner = std.fmt.allocPrint(self.arena, "({s})", .{inner}) catch return error.OutOfMemory;
+                while (self.isOp('[')) {
+                    try self.advance();
+                    try self.expectOp(']');
+                    inner = std.fmt.allocPrint(self.arena, "{s}[]", .{inner}) catch return error.OutOfMemory;
+                }
             }
             return inner;
         }
