@@ -145,10 +145,19 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const acc = if (mc.args.len == 2)
-            (self.exprType(program, mc.args[1], line, col) orelse return null)
-        else
-            elem;
+        // The accumulator type: from the seed (arg 1) normally, but a seed that
+        // is a bare object literal can't self-infer — take the accumulator type
+        // from the annotated callback's first parameter and check the seed
+        // against it (spec 299).
+        const acc = blk_acc: {
+            if (mc.args.len != 2) break :blk_acc elem;
+            if (mc.args[1].* == .obj and mc.args[0].* == .arrow and mc.args[0].arrow.params.len >= 1 and mc.args[0].arrow.params[0].annotation.len > 0) {
+                const at = self.typeFromAnnotation(mc.args[0].arrow.params[0].annotation, line, col) catch break :blk_acc (self.exprType(program, mc.args[1], line, col) orelse return null);
+                self.ensureAssignable(program, at, mc.args[1], line, col) catch return null;
+                break :blk_acc at;
+            }
+            break :blk_acc (self.exprType(program, mc.args[1], line, col) orelse return null);
+        };
         const cb_type = self.checkCbArg(program, mc.args[0], &.{ acc, elem, .i32 }, line, col) orelse return null;
         const p = if (cb_type == .func_type) cb_type.func_type.params else &[_]types.Type{};
         const shape_ok = (p.len == 2 or p.len == 3) and
