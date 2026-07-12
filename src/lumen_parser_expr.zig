@@ -229,7 +229,11 @@ pub fn parseTypeAnnotation(self: *Parser) CompileError![]const u8 {
             base = member;
             optional = true;
         } else {
-            return error.ParseError; // general unions: feature 005
+            // General unions (`i32 | string`) aren't supported inline; only
+            // `T | null` and named discriminated unions (`type U = A | B` over
+            // record types with a shared literal tag).
+            self.last_err = "only `T | null` and discriminated record unions are supported — for a mix of shapes, declare `type U = A | B` over named record types with a shared literal tag";
+            return error.ParseError;
         }
     }
     if (optional) return std.fmt.allocPrint(self.arena, "{s}?", .{base}) catch error.OutOfMemory;

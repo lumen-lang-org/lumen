@@ -314,18 +314,20 @@ pub const Lexer = struct {
         if (c == '`') {
             self.i += 1;
             const start = self.i;
-            while (self.i < self.src.len and self.src[self.i] != '`') {
-                if (self.src[self.i] == '\\' and self.i + 1 < self.src.len) {
-                    self.i += 2;
-                    continue;
-                }
-                if (self.src[self.i] == '\n') {
+            // Scan to the matching closing backtick, treating `${...}` as an
+            // interpolation whose contents (nested braces, strings, and nested
+            // template literals) do not close the outer template (spec 300).
+            const end = templateBodyEnd(self.src, self.i);
+            const s = self.src[start..end];
+            // Advance line tracking across the whole body.
+            var k = self.i;
+            while (k < end) : (k += 1) {
+                if (self.src[k] == '\n') {
                     self.line += 1;
-                    self.line_start = self.i + 1;
+                    self.line_start = k + 1;
                 }
-                self.i += 1;
             }
-            const s = self.src[start..self.i];
+            self.i = end;
             if (self.i < self.src.len) self.i += 1; // closing backtick
             return .{ .template = s };
         }
@@ -412,6 +414,62 @@ pub const Lexer = struct {
         return error.ParseError;
     }
 };
+
+/// Returns the index of the closing backtick of a template whose body starts at
+/// `start` (just after the opening backtick), treating `${...}` interpolations
+/// as opaque — nested braces, string literals, and nested template literals
+/// inside them do not close the outer template (spec 300).
+fn templateBodyEnd(src: []const u8, start: usize) usize {
+    var i = start;
+    while (i < src.len) {
+        const c = src[i];
+        if (c == '\\' and i + 1 < src.len) {
+            i += 2;
+            continue;
+        }
+        if (c == '`') return i;
+        if (c == '$' and i + 1 < src.len and src[i + 1] == '{') {
+            i = skipInterp(src, i + 2);
+            continue;
+        }
+        i += 1;
+    }
+    return i;
+}
+
+/// Given `i` positioned just after a `${`, returns the index just after the
+/// matching `}`, skipping nested braces, quoted strings, and nested templates.
+fn skipInterp(src: []const u8, i_in: usize) usize {
+    var i = i_in;
+    var depth: usize = 1;
+    while (i < src.len) {
+        const c = src[i];
+        if (c == '\\' and i + 1 < src.len) {
+            i += 2;
+            continue;
+        }
+        if (c == '{') {
+            depth += 1;
+        } else if (c == '}') {
+            depth -= 1;
+            if (depth == 0) return i + 1;
+        } else if (c == '`') {
+            // A nested template inside the interpolation: skip its whole body.
+            const nend = templateBodyEnd(src, i + 1);
+            i = if (nend < src.len) nend + 1 else nend;
+            continue;
+        } else if (c == '"' or c == '\'') {
+            i += 1;
+            while (i < src.len and src[i] != c) : (i += 1) {
+                if (src[i] == '\\' and i + 1 < src.len) i += 1;
+            }
+            if (i < src.len) i += 1; // closing quote
+            continue;
+        }
+        i += 1;
+    }
+    return i;
+}
 
 test "regex literal lexing and `/` disambiguation" {
     const t = std.testing;
