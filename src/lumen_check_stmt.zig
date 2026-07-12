@@ -525,6 +525,8 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     // takes the remaining elements as an array of the same type.
                     if (b.is_rest and i != d.bindings.len - 1) return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
                     const bt: types.Type = if (b.is_rest) src_type else elem;
+                    // A default (`[a = 1]`) must be assignable to the element type.
+                    if (b.default) |dv| try self.ensureAssignable(program, elem, dv, d.line, d.col);
                     b.checked_type = bt;
                     const scope = self.currentScope();
                     if (scope.get(b.name) != null) return self.fail(d.line, d.col, "E_DUPLICATE_BINDING");

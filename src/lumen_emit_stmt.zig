@@ -535,6 +535,11 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 } else if (b.is_rest) {
                     // The remaining elements as a slice.
                     try body.print(arena, "{s}[{d}..];\n", .{ src, i });
+                } else if (b.default) |dv| {
+                    // `[a = default]` — use the element when present, else the default.
+                    try body.print(arena, "if ({d} < {s}.len) {s}[{d}] else ", .{ i, src, src, i });
+                    try emitExpr(dv, body, arena);
+                    try body.appendSlice(arena, ";\n");
                 } else {
                     try body.print(arena, "{s}[{d}];\n", .{ src, i });
                 }

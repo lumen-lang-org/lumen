@@ -203,6 +203,7 @@ pub const DestructBinding = struct {
     checked_type: ?types.Type = null,
     is_rest: bool = false, // `[a, ...rest]` — binds the remaining elements as an array
     field_name: ?[]const u8 = null, // `{ field: name }` object rename — the source field to read; `name` is the local binding
+    default: ?*Expr = null, // `[a = 1]` — value used when the array is shorter than the pattern
 };
 
 pub const DestructureDecl = struct {

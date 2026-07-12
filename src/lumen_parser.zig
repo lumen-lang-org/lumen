@@ -446,7 +446,14 @@ pub const Parser = struct {
                         try bindings.append(self.arena, .{ .name = self.cur.ident, .field_name = first_name });
                         try self.advance();
                     } else {
-                        try bindings.append(self.arena, .{ .name = first_name, .is_rest = is_rest });
+                        // Array element default `[a = 1, b = 2]` — the value used
+                        // when the source array is shorter than the pattern.
+                        var default_expr: ?*ast.Expr = null;
+                        if (!is_object and !is_rest and self.isOp('=')) {
+                            try self.advance();
+                            default_expr = try self.parseExpr();
+                        }
+                        try bindings.append(self.arena, .{ .name = first_name, .is_rest = is_rest, .default = default_expr });
                     }
                     if (self.isOp(',')) try self.advance() else break;
                 }
