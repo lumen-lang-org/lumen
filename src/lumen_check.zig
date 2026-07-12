@@ -707,6 +707,14 @@ pub const Checker = struct {
         return null;
     }
 
+    /// Whether a record type's field was declared `readonly`.
+    pub fn recordFieldReadonly(self: *Checker, type_name: []const u8, field: []const u8) bool {
+        for (self.declFields(type_name)) |f| {
+            if (std.mem.eql(u8, f.name, field)) return f.is_readonly;
+        }
+        return false;
+    }
+
     /// Force the root variable of an lvalue path to emit as a mutable (`var`)
     /// binding so the backend can take its address for a by-reference argument.
     pub fn markReassignedRoot(self: *Checker, e: *const ast.Expr) void {

@@ -62,8 +62,16 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
         var fields: std.ArrayListUnmanaged(ast.TypeField) = .empty;
         while (!self.isOp('}')) {
             if (self.cur != .ident) return error.ParseError;
-            const fname = self.cur.ident;
+            var fname = self.cur.ident;
             try self.advance();
+            // `readonly name: T` — a `readonly` followed by another identifier
+            // is the modifier; `readonly: T` is a field literally named that.
+            var is_readonly = false;
+            if (std.mem.eql(u8, fname, "readonly") and self.cur == .ident) {
+                is_readonly = true;
+                fname = self.cur.ident;
+                try self.advance();
+            }
             // Method signature shorthand `name(params): R` — recorded as a
             // function-typed member, same as in `interface` (spec 254/288).
             if (self.isOp('(')) {
@@ -73,7 +81,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 continue;
             }
             const annotation = try self.parseOptionalMember();
-            try fields.append(self.arena, .{ .name = fname, .annotation = annotation });
+            try fields.append(self.arena, .{ .name = fname, .annotation = annotation, .is_readonly = is_readonly });
             // Members separate with `,`, `;`, or a newline (no token) -- the same
             // as an `interface` body.
             if (self.isOp(',') or self.isOp(';')) try self.advance();
@@ -225,8 +233,16 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
     var fields: std.ArrayListUnmanaged(ast.TypeField) = .empty;
     while (!self.isOp('}')) {
         if (self.cur != .ident) return error.ParseError;
-        const fname = self.cur.ident;
+        var fname = self.cur.ident;
         try self.advance();
+        // `readonly name: T` — a `readonly` followed by another identifier is
+        // the modifier; `readonly: T` is a field literally named that.
+        var is_readonly = false;
+        if (std.mem.eql(u8, fname, "readonly") and self.cur == .ident) {
+            is_readonly = true;
+            fname = self.cur.ident;
+            try self.advance();
+        }
         // Method signature shorthand `name(params): R` — recorded as a
         // function-typed member `(T,...)=>R` (spec 254).
         if (self.isOp('(')) {
@@ -236,7 +252,7 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
             continue;
         }
         const annotation = try self.parseOptionalMember();
-        try fields.append(self.arena, .{ .name = fname, .annotation = annotation });
+        try fields.append(self.arena, .{ .name = fname, .annotation = annotation, .is_readonly = is_readonly });
         if (self.isOp(',') or self.isOp(';')) try self.advance();
     }
     try self.expectOp('}');

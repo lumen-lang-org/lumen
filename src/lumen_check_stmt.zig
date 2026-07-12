@@ -270,6 +270,7 @@ pub fn checkMemberAssign(self: *Checker, program: *ast.Program, ma: *ast.MemberA
         if (obj_type == .named and self.refRooted(obj)) {
             const ft = self.recordFieldType(obj_type.named, ma.field) orelse
                 return self.fail(ma.line, ma.col, "E_TYPE_MISMATCH");
+            if (self.recordFieldReadonly(obj_type.named, ma.field)) return self.fail(ma.line, ma.col, "E_READONLY_ASSIGNMENT");
             try self.assignField(program, ft, ma);
             return;
         }
