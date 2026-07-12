@@ -72,7 +72,9 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             }
             const annotation = try self.parseOptionalMember();
             try fields.append(self.arena, .{ .name = fname, .annotation = annotation });
-            if (self.isOp(',')) try self.advance() else break;
+            // Members separate with `,`, `;`, or a newline (no token) -- the same
+            // as an `interface` body.
+            if (self.isOp(',') or self.isOp(';')) try self.advance();
         }
         try self.expectOp('}');
         if (self.cur == .cmp and std.mem.eql(u8, self.cur.cmp, "|")) {
