@@ -182,6 +182,10 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
             if (std.mem.eql(u8, pname, "Error")) {
                 return self.fail(c.line, c.col, "custom error subclasses (`class ... extends Error`) are not supported yet — throw `new Error(\"message\")` with a distinguishing message, or return a discriminated result type (`type Result = Ok | Err`)");
             }
+            if (self.generic_classes.get(pname) != null) {
+                const msg = std.fmt.allocPrint(self.arena, "extending a generic class (`{s}<...>`) is not supported yet — extend a concrete (non-generic) base class, or compose it as a field instead of subclassing", .{pname}) catch "E_TYPE_MISMATCH";
+                return self.fail(c.line, c.col, msg);
+            }
             const msg = std.fmt.allocPrint(self.arena, "class `{s}` extends `{s}`, but `{s}` is not a known class", .{ c.name, pname, pname }) catch "E_TYPE_MISMATCH";
             return self.fail(c.line, c.col, msg);
         }
