@@ -23,6 +23,43 @@ const check_mod = @import("lumen_check.zig");
 
 const Checker = check_mod.Checker;
 
+// Interprocedural param-capture info, computed once before the binding pass.
+// `g_captures[key][i]` is true when parameter `i` of that function/method
+// escapes its body (so passing an instance there would leak it). When
+// `g_interproc` is off (during the capture computation itself) or the callee is
+// unknown, a passed argument is conservatively treated as escaping.
+var g_self: ?*Checker = null;
+var g_captures: std.StringHashMapUnmanaged([]const bool) = .empty;
+var g_interproc: bool = false;
+
+fn keyFn(arena: std.mem.Allocator, name: []const u8) []const u8 {
+    return std.fmt.allocPrint(arena, "fn\x00{s}", .{name}) catch "";
+}
+fn keyMethod(arena: std.mem.Allocator, class: []const u8, method: []const u8) []const u8 {
+    return std.fmt.allocPrint(arena, "m\x00{s}\x00{s}", .{ class, method }) catch "";
+}
+
+/// The capture array for a method call on `class`.`method`, resolving up the
+/// inheritance chain; null when unknown.
+fn methodCaptures(class: []const u8, method: []const u8) ?[]const bool {
+    const self = g_self orelse return null;
+    var cur: ?[]const u8 = class;
+    while (cur) |cn| {
+        if (g_captures.get(keyMethod(self.arena, cn, method))) |caps| return caps;
+        const ci = self.classes.get(cn) orelse break;
+        cur = ci.parent;
+    }
+    return null;
+}
+
+/// Whether a bare instance passed as argument `i` to `caps` stays put (the
+/// callee does not capture that parameter). Unknown callee or a rest/extra
+/// position (out of range) is conservatively an escape.
+fn argSafe(caps: ?[]const bool, i: usize) bool {
+    const c = caps orelse return false;
+    return i < c.len and !c[i];
+}
+
 fn isRef(e: *const ast.Expr, name: []const u8) bool {
     return e.* == .var_ref and std.mem.eql(u8, e.var_ref.name, name);
 }
@@ -38,7 +75,16 @@ fn exprEscapes(e: *const ast.Expr, name: []const u8) bool {
         .field => |f| if (isRef(f.obj, name)) false else exprEscapes(f.obj, name),
         .method_call => |mc| blk: {
             var esc = if (isRef(mc.obj, name)) false else exprEscapes(mc.obj, name);
-            for (mc.args) |a| esc = esc or exprEscapes(a, name);
+            const caps: ?[]const bool = if (g_interproc) methodCaptures(mc.class_name orelse "", mc.name) else null;
+            for (mc.args, 0..) |a, i| {
+                if (isRef(a, name)) {
+                    // Bare instance passed as an argument: escapes unless the
+                    // callee's parameter at this position is non-capturing.
+                    if (!argSafe(caps, i)) break :blk true;
+                } else {
+                    esc = esc or exprEscapes(a, name);
+                }
+            }
             break :blk esc;
         },
         .array => |a| anyEscapes(a.items, name),
@@ -71,7 +117,18 @@ fn exprEscapes(e: *const ast.Expr, name: []const u8) bool {
             break :blk false;
         },
         .index => |idx| exprEscapes(idx.obj, name) or exprEscapes(idx.value, name),
-        .call => |cl| anyEscapes(cl.args, name),
+        .call => |cl| blk: {
+            const caps: ?[]const bool = if (g_interproc and g_self != null) g_captures.get(keyFn(g_self.?.arena, cl.name)) else null;
+            var esc = false;
+            for (cl.args, 0..) |a, i| {
+                if (isRef(a, name)) {
+                    if (!argSafe(caps, i)) break :blk true;
+                } else {
+                    esc = esc or exprEscapes(a, name);
+                }
+            }
+            break :blk esc;
+        },
         .static_call => |sc| anyEscapes(sc.args, name),
         .optional_call => |oc| exprEscapes(oc.callee, name) or anyEscapes(oc.args, name),
         .cast => |c| exprEscapes(c.inner, name),
@@ -327,8 +384,47 @@ fn maybeMark(self: *Checker, d: *ast.VarDecl, enclosing: []const ast.Stmt) void 
     d.stack_alloc = true;
 }
 
+/// The per-parameter capture array for a function/method body: entry `i` is
+/// true when parameter `i` escapes the body. Computed with interprocedural
+/// resolution off (a parameter passed to any call is conservatively captured),
+/// which needs no fixpoint.
+fn computeParamCaptures(self: *Checker, params: []const ast.FunctionParam, body: []const ast.Stmt) []const bool {
+    const caps = self.arena.alloc(bool, params.len) catch return &.{};
+    for (params, 0..) |p, i| {
+        caps[i] = bodyRefEscapes(body, p.name);
+    }
+    return caps;
+}
+
+/// Precompute param-capture info for every function and method, so the binding
+/// pass can tell whether passing an instance as an argument leaks it.
+fn computeCaptures(self: *Checker, program: *ast.Program) void {
+    g_interproc = false;
+    for (program.stmts) |*stmt| {
+        switch (stmt.*) {
+            .function_decl => |*f| {
+                if (f.type_params.len != 0) continue;
+                const caps = computeParamCaptures(self, f.params, f.body);
+                g_captures.put(self.arena, keyFn(self.arena, f.name), caps) catch {};
+            },
+            .class_decl => |*c| {
+                for (c.methods) |*m| {
+                    const caps = computeParamCaptures(self, m.params, m.body);
+                    g_captures.put(self.arena, keyMethod(self.arena, c.name, m.name), caps) catch {};
+                }
+            },
+            else => {},
+        }
+    }
+}
+
 /// Entry point: run over every top-level function and every class method.
 pub fn analyze(self: *Checker, program: *ast.Program) void {
+    g_self = self;
+    g_captures = .empty;
+    computeCaptures(self, program);
+    // Binding pass with interprocedural argument resolution enabled.
+    g_interproc = true;
     for (program.stmts) |*stmt| {
         switch (stmt.*) {
             .function_decl => |*f| {
@@ -341,4 +437,6 @@ pub fn analyze(self: *Checker, program: *ast.Program) void {
             else => {},
         }
     }
+    g_interproc = false;
+    g_self = null;
 }

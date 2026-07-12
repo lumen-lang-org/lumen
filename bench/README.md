@@ -17,7 +17,7 @@ stays in range, making the output **bit-identical** on both runtimes.
 | **Startup** — trivial `console.log` | ~3 ms | ~53 ms | **Lumen ~17× faster** |
 | **Allocation-free compute** — `bench2`, 100M iters (arithmetic + method dispatch, one reused instance) | ~929 ms | ~1124 ms | **Lumen ~1.2× faster** |
 | **Object churn, escape-analyzable** — `bench3`, 20M iters (one `new P` per iter, used only as a method receiver) | **~280 ms** | ~360 ms | **Lumen ~1.3× faster** |
-| **Object churn, partial escape** — `bench`, 20M iters (two `new Vec` per iter; one is passed as an argument, so it stays on the heap) | ~0.65 s | ~0.39 s | Node ~1.7× faster |
+| **Object churn, both temps escape-analyzed** — `bench`, 20M iters (two `new Vec` per iter; one is passed as an argument to a non-capturing method) | **~290 ms** | ~385 ms | **Lumen ~1.3× faster** |
 
 Outputs are identical on both runtimes (`bench` → 516810114, `bench2` → 18723,
 `bench3` → 144999087).
@@ -33,11 +33,12 @@ on the stack instead:
   zero heap in the hot loop**. It went from ~all-heap (~1.5 s, memory-growing) to
   **~280 ms, beating Node** — and with no GC jitter (280/280/281 ms vs Node's
   variance).
-- `bench`'s second temp is passed as an argument (`a.dot(b)`), which the
-  conservative analysis treats as escaping, so it stays on the heap. Still a
-  ~2–4× improvement over the pre-analysis heap-everything path. Interprocedural
-  analysis (does the callee actually store the argument?) would recover this
-  case.
+- `bench`'s second temp is passed as an argument (`a.dot(b)`). **Interprocedural
+  escape analysis** (spec 345) proves `dot` doesn't capture its parameter, so
+  that temp is stack-allocated too — the loop is now fully heap-free and drops
+  from ~1.3–3.5 s (all-heap) to **~290 ms, beating Node.** An argument passed to
+  a callee that *does* store it (or an unknown callee) stays conservatively on
+  the heap.
 
 ## Reading the results
 
