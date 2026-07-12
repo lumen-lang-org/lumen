@@ -183,7 +183,53 @@ pub fn inferTypeArgs(self: *Checker, program: *ast.Program, type_params: []const
             }
             break;
         }
-        const arg_type = self.exprType(program, args[idx], line, col) orelse return self.fail(line, col, "E_TYPE_INFER");
+        // A function-typed parameter whose argument is an untyped arrow: hint the
+        // arrow's parameters from the type parameters inferred so far (from
+        // earlier arguments), so `map([1,2,3], (x) => x*2)` types `x` as `i32`.
+        if (args[idx].* == .arrow) {
+            if (topLevelArrow(p.annotation)) |ai| {
+                const params_src = std.mem.trim(u8, p.annotation[0..ai], " ");
+                if (params_src.len >= 2 and params_src[0] == '(' and params_src[params_src.len - 1] == ')') {
+                    var hints: std.ArrayListUnmanaged(types.Type) = .empty;
+                    var it = std.mem.splitScalar(u8, params_src[1 .. params_src.len - 1], ',');
+                    var ok = true;
+                    while (it.next()) |part| {
+                        // A func-type param is stored as a bare type (`T`) or,
+                        // if named, `name: T`; take the text after any `:`.
+                        const ppat = if (std.mem.indexOfScalar(u8, part, ':')) |colon|
+                            std.mem.trim(u8, part[colon + 1 ..], " ")
+                        else
+                            std.mem.trim(u8, part, " ");
+                        // Resolve a type-parameter pattern via `found`, else treat
+                        // it as a concrete annotation.
+                        var ann = ppat;
+                        for (type_params, 0..) |tp, k| {
+                            if (std.mem.eql(u8, ppat, tp)) {
+                                ann = found[k] orelse {
+                                    ok = false;
+                                    break;
+                                };
+                            }
+                        }
+                        if (!ok) break;
+                        const ht = self.typeFromAnnotation(ann, line, col) catch {
+                            ok = false;
+                            break;
+                        };
+                        hints.append(self.arena, ht) catch {
+                            ok = false;
+                            break;
+                        };
+                    }
+                    if (ok and hints.items.len > 0) self.arrow_param_hint = hints.items;
+                }
+            }
+        }
+        const arg_type = self.exprType(program, args[idx], line, col) orelse {
+            self.arrow_param_hint = null;
+            return self.fail(line, col, "E_TYPE_INFER");
+        };
+        self.arrow_param_hint = null;
         try self.unifyAnnotation(type_params, found, p.annotation, arg_type, line, col);
     }
     const out = self.arena.alloc([]const u8, type_params.len) catch return error.OutOfMemory;
@@ -210,7 +256,46 @@ pub fn unifyAnnotation(self: *Checker, type_params: []const []const u8, found: [
         const elem = types.arrayElem(arg_type) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
         return self.unifyAnnotation(type_params, found, inner_pat, elem, line, col);
     }
+    // Function-type pattern `(P, ...) => R`: unify the return pattern against the
+    // callback's return type, and each parameter pattern against its parameter
+    // type. This lets a type parameter be inferred from a callback's return
+    // (`map<T, U>(a: T[], f: (x: T) => U)` infers `U` from `f`).
+    if (arg_type == .func_type) {
+        if (topLevelArrow(pattern)) |ai| {
+            const ret_pat = std.mem.trim(u8, pattern[ai + 2 ..], " ");
+            try self.unifyAnnotation(type_params, found, ret_pat, arg_type.func_type.ret.*, line, col);
+            // Parameter patterns: the type after each `:` in the `(...)` list.
+            const params_src = std.mem.trim(u8, pattern[0..ai], " ");
+            if (params_src.len >= 2 and params_src[0] == '(' and params_src[params_src.len - 1] == ')') {
+                var it = std.mem.splitScalar(u8, params_src[1 .. params_src.len - 1], ',');
+                var pi: usize = 0;
+                while (it.next()) |part| : (pi += 1) {
+                    if (pi >= arg_type.func_type.params.len) break;
+                    const colon = std.mem.indexOfScalar(u8, part, ':') orelse continue;
+                    const ppat = std.mem.trim(u8, part[colon + 1 ..], " ");
+                    try self.unifyAnnotation(type_params, found, ppat, arg_type.func_type.params[pi], line, col);
+                }
+            }
+            return;
+        }
+    }
     // Other patterns are concrete; nothing to infer here.
+}
+
+/// The index of a top-level `=>` in a function-type annotation (not nested
+/// inside parentheses or brackets), or null.
+fn topLevelArrow(pattern: []const u8) ?usize {
+    var depth: i32 = 0;
+    var i: usize = 0;
+    while (i + 1 < pattern.len) : (i += 1) {
+        switch (pattern[i]) {
+            '(', '[', '<' => depth += 1,
+            ')', ']', '>' => depth -= 1,
+            '=' => if (depth == 0 and pattern[i + 1] == '>') return i,
+            else => {},
+        }
+    }
+    return null;
 }
 
 /// Specialize a generic function for a concrete type-argument tuple, creating
