@@ -1027,6 +1027,23 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                         }
                     }
                     switch_stmt.exhaustive = all;
+                } else if (switch_type == .enum_type) {
+                    // Every enum member covered by a `case E.Member:` makes the
+                    // switch exhaustive, so a following `return` is not "missing".
+                    if (self.enums.get(switch_type.enum_type.name)) |einfo| {
+                        var all = true;
+                        for (einfo.members) |m| {
+                            var covered = false;
+                            for (switch_stmt.cases) |c| {
+                                if (c.value.* == .field and std.mem.eql(u8, c.value.field.name, m.name)) covered = true;
+                            }
+                            if (!covered) {
+                                all = false;
+                                break;
+                            }
+                        }
+                        switch_stmt.exhaustive = all;
+                    }
                 }
             }
         },
