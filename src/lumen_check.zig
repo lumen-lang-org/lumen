@@ -691,7 +691,7 @@ pub const Checker = struct {
     }
 
     /// The declared fields of a record type by name (empty if not a record).
-    fn declFields(self: *Checker, type_name: []const u8) []ast.TypeField {
+    pub fn declFields(self: *Checker, type_name: []const u8) []ast.TypeField {
         if (self.type_decls.get(type_name)) |info| return info.fields;
         return &.{};
     }

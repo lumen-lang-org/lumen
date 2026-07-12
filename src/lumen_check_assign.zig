@@ -143,7 +143,29 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 if (types.same(expected, actual_type)) return;
                 if (actual_type == .named) {
                     for (uinfo.variants) |v| {
-                        if (std.mem.eql(u8, v.name, actual_type.named)) return;
+                        if (std.mem.eql(u8, v.name, actual_type.named)) {
+                            // A variant record value used where the union is
+                            // expected: the union lowers to a flat struct (every
+                            // variant field, defaulted), so a variant-typed value
+                            // doesn't coerce as-is. Rewrite cheap re-emittable
+                            // sources into an object literal of field reads — the
+                            // emitted anonymous literal coerces to the flat
+                            // struct, defaults filling the other variants'
+                            // fields (same trick as structural width subtyping).
+                            if (value.* == .var_ref or value.* == .field) {
+                                const vfields = self.declFields(v.name);
+                                const inits = self.arena.alloc(ast.FieldInit, vfields.len) catch return error.OutOfMemory;
+                                const src = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                                src.* = value.*;
+                                for (vfields, 0..) |vf, i| {
+                                    const fread = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                                    fread.* = .{ .field = .{ .obj = src, .name = vf.name } };
+                                    inits[i] = .{ .name = vf.name, .value = fread };
+                                }
+                                value.* = .{ .obj = inits };
+                            }
+                            return;
+                        }
                     }
                 }
                 return self.fail(line, col, "E_TYPE_MISMATCH");
