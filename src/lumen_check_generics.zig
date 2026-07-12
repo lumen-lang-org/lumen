@@ -277,7 +277,14 @@ pub fn specializeClass(self: *Checker, decl: *const ast.ClassDecl, type_args: []
 
     const new_fields = self.arena.alloc(ast.TypeField, decl.fields.len) catch return error.OutOfMemory;
     for (decl.fields, 0..) |f, i| {
-        new_fields[i] = .{ .name = f.name, .annotation = try self.substCur(f.annotation) };
+        new_fields[i] = .{
+            .name = f.name,
+            .annotation = try self.substCur(f.annotation),
+            .visibility = f.visibility,
+            .is_static = f.is_static,
+            .is_readonly = f.is_readonly,
+            .init = if (f.init) |ie| try self.cloneExpr(ie) else null,
+        };
     }
     const new_ctor = self.arena.alloc(ast.FunctionParam, decl.ctor_params.len) catch return error.OutOfMemory;
     for (decl.ctor_params, 0..) |p, i| {

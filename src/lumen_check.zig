@@ -1233,6 +1233,21 @@ pub const Checker = struct {
     /// and the emitter; only its specializations are checked/emitted).
     pub fn fillClassTypes(self: *Checker, program: ?*ast.Program, c: *ast.ClassDecl) CompileError!void {
         for (c.fields) |*field| {
+            if (field.annotation.len == 0) {
+                // `count = 0` — infer the field type from its initializer. During
+                // a generic specialization (no `program`), fall back to the
+                // lightweight literal/structural inference.
+                if (field.init) |ie| {
+                    const inferred = if (program) |prog|
+                        self.exprType(prog, ie, c.line, c.col)
+                    else
+                        types.inferExprType(ie);
+                    field.checked_type = inferred orelse
+                        return self.fail(c.line, c.col, "cannot infer this field's type — add an annotation (`x: T`)");
+                    continue;
+                }
+                return self.fail(c.line, c.col, "cannot infer this field's type — add an annotation (`x: T`)");
+            }
             field.checked_type = try self.typeFromAnnotation(field.annotation, c.line, c.col);
         }
         for (c.ctor_params) |*param| {

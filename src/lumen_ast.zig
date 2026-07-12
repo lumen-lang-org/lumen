@@ -29,6 +29,9 @@ pub const TypeField = struct {
     visibility: Visibility = .public,
     is_static: bool = false,
     is_readonly: bool = false,
+    // A class field declared with an initializer but no annotation (`count = 0`):
+    // its type is inferred from this expression during the class-type pass.
+    init: ?*Expr = null,
 };
 
 pub const EnumValue = union(enum) { int: i64, str: []const u8 };

@@ -571,26 +571,36 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 .col = m_col,
             });
         } else {
-            // field: name: T [= expr] ;
-            const annotation = try self.parseOptionalMember();
+            // field: name [: T] [= expr] ;  — the annotation may be omitted when
+            // an initializer is present (the type is inferred from it).
+            var annotation: []const u8 = "";
+            if (self.isOp('?') or self.isOp(':')) {
+                annotation = try self.parseOptionalMember();
+            }
+            // A field initializer `= expr` runs at construction (instance fields
+            // only; a static field initializer is not supported here).
+            var init_expr: ?*Expr = null;
+            if (self.isOp('=')) {
+                try self.advance();
+                const fline = self.cur_line;
+                const fcol = self.cur_col;
+                init_expr = try self.parseExpr();
+                if (!is_static) {
+                    try field_inits.append(self.arena, .{ .member_assign = .{ .field = member, .value = init_expr.?, .line = fline, .col = fcol } });
+                }
+            }
+            if (annotation.len == 0 and init_expr == null) {
+                self.last_err = "a class field needs a type annotation (`x: T`) or an initializer (`x = value`)";
+                return error.ParseError;
+            }
             try fields.append(self.arena, .{
                 .name = member,
                 .annotation = annotation,
                 .visibility = visibility,
                 .is_static = is_static,
                 .is_readonly = is_readonly,
+                .init = if (annotation.len == 0) init_expr else null,
             });
-            // A field initializer `= expr` runs at construction (instance fields
-            // only; a static field initializer is not supported here).
-            if (self.isOp('=')) {
-                try self.advance();
-                const fline = self.cur_line;
-                const fcol = self.cur_col;
-                const init_expr = try self.parseExpr();
-                if (!is_static) {
-                    try field_inits.append(self.arena, .{ .member_assign = .{ .field = member, .value = init_expr, .line = fline, .col = fcol } });
-                }
-            }
             if (self.isOp(';') or self.isOp(',')) try self.advance();
         }
     }
