@@ -1742,8 +1742,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // is a compile-time string array — rewrite the call into an array
             // literal of the type's field names (spec 264).
             if (std.mem.eql(u8, call.namespace, "Object") and self.bindingPtr("Object") == null) {
+                // Object.freeze(x): records and arrays are already immutable in
+                // Lumen, so this is an identity — replace the call with its
+                // argument and keep the argument's type.
+                if (std.mem.eql(u8, call.name, "freeze")) {
+                    if (call.args.len != 1) {
+                        _ = self.fail(line, col, "'Object.freeze' expects 1 argument") catch {};
+                        return null;
+                    }
+                    const at = self.exprType(program, call.args[0], line, col) orelse return null;
+                    e.* = call.args[0].*;
+                    return at;
+                }
                 if (!std.mem.eql(u8, call.name, "keys")) {
-                    _ = self.fail(line, col, "only Object.keys is supported — records have static shapes, so read fields directly") catch {};
+                    _ = self.fail(line, col, "only Object.keys and Object.freeze are supported — records have static, immutable shapes, so read fields directly") catch {};
                     return null;
                 }
                 if (call.args.len != 1) {
