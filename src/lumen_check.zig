@@ -884,6 +884,13 @@ pub const Checker = struct {
                     const mname = try self.specializeClass(gc, args, line, col);
                     return .{ .class_type = mname };
                 }
+                if (std.mem.eql(u8, base, "Record")) {
+                    return self.fail(line, col, "Record<K, V> is not supported — use `Map<K, V>` for dynamic key/value storage, or a named `type` with fixed fields");
+                }
+                if (std.mem.eql(u8, base, "Partial") or std.mem.eql(u8, base, "Readonly") or std.mem.eql(u8, base, "Required") or std.mem.eql(u8, base, "Pick") or std.mem.eql(u8, base, "Omit")) {
+                    const msg = std.fmt.allocPrint(self.arena, "the `{s}<...>` utility type is not supported — declare an explicit named `type` with the fields you need", .{base}) catch "unsupported utility type";
+                    return self.fail(line, col, msg);
+                }
                 return self.fail(line, col, "unknown generic type");
             }
         }

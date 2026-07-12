@@ -575,7 +575,16 @@ pub fn tsName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .int_literal_union => "i32",
         .named => |name| name,
         .named_array => |name| try std.fmt.allocPrint(arena, "{s}[]", .{name}),
-        .nested_array => |inner| try std.fmt.allocPrint(arena, "{s}[]", .{try tsName(arena, inner.*)}),
+        .nested_array => |inner| blk: {
+            const in = try tsName(arena, inner.*);
+            // A compound element type needs grouping before `[]`, so an array of
+            // optionals reads `(i32 | null)[]`, not the ambiguous `i32 | null[]`.
+            const needs_parens = inner.* == .optional or inner.* == .func_type;
+            break :blk if (needs_parens)
+                try std.fmt.allocPrint(arena, "({s})[]", .{in})
+            else
+                try std.fmt.allocPrint(arena, "{s}[]", .{in});
+        },
         .union_type => |name| name,
         .enum_type => |e| e.name,
         .optional => |inner| try std.fmt.allocPrint(arena, "{s} | null", .{try tsName(arena, inner.*)}),
