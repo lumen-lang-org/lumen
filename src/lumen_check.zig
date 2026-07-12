@@ -233,6 +233,9 @@ pub const Checker = struct {
     // it sets these hints before checking the callback so a bare untyped param
     // (`v => ...`) can infer its type positionally. Consumed once by the arrow.
     arrow_param_hint: ?[]const types.Type = null,
+    // The program being checked, set once at entry, so passes that don't thread
+    // `program` (generic specialization) can still infer via `exprType`.
+    cur_program: ?*ast.Program = null,
     // The expected return type of the next arrow to be checked (a callback whose
     // caller knows the result type, e.g. `reduce`'s accumulator). Lets an
     // expression-body arrow whose body is an object/array literal type against
@@ -1150,6 +1153,7 @@ pub const Checker = struct {
     }
 
     fn checkProgram(self: *Checker, program: *ast.Program) CompileError!void {
+        self.cur_program = program;
         try self.pushScope();
         // Pop the root scope on the way out so top-level unused-variable
         // warnings are collected like any other scope's.
@@ -1295,12 +1299,18 @@ pub const Checker = struct {
             if (m.infer_return and !m.is_async and ret == .void) {
                 if (check_stmt.firstReturnExpr(m.body)) |rexpr| {
                     // A getter-style `return this.<field>` resolves against the
-                    // class's own fields directly (no expression typing needed),
-                    // so it also works for generic-class specializations where
-                    // `program` is not threaded through.
+                    // class's own fields directly (no expression typing needed).
                     if (thisFieldType(c, rexpr)) |ft| {
                         ret = ft;
-                    } else if (program) |prog| {
+                    } else if (program orelse self.cur_program) |prog| {
+                        // General inference: type the return expression with the
+                        // parameters in scope and `this` bound to this class, so
+                        // returns built from params or `this.<field>` expressions
+                        // (`this.items[0]`, `this.a + this.b`) infer -- including
+                        // in generic specializations (via `cur_program`).
+                        const prev_class = self.current_class;
+                        self.current_class = c.name;
+                        defer self.current_class = prev_class;
                         try self.pushScope();
                         defer self.popScope();
                         for (m.params) |param| self.declareParam(param, m.line, m.col) catch {};
