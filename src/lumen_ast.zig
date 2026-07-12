@@ -579,6 +579,7 @@ pub const Expr = union(enum) {
 pub const FieldBuiltin = enum {
     length,
     error_message,
+    error_name,
     container_size,
     buffer_length,
 };

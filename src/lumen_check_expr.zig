@@ -724,6 +724,11 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 field.builtin = .error_message;
                 return .string;
             }
+            if (obj_type == .error_obj and std.mem.eql(u8, field.name, "name")) {
+                // Lumen has no custom Error subclasses; the name is always "Error".
+                field.builtin = .error_name;
+                return .string;
+            }
             if (obj_type == .regexp and (std.mem.eql(u8, field.name, "source") or std.mem.eql(u8, field.name, "flags"))) {
                 return .string;
             }
@@ -1063,6 +1068,19 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
             }
             const obj_type = self.exprType(program, mc.obj, line, col) orelse return null;
+            if (obj_type == .error_obj) {
+                // `e.toString()` -> "Error: <message>". No other Error methods.
+                if (!std.mem.eql(u8, mc.name, "toString")) {
+                    _ = self.failUnknownMethod(line, col, "Error", mc.name, &.{"toString"}) catch {};
+                    return null;
+                }
+                if (mc.args.len != 0) {
+                    _ = self.fail(line, col, "'Error.toString' expects 0 arguments") catch {};
+                    return null;
+                }
+                mc.container_type = .error_obj; // sentinel for codegen
+                return .string;
+            }
             if (obj_type == .regexp) {
                 // `re.test(s)` -> bool. (Other regex methods arrive in later cycles.)
                 if (!std.mem.eql(u8, mc.name, "test")) {

@@ -1730,7 +1730,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, "}}); break :__cl{d} {{}}; }})", .{s});
                 return;
             }
-            if (mc.container_type != null and mc.container_type.? == .regexp) {
+            if (mc.container_type != null and mc.container_type.? == .error_obj) {
+                // e.toString() -> "Error: " ++ message (error_obj is the message).
+                try w.appendSlice(arena, "(std.mem.concat(__sa(), u8, &.{ \"Error: \", ");
+                try emitExpr(mc.obj, w, arena);
+                try w.appendSlice(arena, " }) catch unreachable)");
+            } else if (mc.container_type != null and mc.container_type.? == .regexp) {
                 // Plan B: if the object is a literal regex, try to emit a
                 // specialized straight-line matcher; otherwise fall back to the
                 // runtime interpreter over (re).source / (re).flags.
@@ -2006,6 +2011,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ".length()");
             } else if (fa.builtin == .error_message) {
                 try emitExpr(fa.obj, w, arena);
+            } else if (fa.builtin == .error_name) {
+                // Always "Error"; evaluate (discard) the receiver for any side effect.
+                g_global_pred_seq += 1;
+                try w.print(arena, "(__en{d}: {{ _ = &(", .{g_global_pred_seq});
+                try emitExpr(fa.obj, w, arena);
+                try w.print(arena, "); break :__en{d} @as([]const u8, \"Error\"); }})", .{g_global_pred_seq});
             } else if (fa.is_static) {
                 // Class.staticField -> Owner.__static_Owner_field
                 const owner = fa.class_name orelse "";
