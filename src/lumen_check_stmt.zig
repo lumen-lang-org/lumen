@@ -522,6 +522,37 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
         .destructure_decl => |*d| {
             const src_type = self.exprType(program, d.source, d.line, d.col) orelse
                 return self.inferenceFail(d.line, d.col, "cannot infer destructured source type");
+            if (d.is_assignment) {
+                // `[a, b] = expr` — assign to existing variables (e.g. a swap).
+                if (src_type == .tuple_type and d.bindings.len != src_type.tuple_type.len) {
+                    return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
+                }
+                for (d.bindings, 0..) |*b, i| {
+                    const bind = self.bindingPtr(b.name) orelse
+                        return self.undefined_(b.name, d.line, d.col);
+                    if (!bind.mutable) {
+                        const msg = std.fmt.allocPrint(self.arena, "cannot assign to '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable", .{ b.name, b.name }) catch "E_CONST_ASSIGNMENT";
+                        return self.fail(d.line, d.col, msg);
+                    }
+                    const elem_t: types.Type = switch (src_type) {
+                        .tuple_type => |elems| elems[i],
+                        else => if (types.isArray(src_type))
+                            (types.arrayElem(src_type) orelse return self.fail(d.line, d.col, "E_TYPE_MISMATCH"))
+                        else {
+                            const tn = types.tsName(self.arena, src_type) catch "?";
+                            const msg = std.fmt.allocPrint(self.arena, "array destructuring needs an array or tuple, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                            return self.fail(d.line, d.col, msg);
+                        },
+                    };
+                    if (!types.same(bind.ty, elem_t)) return self.failTypeMismatch(d.line, d.col, bind.ty, elem_t);
+                    // The target is written, so its declaration must emit as `var`.
+                    if (bind.decl) |dd| dd.reassigned = true;
+                    b.checked_type = bind.ty;
+                    b.emit_name = bind.emit_name;
+                }
+                if (src_type == .tuple_type) d.is_tuple = true;
+                return;
+            }
             if (d.is_object) {
                 const type_name = switch (src_type) {
                     .named => |n| n,

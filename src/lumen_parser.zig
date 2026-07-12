@@ -269,6 +269,21 @@ pub const Parser = struct {
             }
             if (self.isOp('[') or self.isOp('(') or self.cur == .str or self.cur == .num or self.cur == .flt or self.cur == .template) {
                 const value = try self.parseExpr();
+                // Array destructuring assignment `[a, b] = expr;` (e.g. a swap):
+                // the targets are existing variables, not new bindings.
+                if (self.isOp('=') and value.* == .array) {
+                    try self.advance(); // '='
+                    const rhs = try self.parseExpr();
+                    try self.expectSemi();
+                    const binds = try self.arena.alloc(ast.DestructBinding, value.array.items.len);
+                    for (value.array.items, 0..) |it, i| {
+                        // Only simple variable targets are supported (no nested
+                        // patterns or member targets).
+                        if (it.* != .var_ref) return error.ParseError;
+                        binds[i] = .{ .name = it.var_ref.name };
+                    }
+                    return .{ .destructure_decl = .{ .mutable = true, .is_object = false, .is_assignment = true, .bindings = binds, .source = rhs, .line = line, .col = col } };
+                }
                 try self.expectSemi();
                 return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
             }

@@ -214,6 +214,7 @@ pub const DestructureDecl = struct {
     mutable: bool,
     is_object: bool, // true: { x, y } from a record; false: [ a, b ] from an array
     is_tuple: bool = false, // an array-pattern destructuring of a tuple source: bindings read positional struct fields (`.@"i"`) instead of slice indices
+    is_assignment: bool = false, // `[a, b] = expr` assigns to existing variables instead of declaring new ones
     bindings: []DestructBinding,
     source: *Expr,
     line: u32,
