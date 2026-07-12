@@ -1368,6 +1368,21 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, "__promiseResolved({s}, ", .{try types.zigName(arena, inner)});
                 try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
+            } else if (std.mem.eql(u8, cl.namespace, "Promise") and std.mem.eql(u8, cl.name, "all")) {
+                // Promise.all([p1, p2, ...]) -> await each (the shared loop drives
+                // them all concurrently), collect into a T[], wrap resolved.
+                const elem = cl.checked_arg_type orelse return error.ParseError;
+                const elem_zig = try types.zigName(arena, elem);
+                const items = cl.args[0].array.items;
+                g_global_pred_seq += 1;
+                const seq = g_global_pred_seq;
+                try w.print(arena, "(__pa{d}: {{ const __r = __sa().alloc({s}, {d}) catch unreachable; ", .{ seq, elem_zig, items.len });
+                for (items, 0..) |it, i| {
+                    try w.print(arena, "__r[{d}] = (", .{i});
+                    try emitExpr(it, w, arena);
+                    try w.appendSlice(arena, ").await_(); ");
+                }
+                try w.print(arena, "break :__pa{d} __promiseResolved([]const {s}, @as([]const {s}, __r)); }})", .{ seq, elem_zig, elem_zig });
             } else if (std.mem.eql(u8, cl.namespace, "Worker") and std.mem.eql(u8, cl.name, "run")) {
                 // Worker.run(fn) -> spawn fn on a real detached std.Thread,
                 // resolving a Promise<T> on the main thread once it finishes.

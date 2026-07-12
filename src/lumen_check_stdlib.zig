@@ -3227,7 +3227,56 @@ pub fn promiseCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
         program.needs_async = true;
         return result;
     }
-    const msg = std.fmt.allocPrint(self.arena, "Promise.{s} is not supported yet — only Promise.resolve(v); use `async`/`await` for composition", .{call.name}) catch "E_UNSUPPORTED_STD";
+    // `Promise.all([p1, p2, ...])` -> `Promise<T[]>`. Promises are eager (they
+    // schedule on the shared event loop at creation), so awaiting each in turn
+    // still lets them all make progress concurrently. Restricted to an array
+    // literal so the element promises' types are known positionally.
+    if (std.mem.eql(u8, call.name, "all")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        if (call.args[0].* != .array) {
+            _ = self.fail(line, col, "Promise.all takes an array literal of promises, e.g. `Promise.all([a(), b()])`") catch {};
+            return null;
+        }
+        const items = call.args[0].array.items;
+        if (items.len == 0) {
+            _ = self.fail(line, col, "Promise.all needs at least one promise") catch {};
+            return null;
+        }
+        var inner: ?types.Type = null;
+        for (items) |it| {
+            const it_ty = self.exprType(program, it, line, col) orelse return null;
+            if (it_ty != .promise_type) {
+                const tn = types.tsName(self.arena, it_ty) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "Promise.all elements must be promises, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                _ = self.fail(line, col, msg) catch {};
+                return null;
+            }
+            const t = it_ty.promise_type.*;
+            if (inner) |prev| {
+                if (!types.same(prev, t)) {
+                    _ = self.fail(line, col, "Promise.all elements must all resolve to the same type") catch {};
+                    return null;
+                }
+            } else inner = t;
+        }
+        const arr_ty = types.arrayOf(inner.?) orelse {
+            const tn = types.tsName(self.arena, inner.?) catch "?";
+            const msg = std.fmt.allocPrint(self.arena, "Promise.all cannot collect `Promise<{s}>` — the resolved type has no array form", .{tn}) catch "E_TYPE_MISMATCH";
+            _ = self.fail(line, col, msg) catch {};
+            return null;
+        };
+        const p = self.arena.create(types.Type) catch return null;
+        p.* = arr_ty;
+        call.checked_arg_type = inner.?; // element type, drives the alloc
+        call.checked_type = .{ .promise_type = p };
+        program.uses_io = true;
+        program.needs_async = true;
+        return .{ .promise_type = p };
+    }
+    const msg = std.fmt.allocPrint(self.arena, "Promise.{s} is not supported yet — only Promise.resolve(v) and Promise.all([...]); use `async`/`await` for composition", .{call.name}) catch "E_UNSUPPORTED_STD";
     _ = self.fail(line, col, msg) catch {};
     return null;
 }
