@@ -857,6 +857,24 @@ pub fn parsePrimary(self: *Parser) CompileError!*Expr {
             if (self.cur != .ident) return error.ParseError;
             const fname = self.cur.ident;
             try self.advance();
+            // Method shorthand `{ run() { ... } }` desugars to a function-typed
+            // field `run: (...) => { ... }`. (Object literals have no `this`, so
+            // such a method is a plain closure over its params.)
+            if (self.isOp('(')) {
+                const params = try self.parseParamList();
+                var ret_ann: []const u8 = "";
+                if (self.isOp(':')) {
+                    try self.advance();
+                    ret_ann = try self.parseTypeAnnotation();
+                }
+                const block = try self.parseBlock();
+                const arrow = try self.arena.create(ast.ArrowExpr);
+                arrow.* = .{ .params = params, .return_annotation = ret_ann, .body_block = block };
+                const av = try self.node(.{ .arrow = arrow });
+                try fields.append(self.arena, .{ .name = fname, .value = av });
+                if (self.isOp(',')) try self.advance() else break;
+                continue;
+            }
             // Shorthand `{ x }` (spec 052): no `: value` follows, so `x`
             // desugars to `x: x` -- a reference to the same-named binding.
             if (!self.isOp(':')) {
