@@ -163,7 +163,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             const operand_type = self.exprType(program, inner, line, col) orelse return null;
             if (operand_type != .promise_type) {
-                _ = self.fail(line, col, "E_AWAIT_NOT_PROMISE") catch {};
+                const tn = types.tsName(self.arena, operand_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "`await` needs a Promise, got `{s}` — only `async` functions return a Promise", .{tn}) catch "E_AWAIT_NOT_PROMISE";
+                _ = self.fail(line, col, msg) catch {};
                 return null;
             }
             program.needs_async = true;
@@ -1252,7 +1254,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     break :blk .string;
                 }
                 const elem_type = types.arrayElem(obj_type) orelse {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    const tn = types.tsName(self.arena, obj_type) catch "?";
+                    const msg = std.fmt.allocPrint(self.arena, "cannot index `{s}` — indexing needs an array, string, or tuple", .{tn}) catch "E_TYPE_MISMATCH";
+                    _ = self.fail(line, col, msg) catch {};
                     return null;
                 };
                 index.checked_element_type = elem_type;
