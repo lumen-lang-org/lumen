@@ -385,11 +385,16 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return .bool;
             }
             if (!types.same(left_type, right_type)) {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                const ln = types.tsName(self.arena, left_type) catch "?";
+                const rn = types.tsName(self.arena, right_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "cannot compare `{s}` and `{s}` — both sides of `{s}` must be the same type", .{ ln, rn, cmp.op }) catch "E_TYPE_MISMATCH";
+                _ = self.fail(line, col, msg) catch {};
                 return null;
             }
             if (!std.mem.eql(u8, cmp.op, "==") and !std.mem.eql(u8, cmp.op, "!=") and !types.isNumeric(left_type)) {
-                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                const ln = types.tsName(self.arena, left_type) catch "?";
+                const msg = std.fmt.allocPrint(self.arena, "`{s}` needs numeric operands, got `{s}`", .{ cmp.op, ln }) catch "E_TYPE_MISMATCH";
+                _ = self.fail(line, col, msg) catch {};
                 return null;
             }
             cmp.checked_operand_type = left_type;
