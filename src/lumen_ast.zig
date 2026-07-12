@@ -62,6 +62,9 @@ pub const TypeDecl = struct {
     // Type parameters for a generic interface/type alias, e.g. `Pair<A, B>`.
     // When non-empty the declaration is a template specialized on use.
     type_params: [][]const u8 = &.{},
+    // `interface B extends A, C { ... }` — parent interfaces whose fields are
+    // merged in ahead of this one's own fields.
+    parents: [][]const u8 = &.{},
     line: u32,
     col: u32,
 };

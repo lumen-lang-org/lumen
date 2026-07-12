@@ -1192,6 +1192,30 @@ pub const Checker = struct {
                     continue;
                 }
                 if (stmt.type_decl.union_variants != null) continue; // validated in the union pass below
+                // `interface B extends A, C` — merge the parents' fields ahead of
+                // B's own (declared earlier in source order, so already
+                // registered). A field B redeclares overrides the inherited one.
+                if (stmt.type_decl.parents.len > 0) {
+                    var merged: std.ArrayListUnmanaged(ast.TypeField) = .empty;
+                    for (stmt.type_decl.parents) |pname| {
+                        const pinfo = self.type_decls.get(pname) orelse {
+                            const msg = std.fmt.allocPrint(self.arena, "interface `{s}` extends `{s}`, but `{s}` is not a known interface or record type", .{ stmt.type_decl.name, pname, pname }) catch "E_TYPE_MISMATCH";
+                            return self.fail(stmt.type_decl.line, stmt.type_decl.col, msg);
+                        };
+                        for (pinfo.fields) |pf| {
+                            var overridden = false;
+                            for (stmt.type_decl.fields) |own| {
+                                if (std.mem.eql(u8, own.name, pf.name)) {
+                                    overridden = true;
+                                    break;
+                                }
+                            }
+                            if (!overridden) merged.append(self.arena, pf) catch return error.OutOfMemory;
+                        }
+                    }
+                    for (stmt.type_decl.fields) |f| merged.append(self.arena, f) catch return error.OutOfMemory;
+                    stmt.type_decl.fields = merged.toOwnedSlice(self.arena) catch return error.OutOfMemory;
+                }
                 try self.declareType(stmt.type_decl.name, stmt.type_decl.fields, stmt.type_decl.string_literals, stmt.type_decl.int_literals, stmt.type_decl.line, stmt.type_decl.col);
             }
         }

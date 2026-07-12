@@ -198,6 +198,17 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
     const tname = self.cur.ident;
     try self.advance();
     const type_params = try self.parseTypeParams();
+    // `interface B extends A, C` — record the parent interface names to merge.
+    var parents: std.ArrayListUnmanaged([]const u8) = .empty;
+    if (self.isKw("extends")) {
+        try self.advance();
+        while (true) {
+            if (self.cur != .ident) return error.ParseError;
+            try parents.append(self.arena, self.cur.ident);
+            try self.advance();
+            if (self.isOp(',')) try self.advance() else break;
+        }
+    }
     try self.expectOp('{');
     var fields: std.ArrayListUnmanaged(ast.TypeField) = .empty;
     while (!self.isOp('}')) {
@@ -218,7 +229,7 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
     }
     try self.expectOp('}');
     if (self.isOp(';')) try self.advance();
-    return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .type_params = type_params, .line = line, .col = col } };
+    return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .type_params = type_params, .parents = try parents.toOwnedSlice(self.arena), .line = line, .col = col } };
 }
 
 /// `enum Name { A, B = 2, C }` (numeric) or `enum Name { Up = "up" }` (string).
