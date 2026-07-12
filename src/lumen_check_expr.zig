@@ -829,6 +829,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                     return null;
                 }
+                // An already-optional field (`c?.d` where `d?: T`) flattens: the
+                // chain yields `?T`, not `?(?T)`. The emit still reads `__oc.d`
+                // (already `?T`) coerced to `?T`, so record the unwrapped `T`.
+                if (field_type == .optional) {
+                    field.chain_field_type = field_type.optional.*;
+                    return field_type;
+                }
                 field.chain_field_type = field_type;
                 const p = self.arena.create(types.Type) catch return null;
                 p.* = field_type;
