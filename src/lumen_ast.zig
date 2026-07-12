@@ -142,6 +142,9 @@ pub const FunctionDecl = struct {
     params: []FunctionParam,
     return_annotation: []const u8,
     checked_return_type: ?types.Type = null,
+    // True when the source omitted the `: T` return annotation, so the checker
+    // infers the return type from the body's first `return <expr>`.
+    infer_return: bool = false,
     body: []Stmt,
     // Class-member modifiers (unused for free functions).
     visibility: Visibility = .public,

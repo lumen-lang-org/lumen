@@ -204,6 +204,12 @@ pub const Checker = struct {
     in_constructor: bool = false,
     next_binding_id: u32 = 0,
     current_return_type: ?types.Type = null,
+    // True while checking a function whose return annotation was omitted but the
+    // checker could not infer a type (a loop/local binding, a forward-referenced
+    // callee, or a record needing not-yet-declared types). A value `return` then
+    // guides the user to add an explicit annotation instead of the confusing
+    // "expected `void`" mismatch.
+    current_return_uninferable: bool = false,
     // True while checking the body of an `async function` (gates `await`).
     in_async: bool = false,
     // True while checking inside any function/method body (top-level `await` is
@@ -904,15 +910,34 @@ pub const Checker = struct {
         param.checked_type = try self.typeFromAnnotation(param.annotation, line, col);
     }
 
-    pub fn declareFunction(self: *Checker, decl: *ast.FunctionDecl) CompileError!void {
+    pub fn declareFunction(self: *Checker, program: ?*ast.Program, decl: *ast.FunctionDecl) CompileError!void {
         if (self.funcs.get(decl.name) != null) return self.fail(decl.line, decl.col, "E_DUPLICATE_BINDING");
-        const return_type = try self.typeFromAnnotation(decl.return_annotation, decl.line, decl.col);
+        var return_type = try self.typeFromAnnotation(decl.return_annotation, decl.line, decl.col);
         // An async function must declare a `Promise<T>` return type.
         if (decl.is_async and return_type != .promise_type) return self.fail(decl.line, decl.col, "E_ASYNC_RETURN");
         for (decl.params) |*param| {
             try self.resolveParam(param, decl.line, decl.col);
         }
         try self.validateParamSignature(decl.params);
+        // Infer an omitted return type from the body's first `return <expr>`, so
+        // a plain function need not annotate it (`function add(a, b) { return a
+        // + b; }`). Async functions still require an explicit `Promise<...>`.
+        // Runs in the declaration pass, before any body or call site is checked,
+        // so callers observe the inferred type. If inference cannot determine a
+        // type (e.g. a forward-referenced callee), the type stays `void` and the
+        // body check surfaces the real diagnostic.
+        if (program) |prog| {
+            if (decl.infer_return and !decl.is_async) {
+                if (check_stmt.firstReturnExpr(decl.body)) |rexpr| {
+                    try self.pushScope();
+                    defer self.popScope();
+                    for (decl.params) |param| self.declareParam(param, decl.line, decl.col) catch {};
+                    if (self.exprType(prog, rexpr, decl.line, decl.col)) |inferred| {
+                        if (inferred != .void) return_type = inferred;
+                    }
+                }
+            }
+        }
         decl.checked_return_type = return_type;
         self.funcs.put(self.arena, decl.name, .{ .params = decl.params, .return_type = return_type }) catch return error.OutOfMemory;
     }
@@ -1160,7 +1185,7 @@ pub const Checker = struct {
                     self.generic_funcs.put(self.arena, stmt.function_decl.name, &stmt.function_decl) catch return error.OutOfMemory;
                     continue;
                 }
-                try self.declareFunction(&stmt.function_decl);
+                try self.declareFunction(program, &stmt.function_decl);
             }
         }
         for (program.stmts) |*stmt| {

@@ -248,7 +248,7 @@ pub fn specializeFunction(self: *Checker, decl: *const ast.FunctionDecl, type_ar
         .col = decl.col,
     };
     // Register so recursive/self calls resolve, then queue for body checking.
-    try self.declareFunction(spec);
+    try self.declareFunction(null, spec);
     const stmt_ptr = self.arena.create(ast.Stmt) catch return error.OutOfMemory;
     stmt_ptr.* = .{ .function_decl = spec.* };
     self.pending_specializations.append(self.arena, stmt_ptr) catch return error.OutOfMemory;

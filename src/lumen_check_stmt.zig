@@ -112,6 +112,13 @@ pub fn checkFunctionBody(self: *Checker, program: *ast.Program, decl: *ast.Funct
     else
         decl.checked_return_type;
     defer self.current_return_type = previous_return_type;
+    // An omitted return annotation that stayed `void` after inference: a value
+    // `return` inside is a "please annotate" case, not a real void mismatch.
+    const previous_uninferable = self.current_return_uninferable;
+    self.current_return_uninferable = decl.infer_return and
+        (decl.checked_return_type == null or decl.checked_return_type.? == .void) and
+        firstReturnExpr(decl.body) != null;
+    defer self.current_return_uninferable = previous_uninferable;
     const previous_in_async = self.in_async;
     const previous_in_function = self.in_function;
     self.in_async = decl.is_async;
@@ -339,6 +346,39 @@ pub fn stmtReturns(stmt: ast.Stmt) bool {
     };
 }
 
+///// The first value-carrying `return <expr>` in source order, searching nested
+/// control-flow blocks. Used to infer an un-annotated function's return type.
+pub fn firstReturnExpr(body: []ast.Stmt) ?*ast.Expr {
+    for (body) |stmt| {
+        if (firstReturnExprStmt(stmt)) |e| return e;
+    }
+    return null;
+}
+
+fn firstReturnExprStmt(stmt: ast.Stmt) ?*ast.Expr {
+    return switch (stmt) {
+        .return_stmt => |r| r.value,
+        .block_stmt => |b| firstReturnExpr(b.body),
+        .if_stmt => |s| firstReturnExpr(s.then_body) orelse (if (s.else_body) |eb| firstReturnExpr(eb) else null),
+        .while_stmt => |s| firstReturnExpr(s.body),
+        .do_while_stmt => |s| firstReturnExpr(s.body),
+        .for_stmt => |s| firstReturnExpr(s.body),
+        .for_of_stmt => |s| firstReturnExpr(s.body),
+        .for_in_stmt => |s| firstReturnExpr(s.body),
+        .switch_stmt => |s| blk: {
+            for (s.cases) |c| {
+                if (firstReturnExpr(c.body)) |e| break :blk e;
+            }
+            if (s.default_body) |d| {
+                if (firstReturnExpr(d)) |e| break :blk e;
+            }
+            break :blk null;
+        },
+        .try_stmt => |s| firstReturnExpr(s.try_body) orelse firstReturnExpr(s.catch_body) orelse (if (s.finally_body) |fb| firstReturnExpr(fb) else null),
+        else => null,
+    };
+}
+
 /// Check one `let`/`const`/`var` declarator: resolve its type (annotation or
 /// inferred), verify the initializer, and bind the name. Shared by single and
 /// comma-grouped declarations.
@@ -420,7 +460,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
 
         .function_decl => |*decl| {
             if (self.nested_stmt_depth > 0) return self.fail(decl.line, decl.col, "E_UNSUPPORTED_NESTED_FUNCTION");
-            if (decl.checked_return_type == null) try self.declareFunction(decl);
+            if (decl.checked_return_type == null) try self.declareFunction(program, decl);
             try self.checkFunctionBody(program, decl);
         },
         .var_decl => |*decl| try self.checkVarDecl(program, decl),
@@ -999,6 +1039,9 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 }
                 return self.fail(ret.line, ret.col, "E_RETURN_TYPE");
             };
+            if (expected_return == .void and self.current_return_uninferable) {
+                return self.fail(ret.line, ret.col, "could not infer this function's return type — add an explicit `: T` return annotation (inference does not yet cover returns of loop/local variables, forward-referenced functions, or record types)");
+            }
             // ensureAssignable already recorded a detailed expected/got message.
             self.ensureAssignable(program, expected_return, value, ret.line, ret.col) catch return error.ParseError;
             ret.checked_type = expected_return;

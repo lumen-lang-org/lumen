@@ -270,15 +270,18 @@ pub fn parseFunctionDecl(self: *Parser, line: u32, col: u32, is_async: bool) Com
     // side-effecting function `function log(msg: string) { ... }`). A
     // value-returning function still needs an explicit `: T` annotation.
     var return_annotation: []const u8 = "void";
+    var infer_return = true;
     if (self.isOp(':')) {
         try self.advance();
         return_annotation = try self.parseTypeAnnotation();
+        infer_return = false;
     }
     const body = try self.parseBlock();
     return .{ .function_decl = .{
         .name = name,
         .params = params,
         .return_annotation = return_annotation,
+        .infer_return = infer_return,
         .body = body,
         .type_params = type_params,
         .is_async = is_async,
