@@ -1471,6 +1471,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try emitExpr(inner, w, arena);
             try w.append(arena, ')');
         },
+        .non_null => |nn| {
+            // `x!` — unwrap an optional (`.?`, panics if null). A no-op when the
+            // operand is not optional.
+            if (nn.unwraps) {
+                try w.append(arena, '(');
+                try emitExpr(nn.inner, w, arena);
+                try w.appendSlice(arena, ").?");
+            } else {
+                try emitExpr(nn.inner, w, arena);
+            }
+        },
         .bnot => |inner| {
             // Bitwise NOT needs a fixed-width operand: `~` on a bare
             // `comptime_int` literal (`~5`) is a Zig error. Pin to i32 (JS

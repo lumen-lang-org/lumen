@@ -384,6 +384,7 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
         .instanceof_expr => |io| .{ .instanceof_expr = .{ .value = try self.cloneExpr(io.value), .class_name = io.class_name, .result = io.result } },
         .inc_dec => |id| .{ .inc_dec = .{ .target = try self.cloneExpr(id.target), .is_inc = id.is_inc, .is_prefix = id.is_prefix, .checked_type = id.checked_type } },
         .not => |inner| .{ .not = try self.cloneExpr(inner) },
+        .non_null => |nn| .{ .non_null = .{ .inner = try self.cloneExpr(nn.inner), .unwraps = nn.unwraps } },
         .bnot => |inner| .{ .bnot = try self.cloneExpr(inner) },
         .await_expr => |inner| .{ .await_expr = try self.cloneExpr(inner) },
         .bin => |b| .{ .bin = .{ .op = b.op, .l = try self.cloneExpr(b.l), .r = try self.cloneExpr(b.r) } },

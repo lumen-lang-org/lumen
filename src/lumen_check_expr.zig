@@ -145,6 +145,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             };
             return .string;
         },
+        .non_null => |*nn| {
+            // `x!` — assert non-null. Unwraps an optional to its inner type; a
+            // no-op on an already-non-optional operand.
+            const t = self.exprType(program, nn.inner, line, col) orelse return null;
+            nn.unwraps = t == .optional;
+            return types.unwrapOptional(t);
+        },
         .instanceof_expr => |*io| {
             // Classes are non-polymorphic (spec 270): a value's class is known
             // statically, so `x instanceof C` is a compile-time bool.

@@ -559,6 +559,7 @@ pub const Expr = union(enum) {
     var_ref: struct { name: []const u8, emit_name: ?[]const u8 = null, unwrap: bool = false, is_func_ref: bool = false, capture: bool = false, func_sig: ?*const types.FuncSig = null, deref: bool = false, is_accumulator: bool = false, builtin_const: ?[]const u8 = null }, // deref: a scalar `Ref<T>` parameter read, emitted as `name.*`; is_accumulator: read of a string-builder local, emitted as `name.items`
     neg: *Expr,
     not: *Expr,
+    non_null: struct { inner: *Expr, unwraps: bool = false }, // `x!` — non-null assertion; `unwraps` when the operand is optional (emit `.?`, panics if null); a no-op on a non-optional operand
     bnot: *Expr, // bitwise ~
     typeof_expr: struct { operand: *Expr, result: ?[]const u8 = null }, // `typeof x` — a compile-time type-name string ("number"/"string"/...)
     instanceof_expr: struct { value: *Expr, class_name: []const u8, result: ?bool = null }, // `x instanceof C` — a compile-time bool (classes are non-polymorphic; spec 292)

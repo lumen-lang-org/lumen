@@ -205,6 +205,7 @@ pub fn inferExprType(e: *const ast.Expr) ?Type {
         .typeof_expr => .string,
         .instanceof_expr => .bool,
         .not => .bool,
+        .non_null => |nn| if (inferExprType(nn.inner)) |t| unwrapOptional(t) else null,
         .bnot => |inner| inferExprType(inner),
         .bin => .i32,
         .bool_bin => .bool,

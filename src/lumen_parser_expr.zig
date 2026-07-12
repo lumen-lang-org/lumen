@@ -494,7 +494,14 @@ pub fn parsePostfix(self: *Parser) CompileError!*Expr {
 }
 pub fn parsePostfixFrom(self: *Parser, base: *Expr) CompileError!*Expr {
     var e = base;
-    while (self.isOp('.') or self.isOp('[') or self.isOp2("?.") or self.isOp('(')) {
+    while (self.isOp('.') or self.isOp('[') or self.isOp2("?.") or self.isOp('(') or self.isOp('!')) {
+        // Postfix non-null assertion `x!` (a single `!`, not `!=`/`!==`): unwraps
+        // an optional. Chains with the other postfix forms (`a!.b`, `a.b!`).
+        if (self.isOp('!')) {
+            try self.advance();
+            e = try self.node(.{ .non_null = .{ .inner = e } });
+            continue;
+        }
         // A direct call on a computed function value: `fns[0](5)`, `adder()(9)`,
         // `obj.field(x)` where the field is a function (spec 298). Reuses the
         // `optional_call` node with the chain flag off.

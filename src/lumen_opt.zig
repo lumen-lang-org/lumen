@@ -222,6 +222,7 @@ fn accBadRef(e: *const Expr, name: []const u8) bool {
         .instanceof_expr => |io| accBadRef(io.value, name),
         .inc_dec => |id| accBadRef(id.target, name),
         .neg, .not, .bnot, .await_expr => |inner| accBadRef(inner, name),
+        .non_null => |nn| accBadRef(nn.inner, name),
         .bin => |b| accBadRef(b.l, name) or accBadRef(b.r, name),
         .bool_bin => |b| accBadRef(b.l, name) or accBadRef(b.r, name),
         .cmp => |b| accBadRef(b.l, name) or accBadRef(b.r, name),
@@ -444,6 +445,7 @@ fn markAccExpr(e: *Expr, name: []const u8) void {
         .instanceof_expr => |io| markAccExpr(io.value, name),
         .inc_dec => |id| markAccExpr(id.target, name),
         .neg, .not, .bnot, .await_expr => |inner| markAccExpr(inner, name),
+        .non_null => |nn| markAccExpr(nn.inner, name),
         .bin => |b| {
             markAccExpr(b.l, name);
             markAccExpr(b.r, name);
@@ -558,6 +560,7 @@ pub fn exprUsesName(e: *const Expr, name: []const u8) bool {
         .instanceof_expr => |io| exprUsesName(io.value, name),
         .inc_dec => |id| exprUsesName(id.target, name),
         .neg, .not, .bnot, .await_expr => |inner| exprUsesName(inner, name),
+        .non_null => |nn| exprUsesName(nn.inner, name),
         .bin => |b| exprUsesName(b.l, name) or exprUsesName(b.r, name),
         .bool_bin => |b| exprUsesName(b.l, name) or exprUsesName(b.r, name),
         .cmp => |b| exprUsesName(b.l, name) or exprUsesName(b.r, name),
