@@ -27,6 +27,8 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     if (self.cur != .ident) return error.ParseError;
     const tname = self.cur.ident;
     try self.advance();
+    // Generic type alias: `type Pair<A, B> = { ... }`.
+    const type_params = try self.parseTypeParams();
     try self.expectOp('=');
     if (self.cur == .str) {
         var literals: std.ArrayListUnmanaged([]const u8) = .empty;
@@ -82,7 +84,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             return error.ParseError;
         }
         if (self.isOp(';')) try self.advance();
-        return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .line = line, .col = col } };
+        return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .type_params = type_params, .line = line, .col = col } };
     }
     // A function-type alias `type F = (a: T) => R;`.
     if (self.isOp('(')) {
