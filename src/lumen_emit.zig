@@ -2091,6 +2091,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.appendSlice(arena, "))]");
         },
         .optional_call => |oc| {
+            // A direct value call `f()` on a computed function value (spec 298):
+            // evaluate the callee once, then call through its `{ ctx, call }`
+            // fat pointer.
+            if (!oc.optional_chain) {
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__vc{d}: {{ const __f = ", .{s});
+                try emitExpr(oc.callee, w, arena);
+                try w.print(arena, "; break :__vc{d} __f.call(__f.ctx", .{s});
+                for (oc.args) |arg| {
+                    try w.appendSlice(arena, ", ");
+                    try emitExpr(arg, w, arena);
+                }
+                try w.appendSlice(arena, "); })");
+                return;
+            }
             // a?.() -> (if (a) |__oc| @as(?R, __oc.call(__oc.ctx, args...)) else
             // null). A Lumen closure value is a `{ ctx, call }` struct (spec
             // 006), not a bare Zig function pointer, so the call-through goes

@@ -1188,6 +1188,25 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
+            // Calling a function-typed field of a record: `obj.field(args)`
+            // where `field` has a function type (spec 298). Rewrite to a value
+            // call on the field access and re-check.
+            if (obj_type == .named and !mc.optional_chain) {
+                const ft = blk_ff: {
+                    // Look up the field's type directly on the record decl.
+                    const decl = self.type_decls.get(obj_type.named) orelse break :blk_ff null;
+                    for (decl.fields) |f| {
+                        if (std.mem.eql(u8, f.name, mc.name)) break :blk_ff f.checked_type;
+                    }
+                    break :blk_ff null;
+                };
+                if (ft != null and ft.? == .func_type) {
+                    const fld = self.arena.create(ast.Expr) catch return null;
+                    fld.* = .{ .field = .{ .obj = mc.obj, .name = mc.name } };
+                    e.* = .{ .optional_call = .{ .callee = fld, .args = mc.args, .optional_chain = false } };
+                    return self.exprType(program, e, line, col);
+                }
+            }
             if (obj_type != .class_type) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
@@ -1306,11 +1325,33 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         },
         .obj => null,
         .optional_call => |*oc| {
+            const callee_type = self.exprType(program, oc.callee, line, col) orelse return null;
+            // A direct value call `f()` on a computed function value (spec 298):
+            // the callee is a plain `func_type`; check args and return its
+            // return type directly (no optional wrapping).
+            if (!oc.optional_chain) {
+                if (callee_type != .func_type) {
+                    const tn = types.tsName(self.arena, callee_type) catch "?";
+                    const msg = std.fmt.allocPrint(self.arena, "cannot call a value of type `{s}` — only functions are callable", .{tn}) catch "E_TYPE_MISMATCH";
+                    _ = self.fail(line, col, msg) catch {};
+                    return null;
+                }
+                const sig = callee_type.func_type;
+                if (oc.args.len != sig.params.len) {
+                    const msg = std.fmt.allocPrint(self.arena, "this function value expects {d} argument{s}, got {d}", .{ sig.params.len, if (sig.params.len == 1) "" else "s", oc.args.len }) catch "E_ARG_COUNT";
+                    _ = self.fail(line, col, msg) catch {};
+                    return null;
+                }
+                for (oc.args, sig.params) |arg, pt| {
+                    self.ensureAssignable(program, pt, arg, line, col) catch return null;
+                }
+                oc.chain_result_type = sig.ret.*;
+                return sig.ret.*;
+            }
             // `a?.()` (spec 062): calling a possibly-null closure value
             // directly. Narrower than `a?.b`/`a?.[i]`'s "any nullable
             // value" -- the unwrapped type must specifically be a
             // `func_type`, not just non-optional.
-            const callee_type = self.exprType(program, oc.callee, line, col) orelse return null;
             if (callee_type != .optional) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;

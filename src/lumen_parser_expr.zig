@@ -196,6 +196,20 @@ pub fn parseTypeAnnotation(self: *Parser) CompileError![]const u8 {
                     inner = std.fmt.allocPrint(self.arena, "{s}[]", .{inner}) catch return error.OutOfMemory;
                 }
             }
+            // A trailing `| null` / `| undefined` makes it optional (spec 298),
+            // e.g. `((x: i32) => i32) | null`. Parenthesize the element before
+            // the `?` so `((i32)=>i32)?` (optional function) stays distinct from
+            // `(i32)=>i32?` (function returning an optional).
+            var optional = false;
+            while (self.isCmp("|")) {
+                try self.advance();
+                if (self.cur != .ident) return error.ParseError;
+                const member = self.cur.ident;
+                try self.advance();
+                if (!eq(u8, member, "null") and !eq(u8, member, "undefined")) return error.ParseError;
+                optional = true;
+            }
+            if (optional) inner = std.fmt.allocPrint(self.arena, "({s})?", .{inner}) catch return error.OutOfMemory;
             return inner;
         }
     }
@@ -470,7 +484,21 @@ pub fn parsePostfix(self: *Parser) CompileError!*Expr {
 }
 pub fn parsePostfixFrom(self: *Parser, base: *Expr) CompileError!*Expr {
     var e = base;
-    while (self.isOp('.') or self.isOp('[') or self.isOp2("?.")) {
+    while (self.isOp('.') or self.isOp('[') or self.isOp2("?.") or self.isOp('(')) {
+        // A direct call on a computed function value: `fns[0](5)`, `adder()(9)`,
+        // `obj.field(x)` where the field is a function (spec 298). Reuses the
+        // `optional_call` node with the chain flag off.
+        if (self.isOp('(')) {
+            try self.advance();
+            var call_args: std.ArrayListUnmanaged(*Expr) = .empty;
+            while (!self.isOp(')')) {
+                try call_args.append(self.arena, try self.parseSpreadOrExpr());
+                if (self.isOp(',')) try self.advance() else break;
+            }
+            try self.expectOp(')');
+            e = try self.node(.{ .optional_call = .{ .callee = e, .args = try call_args.toOwnedSlice(self.arena), .optional_chain = false } });
+            continue;
+        }
         if (self.isOp2("?.")) {
             try self.advance();
             // Optional index `a?.[i]` (spec 052).
