@@ -2232,8 +2232,18 @@ pub fn emitThrowingCallSuffix(w: *std.ArrayListUnmanaged(u8), arena: std.mem.All
 /// and diagnostics keep the source name (spec 246).
 pub fn safeGlobalName(arena: std.mem.Allocator, name: []const u8) CompileError![]const u8 {
     const eq = std.mem.eql;
-    if (eq(u8, name, "main") or eq(u8, name, "std") or eq(u8, name, "xev") or eq(u8, name, "builtin")) {
+    // A user global function whose name is a Zig keyword can't be emitted bare,
+    // and one that matches a generated runtime helper's parameter name (`name`,
+    // `value`, ...) would be shadowed by that parameter ("shadows declaration").
+    // Both classes are renamed to a reserved prefix; call sites, function-ref
+    // wrappers, and the declaration all route through this function, so the
+    // rename stays consistent.
+    if (isZigReservedField(name)) {
         return std.fmt.allocPrint(arena, "__lumen_user_{s}", .{name});
+    }
+    const collide = [_][]const u8{ "main", "std", "xev", "builtin", "cb", "chunk", "data", "encoding", "i", "key", "name", "other", "start", "v", "value", "bytes", "ctx", "io", "t", "self", "Self" };
+    for (collide) |c| {
+        if (eq(u8, name, c)) return std.fmt.allocPrint(arena, "__lumen_user_{s}", .{name});
     }
     return name;
 }
