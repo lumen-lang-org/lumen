@@ -739,6 +739,15 @@ pub const Checker = struct {
         }
         // A discriminated union name resolves to its union type.
         if (self.unions.get(annotation) != null) return .{ .union_type = annotation };
+        // Nested array `T[][]` (spec 289): the element is itself an array, which
+        // needs a heap-allocated inner Type (arena-less `fromAnnotation` can't
+        // build it). A single-level `T[]` falls through to the enumerated forms.
+        if (std.mem.endsWith(u8, annotation, "[]") and std.mem.endsWith(u8, annotation[0 .. annotation.len - 2], "[]")) {
+            const base_ty = try self.typeFromAnnotation(annotation[0 .. annotation.len - 2], line, col);
+            const p = self.arena.create(types.Type) catch return error.OutOfMemory;
+            p.* = base_ty;
+            return .{ .nested_array = p };
+        }
         // `Buffer` (spec 056): a bare built-in type, resolved directly (unlike
         // `ReadableStream`/`WritableStream`, which have no case here today and
         // fall through to a plain `.named` that never matches the real

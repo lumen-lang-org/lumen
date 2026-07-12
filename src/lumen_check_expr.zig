@@ -625,7 +625,14 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     }
                 } else elem_type = this_elem;
             }
-            const result = types.arrayOf(elem_type.?) orelse {
+            const result = types.arrayOf(elem_type.?) orelse blk_nested: {
+                // An array of arrays (`[[1],[2]]`): the element is itself an
+                // array, needing a heap-allocated inner Type (spec 289).
+                if (types.isArray(elem_type.?)) {
+                    const p = self.arena.create(types.Type) catch return null;
+                    p.* = elem_type.?;
+                    break :blk_nested types.Type{ .nested_array = p };
+                }
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             };

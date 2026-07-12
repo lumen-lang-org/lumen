@@ -169,7 +169,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // otherwise the value must be assignable to the non-optional type
             return self.ensureAssignable(program, inner.*, value, line, col);
         },
-        .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array => {
+        .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array, .nested_array => {
             if (value.* != .array) {
                 const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
                 if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);

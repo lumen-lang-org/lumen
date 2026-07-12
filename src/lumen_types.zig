@@ -33,6 +33,9 @@ pub const Type = union(enum) {
     int_literal_union: []const u8,
     named: []const u8,
     named_array: []const u8,
+    // An array whose element is itself an array (`i32[][]`, `string[][]`, ...).
+    // Composes to any depth: the inner Type is another array type (spec 289).
+    nested_array: *const Type,
     // A discriminated union over named record variants, identified by the union's
     // declared name. Lowers to a flat Zig struct (union of all variant fields).
     union_type: []const u8,
@@ -120,6 +123,7 @@ fn mangle(arena: std.mem.Allocator, t: Type) error{OutOfMemory}![]const u8 {
         .int_literal_union => |n| try std.fmt.allocPrint(arena, "ilu_{s}", .{n}),
         .named => |n| n,
         .named_array => |n| try std.fmt.allocPrint(arena, "ar_{s}", .{n}),
+        .nested_array => |inner| try std.fmt.allocPrint(arena, "ar_{s}", .{try mangle(arena, inner.*)}),
         .union_type => |n| try std.fmt.allocPrint(arena, "un_{s}", .{n}),
         .enum_type => |e| try std.fmt.allocPrint(arena, "enum_{s}", .{e.name}),
         .optional => |inner| try std.fmt.allocPrint(arena, "opt_{s}", .{try mangle(arena, inner.*)}),
@@ -242,6 +246,7 @@ pub fn same(a: Type, b: Type) bool {
             .named => |b_name| std.mem.eql(u8, a_name, b_name),
             else => false,
         },
+        .nested_array => |a_inner| b == .nested_array and same(a_inner.*, b.nested_array.*),
         .named_array => |a_name| switch (b) {
             .named_array => |b_name| std.mem.eql(u8, a_name, b_name),
             else => false,
@@ -379,7 +384,7 @@ pub fn isHmac(t: Type) bool {
 
 pub fn isArray(t: Type) bool {
     return switch (t) {
-        .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array => true,
+        .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array, .nested_array => true,
         else => false,
     };
 }
@@ -393,6 +398,7 @@ pub fn arrayElem(t: Type) ?Type {
         .string_array => .string,
         .string_literal_union => .string,
         .named_array => |name| .{ .named = name },
+        .nested_array => |inner| inner.*,
         else => null,
     };
 }
@@ -407,6 +413,18 @@ pub fn arrayOf(t: Type) ?Type {
         .named => |name| .{ .named_array = name },
         else => null,
     };
+}
+
+/// Like `arrayOf`, but also handles an array element (`arrayOf(i32[]) =
+/// i32[][]`) by heap-allocating the inner Type (spec 289). Needs an arena.
+pub fn arrayOfAlloc(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?Type {
+    if (arrayOf(t)) |a| return a;
+    if (isArray(t)) {
+        const p = try arena.create(Type);
+        p.* = t;
+        return Type{ .nested_array = p };
+    }
+    return null;
 }
 
 /// Render a resolved type back to a canonical source annotation string. The
@@ -428,6 +446,7 @@ pub fn toAnnotation(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?[]con
         .string_array => "string[]",
         .named => |n| n,
         .named_array => |n| try std.fmt.allocPrint(arena, "{s}[]", .{n}),
+        .nested_array => |inner| if (try toAnnotation(arena, inner.*)) |ia| try std.fmt.allocPrint(arena, "{s}[]", .{ia}) else null,
         .union_type => |n| n,
         .class_type => |n| n,
         .enum_type => |e| e.name,
@@ -550,6 +569,7 @@ pub fn tsName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .int_literal_union => "i32",
         .named => |name| name,
         .named_array => |name| try std.fmt.allocPrint(arena, "{s}[]", .{name}),
+        .nested_array => |inner| try std.fmt.allocPrint(arena, "{s}[]", .{try tsName(arena, inner.*)}),
         .union_type => |name| name,
         .enum_type => |e| e.name,
         .optional => |inner| try std.fmt.allocPrint(arena, "{s} | null", .{try tsName(arena, inner.*)}),
@@ -608,6 +628,7 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .int_literal_union => "i32",
         .named => |name| name,
         .named_array => |name| try std.fmt.allocPrint(arena, "[]const {s}", .{name}),
+        .nested_array => |inner| try std.fmt.allocPrint(arena, "[]const {s}", .{try zigName(arena, inner.*)}),
         .union_type => |name| name,
         .enum_type => |e| if (e.is_string) "[]const u8" else "i32",
         .optional => |inner| try std.fmt.allocPrint(arena, "?{s}", .{try zigName(arena, inner.*)}),

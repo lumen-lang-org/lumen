@@ -87,7 +87,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         }
         mc.cb_wants_index = cb_type.func_type.params.len == 2;
         const u = cb_type.func_type.ret.*;
-        const res = types.arrayOf(u) orelse {
+        const res = (types.arrayOfAlloc(self.arena, u) catch return null) orelse {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         };

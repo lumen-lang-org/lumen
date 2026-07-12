@@ -178,13 +178,15 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 const ez = try types.zigName(arena, het);
                 g_global_pred_seq += 1;
                 const s = g_global_pred_seq;
-                try w.print(arena, "(__arl{d}: {{ const __r = __sa().alloc({s}, {d}) catch unreachable; ", .{ s, ez, arr.items.len });
+                // The temp is seq-suffixed so a nested array literal (`[[1],[2]]`)
+                // doesn't shadow the outer one's `__r` (spec 289).
+                try w.print(arena, "(__arl{d}: {{ const __r{d} = __sa().alloc({s}, {d}) catch unreachable; ", .{ s, s, ez, arr.items.len });
                 for (arr.items, 0..) |item, i| {
-                    try w.print(arena, "__r[{d}] = ", .{i});
+                    try w.print(arena, "__r{d}[{d}] = ", .{ s, i });
                     try emitExpr(item, w, arena);
                     try w.appendSlice(arena, "; ");
                 }
-                try w.print(arena, "break :__arl{d} @as([]const {s}, __r); }})", .{ s, ez });
+                try w.print(arena, "break :__arl{d} @as([]const {s}, __r{d}); }})", .{ s, ez, s });
             } else {
                 try w.appendSlice(arena, "&.{ ");
                 for (arr.items, 0..) |item, i| {

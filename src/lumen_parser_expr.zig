@@ -66,10 +66,11 @@ pub fn parseTypeMember(self: *Parser) CompileError![]const u8 {
             base = buf.items;
         }
     }
-    if (self.isOp('[')) {
+    // One or more `[]` suffixes: `T[]`, `T[][]`, ... (nested arrays, spec 289).
+    while (self.isOp('[')) {
         try self.advance();
         try self.expectOp(']');
-        return std.fmt.allocPrint(self.arena, "{s}[]", .{base}) catch error.OutOfMemory;
+        base = std.fmt.allocPrint(self.arena, "{s}[]", .{base}) catch return error.OutOfMemory;
     }
     return base;
 }
