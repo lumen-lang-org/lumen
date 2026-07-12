@@ -1074,6 +1074,24 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                         }
                     }
                     switch_stmt.exhaustive = all;
+                } else if (disc) |d| {
+                    // `switch (u.kind)` over a union discriminant: covering every
+                    // variant's discriminant value makes the switch exhaustive,
+                    // so a `(): T` function needs no unreachable trailing return.
+                    if (self.unions.get(d.union_name)) |uinfo| {
+                        var all = true;
+                        for (uinfo.variants) |v| {
+                            var covered = false;
+                            for (switch_stmt.cases) |c| {
+                                if (c.value.* == .str and std.mem.eql(u8, c.value.str, v.disc_value)) covered = true;
+                            }
+                            if (!covered) {
+                                all = false;
+                                break;
+                            }
+                        }
+                        switch_stmt.exhaustive = all;
+                    }
                 } else if (switch_type == .enum_type) {
                     // Every enum member covered by a `case E.Member:` makes the
                     // switch exhaustive, so a following `return` is not "missing".
