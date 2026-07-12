@@ -1736,6 +1736,14 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return self.staticCallType(program, call, line, col);
         },
         .cast => |*c| {
+            // `expr as const` -- a const assertion. Lumen has no value-level
+            // literal types, so it is an identity assertion: keep the operand's
+            // own type instead of resolving `const` as a (nonexistent) type.
+            if (std.mem.eql(u8, std.mem.trim(u8, c.annotation, " \t"), "const")) {
+                const src = self.exprType(program, c.inner, line, col) orelse return null;
+                c.checked_type = src;
+                return src;
+            }
             const target = self.typeFromAnnotation(c.annotation, line, col) catch return null;
             if (c.is_satisfies) {
                 // `expr satisfies T` (spec 052): verify expr is assignable to
