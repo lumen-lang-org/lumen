@@ -2007,8 +2007,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 const ft = try types.zigName(arena, fa.chain_field_type orelse .none);
                 try w.appendSlice(arena, "(if (");
                 try emitExpr(fa.obj, w, arena);
-                try w.print(arena, ") |__oc| @as(?{s}, __oc.", .{ft});
-                try emitFieldName(w, arena, fa.name);
+                try w.print(arena, ") |__oc| @as(?{s}, ", .{ft});
+                // A builtin field (`?.length`/`?.size`) lowers to its Zig form on
+                // the unwrapped value, not a literal `.length` member.
+                if (fa.builtin == .length or fa.builtin == .buffer_length) {
+                    try w.appendSlice(arena, "@as(i32, @intCast(__oc.len))");
+                } else if (fa.builtin == .container_size) {
+                    try w.appendSlice(arena, "__oc.size()");
+                } else {
+                    try w.appendSlice(arena, "__oc.");
+                    try emitFieldName(w, arena, fa.name);
+                }
                 try w.appendSlice(arena, ") else null)");
             } else if (fa.enum_value) |ev| {
                 switch (ev) {

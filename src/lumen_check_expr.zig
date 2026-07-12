@@ -794,13 +794,25 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 }
                 const inner = obj_type.optional.*;
-                const field_type = switch (inner) {
-                    .named => |type_name| self.fieldType(type_name, field.name, line, col) orelse return null,
-                    else => {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                        return null;
-                    },
-                };
+                const eql = std.mem.eql;
+                var field_type: types.Type = undefined;
+                if (inner == .named) {
+                    field_type = self.fieldType(inner.named, field.name, line, col) orelse return null;
+                } else if ((types.isStringLike(inner) or types.isArray(inner)) and eql(u8, field.name, "length")) {
+                    // `s?.length` / `xs?.length` — the builtin length under an
+                    // optional chain yields `i32 | null`.
+                    field.builtin = .length;
+                    field_type = .i32;
+                } else if ((types.isMap(inner) or types.isSet(inner)) and eql(u8, field.name, "size")) {
+                    field.builtin = .container_size;
+                    field_type = .i32;
+                } else if (types.isBuffer(inner) and eql(u8, field.name, "length")) {
+                    field.builtin = .buffer_length;
+                    field_type = .i32;
+                } else {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
                 field.chain_field_type = field_type;
                 const p = self.arena.create(types.Type) catch return null;
                 p.* = field_type;
