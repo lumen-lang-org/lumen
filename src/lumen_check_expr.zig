@@ -545,7 +545,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         }
                     }
                     const saved_uninferable = self.current_return_uninferable;
+                    const saved_collected = self.collected_return;
                     self.current_return_uninferable = inferred == .void and check_stmt.firstReturnExpr(block) != null;
+                    self.collected_return = null;
                     self.current_return_type = inferred;
                     body_type = inferred;
                     for (block) |*stmt| {
@@ -554,11 +556,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                             break;
                         };
                     }
+                    // A return type collected during the body check (a return of a
+                    // body-local binding, resolvable now that locals are in scope).
+                    if (body_type != null and self.current_return_uninferable) {
+                        if (self.collected_return) |cr| {
+                            inferred = cr;
+                            body_type = cr;
+                        }
+                    }
                     if (body_type != null and inferred != .void and !check_stmt.blockReturns(block)) {
                         _ = self.fail(line, col, "E_MISSING_RETURN") catch {};
                         body_type = null;
                     }
                     self.current_return_uninferable = saved_uninferable;
+                    self.collected_return = saved_collected;
                 }
                 self.current_return_type = saved_ret;
             } else if (arrow.return_annotation.len > 0) {

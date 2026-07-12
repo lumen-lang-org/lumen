@@ -119,6 +119,9 @@ pub fn checkFunctionBody(self: *Checker, program: *ast.Program, decl: *ast.Funct
         (decl.checked_return_type == null or decl.checked_return_type.? == .void) and
         firstReturnExpr(decl.body) != null;
     defer self.current_return_uninferable = previous_uninferable;
+    const previous_collected = self.collected_return;
+    self.collected_return = null;
+    defer self.collected_return = previous_collected;
     const previous_in_async = self.in_async;
     const previous_in_function = self.in_function;
     self.in_async = decl.is_async;
@@ -147,6 +150,18 @@ pub fn checkFunctionBody(self: *Checker, program: *ast.Program, decl: *ast.Funct
     defer self.nested_stmt_depth -= 1;
     warnUnreachable(self, decl.body);
     for (decl.body) |*body_stmt| try self.checkStmt(program, body_stmt);
+
+    // Finalize an inferred return type collected while checking the body, so
+    // call sites after this declaration observe it (spec 314). Update both the
+    // decl and the `funcs` entry (methods carry the type on the decl alone).
+    if (self.current_return_uninferable) {
+        if (self.collected_return) |cr| {
+            decl.checked_return_type = cr;
+            if (self.funcs.getPtr(decl.name)) |fi| fi.return_type = cr;
+            if (!blockReturns(decl.body)) return self.fail(decl.line, decl.col, "E_MISSING_RETURN");
+            return;
+        }
+    }
 
     // The effective return type: for an async function this is the promise's
     // inner type (`Promise<void>` need not return), set in current_return_type.
@@ -1039,8 +1054,19 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 }
                 return self.fail(ret.line, ret.col, "E_RETURN_TYPE");
             };
-            if (expected_return == .void and self.current_return_uninferable) {
-                return self.fail(ret.line, ret.col, "could not infer this function's return type — add an explicit `: T` return annotation (inference does not yet cover returns of loop/local variables, `this`/class fields, forward-referenced functions, or record types)");
+            if (self.current_return_uninferable) {
+                // Inference mode: the body is checked with full scope, so type
+                // the returned value now and record it. All value returns must
+                // agree; the first one fixes the inferred type.
+                const vt = self.exprType(program, value, ret.line, ret.col) orelse
+                    return self.fail(ret.line, ret.col, "could not infer this function's return type — add an explicit `: T` return annotation");
+                if (self.collected_return) |cr| {
+                    if (!types.same(cr, vt)) return self.failTypeMismatch(ret.line, ret.col, cr, vt);
+                } else {
+                    self.collected_return = vt;
+                }
+                ret.checked_type = self.collected_return;
+                return;
             }
             // ensureAssignable already recorded a detailed expected/got message.
             self.ensureAssignable(program, expected_return, value, ret.line, ret.col) catch return error.ParseError;

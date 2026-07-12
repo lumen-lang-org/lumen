@@ -210,6 +210,12 @@ pub const Checker = struct {
     // guides the user to add an explicit annotation instead of the confusing
     // "expected `void`" mismatch.
     current_return_uninferable: bool = false,
+    // While inferring an un-annotated function/arrow/method whose return type
+    // could not be determined in the declaration pass: each value `return`
+    // records its type here (the body is checked with full scope, so locals and
+    // earlier declarations resolve). After the body, this becomes the return
+    // type. `null` means no value has been returned yet.
+    collected_return: ?types.Type = null,
     // True while checking the body of an `async function` (gates `await`).
     in_async: bool = false,
     // True while checking inside any function/method body (top-level `await` is
