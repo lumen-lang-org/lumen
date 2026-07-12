@@ -487,6 +487,14 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
             try w.appendSlice(arena, ").flags, __s))); })");
             return;
         }
+        if (eq(u8, name, "match")) {
+            try w.print(arena, "break :{s} @as(?[]const []const u8, __lumen_regex.matchRegex(__sa(), (", .{lbl});
+            try emitExpr(mc.args[0], w, arena);
+            try w.appendSlice(arena, ").source, (");
+            try emitExpr(mc.args[0], w, arena);
+            try w.appendSlice(arena, ").flags, __s)); })");
+            return;
+        }
         if (eq(u8, name, "split")) {
             try w.print(arena, "break :{s} @as([]const []const u8, __lumen_regex.splitRegex(__sa(), (", .{lbl});
             try emitExpr(mc.args[0], w, arena);

@@ -535,6 +535,18 @@ pub const __lumen_regex = struct {
     /// `String.prototype.split` with a RegExp separator). Zero-width matches are
     /// skipped to avoid looping, so an empty pattern yields the whole string as
     /// one piece. On a bad pattern the whole input is returned as one piece.
+    /// `String.prototype.match` subset: a one-element slice holding the first
+    /// match's full text, or null when the pattern doesn't match (or is
+    /// malformed). Capture groups are not populated — the engine tracks match
+    /// spans, not per-group spans.
+    pub fn matchRegex(a: __re_std.mem.Allocator, pattern: []const u8, flags: []const u8, input: []const u8) ?[]const []const u8 {
+        const c = __reCompilePattern(a, pattern, flags) orelse return null;
+        const m = __reFind(c, input, 0) orelse return null;
+        const out = a.alloc([]const u8, 1) catch return null;
+        out[0] = input[m.start..m.end];
+        return out;
+    }
+
     pub fn splitRegex(a: __re_std.mem.Allocator, pattern: []const u8, flags: []const u8, input: []const u8) []const []const u8 {
         var parts: __re_std.ArrayListUnmanaged([]const u8) = .empty;
         const c = __reCompilePattern(a, pattern, flags) orelse {
