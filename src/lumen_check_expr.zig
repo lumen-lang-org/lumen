@@ -280,6 +280,15 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         .cmp => |*cmp| {
             const left_type = self.exprType(program, cmp.l, line, col) orelse return null;
             const right_type = self.exprType(program, cmp.r, line, col) orelse return null;
+            // An enum compared against its backing scalar (spec 294): the enum
+            // lowers to that value, so compare as the backing type.
+            if ((left_type == .enum_type and types.same(right_type, enumBacking(left_type))) or
+                (right_type == .enum_type and types.same(left_type, enumBacking(right_type))))
+            {
+                cmp.checked_operand_type = if ((left_type == .enum_type and left_type.enum_type.is_string) or
+                    (right_type == .enum_type and right_type.enum_type.is_string)) .string else .i32;
+                return .bool;
+            }
             if ((std.mem.eql(u8, cmp.op, "==") or std.mem.eql(u8, cmp.op, "!=")) and types.isStringLike(left_type) and types.isStringLike(right_type)) {
                 cmp.checked_operand_type = .string;
                 return .bool;
@@ -558,7 +567,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         .template => |parts| {
             for (parts) |*part| {
                 if (part.expr) |hole| {
-                    const ht = self.exprType(program, hole, line, col) orelse return null;
+                    // An enum interpolates as its backing type (spec 294).
+                    const ht = enumBacking(self.exprType(program, hole, line, col) orelse return null);
                     if (!types.isStringLike(ht) and !types.isNumeric(ht) and ht != .bool) {
                         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
