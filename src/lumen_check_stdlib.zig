@@ -95,6 +95,23 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         return res;
     }
 
+    // flat(): T[] on a T[][] — concatenate the inner arrays into one (spec 301).
+    if (eq(u8, name, "flat")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "'flat' expects no arguments (one level of flattening)") catch {};
+            return null;
+        }
+        if (!types.isArray(elem)) {
+            const tn = types.tsName(self.arena, obj_type) catch "?";
+            const msg = std.fmt.allocPrint(self.arena, "`.flat()` needs an array of arrays, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+            _ = self.fail(line, col, msg) catch {};
+            return null;
+        }
+        mc.array_result_type = elem;
+        mc.array_elem_type = elem;
+        return elem;
+    }
+
     // flatMap((T) => U[]): U[] — the callback returns an array per element; the
     // results are concatenated into one flat array. The optional second callback
     // parameter is the element index.
@@ -428,7 +445,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         _ = self.fail(line, col, msg) catch {};
         return null;
     }
-    _ = self.failUnknownMethod(line, col, "array", mc.name, &.{ "map", "filter", "find", "findIndex", "findLast", "findLastIndex", "forEach", "some", "every", "reduce", "reduceRight", "flatMap", "includes", "indexOf", "lastIndexOf", "join", "toString", "slice", "concat", "reverse", "sort", "toSorted", "at", "fill", "with", "copyWithin", "entries", "keys", "values" }) catch {};
+    _ = self.failUnknownMethod(line, col, "array", mc.name, &.{ "map", "filter", "find", "findIndex", "findLast", "findLastIndex", "forEach", "some", "every", "reduce", "reduceRight", "flat", "flatMap", "includes", "indexOf", "lastIndexOf", "join", "toString", "slice", "concat", "reverse", "sort", "toSorted", "at", "fill", "with", "copyWithin", "entries", "keys", "values" }) catch {};
     return null;
 }
 

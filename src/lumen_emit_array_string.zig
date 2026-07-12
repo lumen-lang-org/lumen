@@ -97,6 +97,16 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
         return;
     }
 
+    if (eq(u8, name, "flat")) {
+        // Concatenate each inner array into one flat result (spec 301).
+        const u = types.arrayElem(result) orelse return error.ParseError;
+        const u_zig = try types.zigName(arena, u);
+        try w.print(arena, "({s}: {{ const __arr = ", .{lbl});
+        try emitArrayObj(mc, w, arena);
+        try w.print(arena, "; var __r: std.ArrayListUnmanaged({s}) = .empty; for (__arr) |__e| {{ __r.appendSlice(__sa(), __e) catch unreachable; }} break :{s} @as([]const {s}, __r.items); }})", .{ u_zig, lbl, u_zig });
+        return;
+    }
+
     if (eq(u8, name, "flatMap")) {
         // Concatenate each callback's returned array into one flat result.
         const u = types.arrayElem(result) orelse return error.ParseError;
