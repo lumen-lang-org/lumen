@@ -318,6 +318,14 @@ pub const Parser = struct {
         }
         if (eq(u8, kw, "switch")) return self.parseSwitch(line, col);
         if (eq(u8, kw, "class")) return self.parseClassDecl(line, col);
+        if (eq(u8, kw, "abstract")) {
+            self.last_err = "abstract classes are not supported yet — use an `interface` for the contract a subclass must implement, or a base class with concrete methods";
+            return error.ParseError;
+        }
+        if (eq(u8, kw, "namespace") or eq(u8, kw, "module")) {
+            self.last_err = "namespaces are not supported — organize code into files and use `import`/`export`";
+            return error.ParseError;
+        }
 
         // `this.field = value;` (member assignment) or `this.method(args);`
         if (eq(u8, kw, "this")) {

@@ -256,6 +256,11 @@ pub fn parseEnumDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
 
 pub fn parseFunctionDecl(self: *Parser, line: u32, col: u32, is_async: bool) CompileError!Stmt {
     try self.advance();
+    // `function*` — a generator. Not supported; guide toward an array/iterator.
+    if (self.isOp('*')) {
+        self.last_err = "generator functions (`function*`/`yield`) are not supported — return an array, or build values into one";
+        return error.ParseError;
+    }
     if (self.cur != .ident) return error.ParseError;
     const name = self.cur.ident;
     try self.advance();
