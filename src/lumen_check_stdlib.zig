@@ -985,21 +985,29 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const first_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        if (!types.isNumeric(first_type)) {
+        // Determine the widest numeric type across all arguments (`f64` beats
+        // `i64` beats `i32`), so `Math.max(1.5, 3)` folds at `f64` — matching JS
+        // where every numeric literal is `number`. Then check each argument
+        // against it, widening integer literals/values as needed.
+        var widest = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isNumeric(widest)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
         for (call.args[1..]) |arg| {
             const at = self.exprType(program, arg, line, col) orelse return null;
-            if (!types.same(first_type, at)) {
+            if (!types.isNumeric(at)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             }
+            if (at == .f64) widest = .f64 else if (at == .i64 and widest != .f64) widest = .i64;
         }
-        call.checked_arg_type = first_type;
-        call.checked_type = first_type;
-        return first_type;
+        for (call.args) |arg| {
+            self.ensureAssignable(program, widest, arg, line, col) catch return null;
+        }
+        call.checked_arg_type = widest;
+        call.checked_type = widest;
+        return widest;
     }
     if (std.mem.eql(u8, call.name, "clamp")) {
         if (call.args.len != 3) {
