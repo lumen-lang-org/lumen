@@ -1293,7 +1293,10 @@ pub fn findClass(name: []const u8) ?*const ast.ClassDecl {
 /// (which carry captures) and value-less types are excluded.
 fn promotableType(t: types.Type) bool {
     return switch (t) {
-        .func_type, .void, .none => false,
+        // A top-level arrow/function value (`const f = (x) => ...`) referenced
+        // inside a function is promoted like any other binding: its fat-pointer
+        // struct is declared `undefined` at module scope and assigned in `main`.
+        .void, .none => false,
         else => true,
     };
 }
