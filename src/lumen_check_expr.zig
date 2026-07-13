@@ -547,6 +547,17 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         return opt;
                     }
                 }
+                // One branch `i32[]`, the other `number[]` (`f64[]`): widen the
+                // integer array to `f64[]` so both branches share a type (spec
+                // 415), mirroring the assignment-position widening.
+                if ((then_type == .i32_array and else_type == .f64_array) or (then_type == .f64_array and else_type == .i32_array)) {
+                    const int_branch = if (then_type == .i32_array) ternary.then_expr else ternary.else_expr;
+                    const inner = self.arena.create(ast.Expr) catch return null;
+                    inner.* = int_branch.*;
+                    int_branch.* = .{ .cast = .{ .inner = inner, .annotation = "number[]", .checked_type = .f64_array, .int_array_to_float = true } };
+                    ternary.result_type = .f64_array;
+                    return .f64_array;
+                }
                 _ = self.failTypeMismatch(line, col, then_type, else_type) catch {};
                 return null;
             }
