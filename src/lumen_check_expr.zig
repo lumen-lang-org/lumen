@@ -1211,6 +1211,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             }
             if (std.mem.eql(u8, ne.class_name, "Set") and self.classes.get("Set") == null) {
                 const set_elem = self.arena.create(types.Type) catch return null;
+                // `new Set(otherSet)` copies another set: rewrite the source to
+                // `Array.from(otherSet)` so it flows through the array-source
+                // path (element inference, checking, and the copy-loop emit).
+                if (ne.args.len == 1) {
+                    if (self.exprType(program, ne.args[0], line, col)) |at0| {
+                        if (at0 == .set_type) {
+                            const from_call = self.arena.create(ast.Expr) catch return null;
+                            const from_args = self.arena.alloc(*ast.Expr, 1) catch return null;
+                            from_args[0] = ne.args[0];
+                            from_call.* = .{ .static_call = .{ .namespace = "Array", .name = "from", .args = from_args } };
+                            ne.args[0] = from_call;
+                        }
+                    }
+                }
                 if (ne.type_args.len == 1) {
                     set_elem.* = self.typeFromAnnotation(ne.type_args[0], line, col) catch return null;
                 } else if (ne.type_args.len == 0 and ne.args.len == 1) {
