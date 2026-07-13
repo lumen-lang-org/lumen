@@ -304,7 +304,7 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
     }
     try self.expectOp('}');
     if (self.isOp(';')) try self.advance();
-    return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .type_params = type_params, .parents = try parents.toOwnedSlice(self.arena), .line = line, .col = col } };
+    return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .type_params = type_params, .parents = try parents.toOwnedSlice(self.arena), .is_interface = true, .line = line, .col = col } };
 }
 
 /// Constant-fold a numeric enum member initializer over integer literals,

@@ -33,7 +33,34 @@ const TypeDeclInfo = struct {
     fields: []ast.TypeField,
     string_literals: ?[][]const u8 = null,
     int_literals: ?[]i64 = null,
+    // An `interface` with at least one method member — used polymorphically as a
+    // fat pointer + vtable when classes implement it (spec 428).
+    is_iface: bool = false,
 };
+
+/// True for a type-field member that is a method signature (annotation `(…)=>R`).
+fn isMethodField(f: ast.TypeField) bool {
+    return std.mem.indexOf(u8, f.annotation, "=>") != null;
+}
+
+/// True when a declared interface has at least one method member.
+fn ifaceHasMethods(fields: []const ast.TypeField) bool {
+    for (fields) |f| {
+        if (isMethodField(f)) return true;
+    }
+    return false;
+}
+
+/// True when a class provides every method member of an interface (so a class
+/// instance can coerce into the interface's fat pointer). Spec 428.
+pub fn classImplements(self: *Checker, class_name: []const u8, iface_name: []const u8) bool {
+    const decl = self.type_decls.get(iface_name) orelse return false;
+    for (decl.fields) |f| {
+        if (!isMethodField(f)) continue;
+        if (self.resolveMethod(class_name, f.name) == null) return false;
+    }
+    return true;
+}
 
 /// One variant of a discriminated union: its record name and the discriminant
 /// literal value that selects it.
@@ -706,9 +733,9 @@ pub const Checker = struct {
         scope.put(self.arena, name, .{ .ty = .error_obj, .mutable = false, .emit_name = emit_name }) catch return error.OutOfMemory;
     }
 
-    fn declareType(self: *Checker, name: []const u8, fields: []ast.TypeField, string_literals: ?[][]const u8, int_literals: ?[]i64, line: u32, col: u32) CompileError!void {
+    fn declareType(self: *Checker, name: []const u8, fields: []ast.TypeField, string_literals: ?[][]const u8, int_literals: ?[]i64, is_iface: bool, line: u32, col: u32) CompileError!void {
         if (self.type_decls.get(name) != null) return self.fail(line, col, "E_DUPLICATE_BINDING");
-        self.type_decls.put(self.arena, name, .{ .fields = fields, .string_literals = string_literals, .int_literals = int_literals }) catch return error.OutOfMemory;
+        self.type_decls.put(self.arena, name, .{ .fields = fields, .string_literals = string_literals, .int_literals = int_literals, .is_iface = is_iface and ifaceHasMethods(fields) }) catch return error.OutOfMemory;
     }
 
     /// Resolve an alias target annotation, following nested aliases up to a depth
@@ -1177,6 +1204,9 @@ pub const Checker = struct {
         if (self.type_decls.get(annotation)) |decl| {
             if (decl.string_literals != null) return .{ .string_literal_union = annotation };
             if (decl.int_literals != null) return .{ .int_literal_union = annotation };
+            // A method-bearing interface used as a value type is a polymorphic
+            // fat pointer, not a structural record (spec 428).
+            if (decl.is_iface) return .{ .iface_type = annotation };
         }
         return types.fromAnnotation(annotation);
     }
@@ -1527,7 +1557,7 @@ pub const Checker = struct {
                     td.fields = out;
                     td.mapped_keys = null; // now a plain record for emit + reuse
                 }
-                try self.declareType(stmt.type_decl.name, stmt.type_decl.fields, stmt.type_decl.string_literals, stmt.type_decl.int_literals, stmt.type_decl.line, stmt.type_decl.col);
+                try self.declareType(stmt.type_decl.name, stmt.type_decl.fields, stmt.type_decl.string_literals, stmt.type_decl.int_literals, stmt.type_decl.is_interface, stmt.type_decl.line, stmt.type_decl.col);
             }
         }
         // Union pass: variants must already be declared records sharing a single
@@ -1560,6 +1590,17 @@ pub const Checker = struct {
         }
         for (program.stmts) |*stmt| {
             if (stmt.* == .class_decl and stmt.class_decl.type_params.len == 0) try self.fillClassTypes(program, &stmt.class_decl);
+        }
+        // Resolve each interface method member's signature (`(…)=>R`) to a
+        // `func_type` so the emitter can build the vtable + fat pointer (spec 428).
+        for (program.stmts) |*stmt| {
+            if (stmt.* == .type_decl and stmt.type_decl.is_interface) {
+                for (stmt.type_decl.fields) |*f| {
+                    if (isMethodField(f.*) and f.checked_type == null) {
+                        f.checked_type = self.typeFromAnnotation(f.annotation, stmt.type_decl.line, stmt.type_decl.col) catch null;
+                    }
+                }
+            }
         }
         for (program.stmts) |*stmt| {
             if (stmt.* == .extern_decl) try self.declareExtern(&stmt.extern_decl);

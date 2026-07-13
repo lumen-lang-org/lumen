@@ -251,6 +251,8 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     }
 
     try decls.appendSlice(arena, "};\n");
+    // Per-interface vtables for polymorphic dispatch (spec 428).
+    try emitClassVtables(c, decls, arena);
 }
 
 /// Whether any instance field in the chain is optional with no initializer
@@ -401,5 +403,63 @@ pub fn collectSuperInExpr(c: *const ast.ClassDecl, e: *const Expr, decls: *std.A
         .call => |cl| for (cl.args) |a| try collectSuperInExpr(c, a, decls, arena, seen, throw_target, switch_break_target, options),
         .field => |f| try collectSuperInExpr(c, f.obj, decls, arena, seen, throw_target, switch_break_target, options),
         else => {},
+    }
+}
+
+// ===== Interface polymorphism (spec 428) =====
+
+/// Find an interface declaration's method fields by name in the program.
+fn ifaceMethods(name: []const u8) ?[]const ast.TypeField {
+    const prog = emit_mod.g_program orelse return null;
+    for (prog.stmts) |*stmt| {
+        if (stmt.* == .type_decl and stmt.type_decl.is_interface and std.mem.eql(u8, stmt.type_decl.name, name)) {
+            return stmt.type_decl.fields;
+        }
+    }
+    return null;
+}
+
+/// Emit an interface's vtable type and fat-pointer struct:
+///   const VT_<Name> = struct { m: *const fn(*anyopaque, P...) R, ... };
+///   const LumenIface_<Name> = struct { __ptr: *anyopaque, __vt: *const VT_<Name> };
+pub fn emitIfaceDecl(decl: *const ast.TypeDecl, decls: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    try decls.print(arena, "const VT_{s} = struct {{\n", .{decl.name});
+    for (decl.fields) |f| {
+        const ft = f.checked_type orelse continue;
+        if (ft != .func_type) continue;
+        try decls.appendSlice(arena, "    ");
+        try emit_mod.emitFieldName(decls, arena, f.name);
+        try decls.appendSlice(arena, ": *const fn (*anyopaque");
+        for (ft.func_type.params) |p| try decls.print(arena, ", {s}", .{try types.zigName(arena, p)});
+        try decls.print(arena, ") {s},\n", .{try types.zigName(arena, ft.func_type.ret.*)});
+    }
+    try decls.appendSlice(arena, "};\n");
+    try decls.print(arena, "const LumenIface_{s} = struct {{ __ptr: *anyopaque, __vt: *const VT_{s} }};\n", .{ decl.name, decl.name });
+}
+
+/// Emit the per-(class, interface) vtable instances for every interface a class
+/// implements: each method entry is a wrapper that casts the erased `*anyopaque`
+/// back to `*Class` and calls the real method.
+pub fn emitClassVtables(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    for (c.implements) |iface| {
+        const methods = ifaceMethods(iface) orelse continue;
+        try decls.print(arena, "const __vt_{s}_{s}: VT_{s} = .{{\n", .{ c.name, iface, iface });
+        for (methods) |f| {
+            const ft = f.checked_type orelse continue;
+            if (ft != .func_type) continue;
+            try decls.appendSlice(arena, "    .");
+            try emit_mod.emitFieldName(decls, arena, f.name);
+            try decls.appendSlice(arena, " = &struct {\n        fn __w(__p: *anyopaque");
+            for (ft.func_type.params, 0..) |p, i| try decls.print(arena, ", __a{d}: {s}", .{ i, try types.zigName(arena, p) });
+            try decls.print(arena, ") {s} {{\n            return @as(*{s}, @ptrCast(@alignCast(__p))).", .{ try types.zigName(arena, ft.func_type.ret.*), c.name });
+            try emit_mod.emitFieldName(decls, arena, f.name);
+            try decls.appendSlice(arena, "(");
+            for (ft.func_type.params, 0..) |_, i| {
+                if (i > 0) try decls.appendSlice(arena, ", ");
+                try decls.print(arena, "__a{d}", .{i});
+            }
+            try decls.appendSlice(arena, ");\n        }\n    }.__w,\n");
+        }
+        try decls.appendSlice(arena, "};\n");
     }
 }

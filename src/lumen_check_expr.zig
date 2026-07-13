@@ -1473,6 +1473,41 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return self.exprType(program, e, line, col);
                 }
             }
+            // A method call on an interface-typed receiver dispatches through the
+            // interface's vtable (spec 428). Look the method up among the
+            // interface's members and return its declared return type.
+            if (obj_type == .iface_type) {
+                const iname = obj_type.iface_type;
+                const decl = self.type_decls.get(iname) orelse {
+                    _ = self.fail(line, col, "unknown interface") catch {};
+                    return null;
+                };
+                var msig: ?types.Type = null;
+                for (decl.fields) |f| {
+                    if (std.mem.eql(u8, f.name, mc.name)) {
+                        msig = f.checked_type orelse (self.typeFromAnnotation(f.annotation, line, col) catch null);
+                    }
+                }
+                const sig = msig orelse {
+                    var known: std.ArrayListUnmanaged([]const u8) = .empty;
+                    for (decl.fields) |f| known.append(self.arena, f.name) catch {};
+                    _ = self.failUnknownMethod(line, col, iname, mc.name, known.items) catch {};
+                    return null;
+                };
+                if (sig != .func_type) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                if (mc.args.len != sig.func_type.params.len) {
+                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                    return null;
+                }
+                for (mc.args, sig.func_type.params) |arg, pt| {
+                    self.ensureAssignable(program, pt, arg, line, col) catch return null;
+                }
+                mc.iface_name = iname;
+                return sig.func_type.ret.*;
+            }
             if (obj_type != .class_type) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
@@ -2105,6 +2140,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // checker may re-run over the same node). Return it directly rather
             // than re-validating the (disallowed) `i32[] as f64[]` assertion.
             if (c.int_array_to_float) return c.checked_type orelse .f64_array;
+            // A class-into-interface fat-pointer wrap (spec 428) carries its
+            // resolved `iface_type`; return it directly (idempotent re-typing).
+            if (c.iface_class != null) return c.checked_type;
             // `expr as const` -- a const assertion. Lumen has no value-level
             // literal types, so it is an identity assertion: keep the operand's
             // own type instead of resolving `const` as a (nonexistent) type.

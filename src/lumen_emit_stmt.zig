@@ -401,6 +401,16 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 return;
             }
             if (decl.type_params.len > 0) return; // generic template: only specializations emit
+            // A method-bearing interface lowers to a vtable type + fat-pointer
+            // struct for polymorphic dispatch, not a plain record (spec 428).
+            if (decl.is_interface) {
+                for (decl.fields) |f| {
+                    if (f.checked_type != null and f.checked_type.? == .func_type) {
+                        try emit_class.emitIfaceDecl(&decl, decls, arena);
+                        return;
+                    }
+                }
+            }
             try decls.print(arena, "const {s} = struct {{\n", .{decl.name});
             for (decl.fields) |field| {
                 const field_type = field.checked_type orelse return error.ParseError;

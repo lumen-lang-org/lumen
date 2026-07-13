@@ -74,6 +74,10 @@ pub const TypeDecl = struct {
     mapped_key: ?[]const u8 = null,
     mapped_optional: bool = false,
     mapped_readonly: bool = false,
+    // Declared with the `interface` keyword. An interface with method members is
+    // used polymorphically (a fat pointer + vtable) when classes implement it
+    // (spec 428); a data-only interface stays a structural record.
+    is_interface: bool = false,
     line: u32,
     col: u32,
 };
@@ -602,7 +606,7 @@ pub const Expr = union(enum) {
     this_expr, // `this` inside a method/constructor
     super_call: struct { name: []const u8, args: []*Expr, parent: ?[]const u8 = null }, // super.m(args)
     new_expr: struct { class_name: []const u8, args: []*Expr, type_args: [][]const u8 = &.{}, container_type: ?types.Type = null }, // new C(args) / new C<T>(args) / new Map/Set<...>()
-    method_call: struct { obj: *Expr, name: []const u8, args: []*Expr, class_name: ?[]const u8 = null, is_static: bool = false, array_elem_type: ?types.Type = null, array_acc_type: ?types.Type = null, array_result_type: ?types.Type = null, string_method: bool = false, container_type: ?types.Type = null, optional_chain: bool = false, chain_result_type: ?types.Type = null, cb_wants_index: bool = false, number_method: bool = false, is_console: bool = false, regex_arg: bool = false, sized_fill: bool = false, bool_method: bool = false }, // obj.m(args) / Class.m(args) / Map|Set method; is_console: console.log/error/... used as a void expression; regex_arg: a string method (replace) whose first arg is a regex; sized_fill: `new Array(n).fill(v)` fused initializer
+    method_call: struct { obj: *Expr, name: []const u8, args: []*Expr, class_name: ?[]const u8 = null, is_static: bool = false, array_elem_type: ?types.Type = null, array_acc_type: ?types.Type = null, array_result_type: ?types.Type = null, string_method: bool = false, container_type: ?types.Type = null, optional_chain: bool = false, chain_result_type: ?types.Type = null, cb_wants_index: bool = false, number_method: bool = false, is_console: bool = false, regex_arg: bool = false, sized_fill: bool = false, bool_method: bool = false, iface_name: ?[]const u8 = null }, // obj.m(args) / Class.m(args) / Map|Set method; is_console: console.log/error/... used as a void expression; regex_arg: a string method (replace) whose first arg is a regex; sized_fill: `new Array(n).fill(v)` fused initializer
     template: []TemplatePart, // `text ${expr} ...`
     obj: []FieldInit,
     field: struct { obj: *Expr, name: []const u8, builtin: ?FieldBuiltin = null, enum_value: ?EnumValue = null, optional_chain: bool = false, chain_field_type: ?types.Type = null, class_name: ?[]const u8 = null, is_static: bool = false, is_getter: bool = false, builtin_const: ?[]const u8 = null, unwrap: bool = false }, // builtin_const: a namespace constant (e.g. Math.PI) emitted as a raw Zig f64 literal
@@ -610,7 +614,7 @@ pub const Expr = union(enum) {
     call: struct { name: []const u8, args: []*Expr, emit_name: ?[]const u8 = null, is_closure: bool = false, type_args: [][]const u8 = &.{}, ffi_string_args: []bool = &.{}, ffi_string_return: bool = false, ref_args: []bool = &.{}, is_into_call: bool = false, is_global_parse: bool = false }, // builtin / user / function-value call; type_args from explicit f<T>(...). ffi_* mark a call to an `extern function` so the FFI string marshalling glue is emitted. ref_args[i] true emits `&arg` for a by-reference (`Ref<T>`) parameter. is_into_call: a builder call appended into an accumulator -> emit `f__into(dest, args)`.
     optional_call: struct { callee: *Expr, args: []*Expr, optional_chain: bool = false, chain_result_type: ?types.Type = null }, // `a?.()` (spec 062) -- calling a possibly-null closure value directly, no name involved. callee's static type must be `optional` wrapping `func_type`; short-circuits to null like `a?.b`/`a?.[i]`.
     static_call: StaticCall,
-    cast: struct { inner: *Expr, annotation: []const u8, checked_type: ?types.Type = null, is_satisfies: bool = false, float_to_int: bool = false, int_array_to_float: bool = false }, // `expr as T` (safe-subset assertion; erased at emit). is_satisfies: `expr satisfies T` (spec 052) -- checks assignability to T but keeps expr's own narrower type. float_to_int: `<f64> as i32/i64` truncates at emit. int_array_to_float: `i32[]` value flowing into a `number[]` slot -> elementwise @floatFromInt copy (spec 415)
+    cast: struct { inner: *Expr, annotation: []const u8, checked_type: ?types.Type = null, is_satisfies: bool = false, float_to_int: bool = false, int_array_to_float: bool = false, iface_class: ?[]const u8 = null }, // `expr as T`. iface_class: a class instance wrapped into an interface fat pointer (spec 428) — the source class name; checked_type is the `iface_type` (safe-subset assertion; erased at emit). is_satisfies: `expr satisfies T` (spec 052) -- checks assignability to T but keeps expr's own narrower type. float_to_int: `<f64> as i32/i64` truncates at emit. int_array_to_float: `i32[]` value flowing into a `number[]` slot -> elementwise @floatFromInt copy (spec 415)
 };
 
 pub const FieldBuiltin = enum {

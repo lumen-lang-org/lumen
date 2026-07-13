@@ -331,6 +331,21 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
+        .iface_type => |iface_name| {
+            const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
+            // Same interface flows through directly.
+            if (actual_type == .iface_type and std.mem.eql(u8, actual_type.iface_type, iface_name)) return;
+            // A class instance implementing the interface coerces into its fat
+            // pointer: wrap it in an `iface_class` cast the emitter lowers to a
+            // `{ __ptr, __vt }` value (spec 428).
+            if (actual_type == .class_type and check_mod.classImplements(self, actual_type.class_type, iface_name)) {
+                const inner = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                inner.* = value.*;
+                value.* = .{ .cast = .{ .inner = inner, .annotation = iface_name, .checked_type = expected, .iface_class = actual_type.class_type } };
+                return;
+            }
+            return self.failTypeMismatch(line, col, expected, actual_type);
+        },
         else => {
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
             // An enum member assigns to its backing type (spec 294): a numeric

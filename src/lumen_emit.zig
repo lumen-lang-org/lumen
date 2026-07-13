@@ -729,6 +729,24 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             if (ctor_throws) try emitThrowingCallSuffix(w, arena);
         },
         .method_call => |mc| {
+            // Interface method dispatch (spec 428): bind the fat pointer once,
+            // then call through its vtable with the erased instance pointer.
+            if (mc.iface_name) |_| {
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__id{d}: {{ const __rcv = ", .{s});
+                try emitExpr(mc.obj, w, arena);
+                try w.appendSlice(arena, "; break :__id");
+                try w.print(arena, "{d} __rcv.__vt.", .{s});
+                try emitFieldName(w, arena, mc.name);
+                try w.appendSlice(arena, "(__rcv.__ptr");
+                for (mc.args) |arg| {
+                    try w.appendSlice(arena, ", ");
+                    try emitExpr(arg, w, arena);
+                }
+                try w.appendSlice(arena, "); })");
+                return;
+            }
             if (mc.sized_fill) {
                 // `new Array(n).fill(v)` / `Array(n).fill(v)`: allocate an
                 // n-length slice and memset every element to v.
@@ -1208,6 +1226,15 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, "@as({s}, @intFromFloat(@trunc(", .{ity});
                 try emitExpr(c.inner, w, arena);
                 try w.appendSlice(arena, ")))");
+                return;
+            }
+            // A class instance wrapped into an interface fat pointer (spec 428):
+            // `LumenIface_<Iface>{ .__ptr = @ptrCast(<instance>), .__vt = &__vt_<Class>_<Iface> }`.
+            if (c.iface_class) |class_name| {
+                const iface_name = (c.checked_type orelse return error.ParseError).iface_type;
+                try w.print(arena, "LumenIface_{s}{{ .__ptr = @ptrCast(", .{iface_name});
+                try emitExpr(c.inner, w, arena);
+                try w.print(arena, "), .__vt = &__vt_{s}_{s} }}", .{ class_name, iface_name });
                 return;
             }
             // An `i32[]` value flowing into a `number[]` slot: copy each element

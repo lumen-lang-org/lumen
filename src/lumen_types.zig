@@ -44,6 +44,8 @@ pub const Type = union(enum) {
     none, // the bare null/undefined literal, assignable to any optional
     func_type: *const FuncSig, // (A, B) => R  ->  Zig *const fn(A, B) R
     class_type: []const u8, // a class instance  ->  Zig *Name (heap pointer)
+    iface_type: []const u8, // an interface value (with methods)  ->  a fat pointer
+    // `LumenIface_<Name>{ __ptr, __vt }` dispatched through a per-class vtable (spec 428)
     map_type: *const MapType, // Map<K, V>  ->  *LumenMap_<k>_<v> (heap pointer)
     set_type: *const Type, // Set<T>  ->  *LumenSet_<t> (heap pointer)
     event_emitter_type: *const Type, // EventEmitter<T>  ->  *LumenEventEmitter_<t> (heap pointer)
@@ -128,6 +130,7 @@ fn mangle(arena: std.mem.Allocator, t: Type) error{OutOfMemory}![]const u8 {
         .enum_type => |e| try std.fmt.allocPrint(arena, "enum_{s}", .{e.name}),
         .optional => |inner| try std.fmt.allocPrint(arena, "opt_{s}", .{try mangle(arena, inner.*)}),
         .class_type => |n| try std.fmt.allocPrint(arena, "cls_{s}", .{n}),
+        .iface_type => |n| try std.fmt.allocPrint(arena, "if_{s}", .{n}),
         .map_type => |m| try std.fmt.allocPrint(arena, "map_{s}_{s}", .{ try mangle(arena, m.key.*), try mangle(arena, m.value.*) }),
         .set_type => |elem| try std.fmt.allocPrint(arena, "set_{s}", .{try mangle(arena, elem.*)}),
         .event_emitter_type => |elem| try std.fmt.allocPrint(arena, "eventemitter_{s}", .{try mangle(arena, elem.*)}),
@@ -271,6 +274,10 @@ pub fn same(a: Type, b: Type) bool {
         .none => b == .none,
         .class_type => |a_name| switch (b) {
             .class_type => |b_name| std.mem.eql(u8, a_name, b_name),
+            else => false,
+        },
+        .iface_type => |a_name| switch (b) {
+            .iface_type => |b_name| std.mem.eql(u8, a_name, b_name),
             else => false,
         },
         .func_type => |a_sig| switch (b) {
@@ -459,6 +466,7 @@ pub fn toAnnotation(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?[]con
         .nested_array => |inner| if (try toAnnotation(arena, inner.*)) |ia| try std.fmt.allocPrint(arena, "{s}[]", .{ia}) else null,
         .union_type => |n| n,
         .class_type => |n| n,
+        .iface_type => |n| n,
         .enum_type => |e| e.name,
         .string_literal_union => |n| n,
         .int_literal_union => |n| n,
@@ -607,6 +615,7 @@ pub fn tsName(arena: std.mem.Allocator, t: Type) ![]const u8 {
             break :blk buf.items;
         },
         .class_type => |name| name,
+        .iface_type => |name| name,
         .map_type => |m| try std.fmt.allocPrint(arena, "Map<{s}, {s}>", .{ try tsName(arena, m.key.*), try tsName(arena, m.value.*) }),
         .set_type => |elem| try std.fmt.allocPrint(arena, "Set<{s}>", .{try tsName(arena, elem.*)}),
         .event_emitter_type => "EventEmitter",
@@ -656,6 +665,7 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .none => "?u8", // defensive; a bare null is only valid in an optional context
         .func_type => |sig| try funcStructName(arena, sig.*),
         .class_type => |name| try std.fmt.allocPrint(arena, "*{s}", .{name}),
+        .iface_type => |name| try std.fmt.allocPrint(arena, "LumenIface_{s}", .{name}),
         .map_type => |m| try std.fmt.allocPrint(arena, "*LumenMap({s}, {s})", .{ try zigName(arena, m.key.*), try zigName(arena, m.value.*) }),
         .set_type => |elem| try std.fmt.allocPrint(arena, "*LumenSet({s})", .{try zigName(arena, elem.*)}),
         .event_emitter_type => |elem| try std.fmt.allocPrint(arena, "*LumenEventEmitter({s})", .{try zigName(arena, elem.*)}),
