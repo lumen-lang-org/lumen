@@ -788,10 +788,43 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
                 if (elem_type) |et| {
                     if (!types.same(et, this_elem)) {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                        return null;
+                        // Numeric literals mix widths (`[...f64arr, 2]`,
+                        // `[0, ...f64arr]`): unify at the wider numeric type
+                        // (`f64` > `i64` > `i32`) rather than rejecting, matching
+                        // JS where every numeric literal is `number`.
+                        if (types.isNumeric(et) and types.isNumeric(this_elem)) {
+                            if (this_elem == .f64 or et == .f64) {
+                                elem_type = .f64;
+                            } else if (this_elem == .i64 or et == .i64) {
+                                elem_type = .i64;
+                            }
+                        } else {
+                            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                            return null;
+                        }
                     }
                 } else elem_type = this_elem;
+            }
+            // If numeric widening changed the element type, re-check each entry
+            // against it: non-spread items get their integer literals widened;
+            // a spread whose element can't widen (an `i32[]` into an `f64[]`) is
+            // rejected with a clear type-mismatch, since converting an already-
+            // typed array elementwise is not a cheap coercion.
+            if (elem_type) |et| {
+                if (types.isNumeric(et)) {
+                    for (items) |item| {
+                        if (item.* == .spread) {
+                            const st = self.exprType(program, item.spread, line, col) orelse return null;
+                            const se = types.arrayElem(st) orelse continue;
+                            if (!types.same(se, et)) {
+                                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                                return null;
+                            }
+                        } else {
+                            self.ensureAssignable(program, et, item, line, col) catch return null;
+                        }
+                    }
+                }
             }
             const result = types.arrayOf(elem_type.?) orelse blk_nested: {
                 // An array of arrays (`[[1],[2]]`): the element is itself an
