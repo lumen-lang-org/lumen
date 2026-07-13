@@ -852,9 +852,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
             }
             const result = types.arrayOf(elem_type.?) orelse blk_nested: {
-                // An array of arrays (`[[1],[2]]`): the element is itself an
-                // array, needing a heap-allocated inner Type (spec 289).
-                if (types.isArray(elem_type.?)) {
+                // An array whose element needs a heap-allocated inner Type: an
+                // array (`[[1],[2]]`, spec 289) or an enum member array
+                // (`[Status.A, Status.B]` — the enum lowers to its i32/string
+                // backing, but the element type must stay `Status` so `for…of`
+                // and calls keep the enum type).
+                if (types.isArray(elem_type.?) or elem_type.? == .enum_type) {
                     const p = self.arena.create(types.Type) catch return null;
                     p.* = elem_type.?;
                     break :blk_nested types.Type{ .nested_array = p };
