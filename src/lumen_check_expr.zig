@@ -295,18 +295,11 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         .bool_bin => |bin| {
             const left_type = self.exprType(program, bin.l, line, col) orelse return null;
             // `x != null && <uses x>` narrows x on the right of && (and the
-            // symmetric `x == null || <uses x>` on the right of ||).
-            var short_narrowed = false;
-            if (self.narrowTarget(bin.l)) |nt| {
-                const wants_then = std.mem.eql(u8, bin.op, "&&");
-                if (nt.in_then == wants_then) {
-                    self.narrowed.append(self.arena, nt.name) catch return null;
-                    short_narrowed = true;
-                }
-            }
-            defer if (short_narrowed) {
-                self.narrowed.items.len -= 1;
-            };
+            // symmetric `x == null || <uses x>` on the right of ||). Every
+            // null-check in the left `&&`-chain narrows, so `x != null &&
+            // y != null && x > y` sees both x and y non-null on the right.
+            const pushed = self.collectAndNullChecks(bin.l, std.mem.eql(u8, bin.op, "&&"));
+            defer self.narrowed.items.len -= pushed;
             const right_type = self.exprType(program, bin.r, line, col) orelse return null;
             if (!types.same(.bool, left_type) or !types.same(.bool, right_type)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};

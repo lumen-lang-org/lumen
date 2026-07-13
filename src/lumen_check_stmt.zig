@@ -1012,11 +1012,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 }
             }
             {
-                const active = narrow != null and narrow.?.in_then;
-                if (active) self.narrowed.append(self.arena, narrow.?.name) catch return error.OutOfMemory;
-                defer if (active) {
-                    self.narrowed.items.len -= 1;
-                };
+                // Narrow every `!= null` check in the condition's `&&`-chain in
+                // the then-branch (`if (x != null && y != null) { use x, y }`),
+                // not just the first.
+                const pushed = self.collectAndNullChecks(branch.cond, true);
+                defer self.narrowed.items.len -= pushed;
                 defer if (var_narrowed) {
                     self.narrowed_variants.items.len -= 1;
                 };
@@ -1046,10 +1046,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     // the other variant below.
                     self.narrowed_variants.append(self.arena, .{ .name = on.name, .variant = on.variant }) catch return error.OutOfMemory;
                 }
-                if (narrow != null and !narrow.?.in_then) {
-                    // `if (s == null) return ...` — s is non-null below.
-                    self.narrowed.append(self.arena, narrow.?.name) catch return error.OutOfMemory;
-                }
+                // `if (x == null) return ...` — x is non-null below. For a `||`
+                // guard (`if (x == null || y == null) return`), the complement of
+                // the whole disjunction holds, so every `== null` operand's
+                // target is non-null below (checkBlock restores at block exit).
+                _ = self.collectAndNullChecks(branch.cond, false);
             }
         },
         .switch_stmt => |*switch_stmt| {

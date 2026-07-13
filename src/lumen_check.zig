@@ -471,6 +471,26 @@ pub const Checker = struct {
         return null;
     }
 
+    /// Push every `!= null` (for `&&`) or `== null` (for `||`) narrow target in
+    /// `cond`'s operator-chain onto `self.narrowed`, returning how many were
+    /// pushed (the caller pops that many). Used so a chain of null-checks all
+    /// narrow the operand that follows them (`x != null && y != null && f(x, y)`).
+    pub fn collectAndNullChecks(self: *Checker, cond: *ast.Expr, wants_then: bool) usize {
+        const chain_op: []const u8 = if (wants_then) "&&" else "||";
+        if (cond.* == .bool_bin and std.mem.eql(u8, cond.bool_bin.op, chain_op)) {
+            const l = self.collectAndNullChecks(cond.bool_bin.l, wants_then);
+            const r = self.collectAndNullChecks(cond.bool_bin.r, wants_then);
+            return l + r;
+        }
+        if (self.narrowTarget(cond)) |nt| {
+            if (nt.in_then == wants_then) {
+                self.narrowed.append(self.arena, nt.name) catch return 0;
+                return 1;
+            }
+        }
+        return 0;
+    }
+
     pub fn narrowTarget(self: *Checker, cond: *ast.Expr) ?struct { name: []const u8, in_then: bool } {
         // `A && B`: a `!= null` null-check in either operand holds in the
         // then-branch (both must be true to enter it), so `if (x != null && ...)`
