@@ -923,7 +923,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 const throws = mc.class_name != null and analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, mc.name);
                 if (throws) try emitThrowingCallPrefix(w, arena);
                 try emitExpr(mc.obj, w, arena);
-                try w.print(arena, ".{s}(", .{mc.name});
+                try w.appendSlice(arena, ".");
+                try emitFieldName(w, arena, mc.name);
+                try w.appendSlice(arena, "(");
                 for (mc.args, 0..) |arg, i| {
                     if (i > 0) try w.appendSlice(arena, ", ");
                     try emitExpr(arg, w, arena);

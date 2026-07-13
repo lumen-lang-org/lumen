@@ -303,7 +303,11 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
         }
     }
     const m_throws = m.accessor == .none and analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, src_name);
-    try decls.print(arena, "    fn {s}(self: *{s}", .{ fn_name, self_type });
+    // Escape a method name that collides with a Zig keyword/primitive (`test`,
+    // `error`, `type`, ...) as `@"name"` (spec 429).
+    try decls.appendSlice(arena, "    fn ");
+    try emit_mod.emitFieldName(decls, arena, fn_name);
+    try decls.print(arena, "(self: *{s}", .{self_type});
     for (m.params) |param| {
         const pt = param.checked_type orelse return error.ParseError;
         const ztype = if (param.is_ref) try types.refZigName(arena, pt) else try types.zigName(arena, pt);
