@@ -1117,34 +1117,50 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
                     return null;
                 }
-                // Optional entries initializer: an array literal of `[key, value]`
-                // pairs, `new Map([["a", 1], ["b", 2]])`.
+                // Optional entries initializer: an array of `[key, value]` pairs.
+                // An inline literal (`new Map([["a", 1]])`) is checked entry by
+                // entry so integer literals widen and K/V can be inferred; any
+                // other `[K, V][]`-typed expression (a variable, a `.map(...)`
+                // result) is validated by assignability against `[K, V][]`.
                 if (ne.args.len == 1) {
-                    if (ne.args[0].* != .array) {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                        return null;
-                    }
-                    for (ne.args[0].array.items, 0..) |entry, ei| {
-                        if (entry.* != .array or entry.array.items.len != 2) {
-                            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    if (ne.args[0].* == .array) {
+                        for (ne.args[0].array.items, 0..) |entry, ei| {
+                            if (entry.* != .array or entry.array.items.len != 2) {
+                                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                                return null;
+                            }
+                            if (ne.type_args.len == 0 and ei == 0) {
+                                // Infer K/V from the first entry.
+                                k.* = self.exprType(program, entry.array.items[0], line, col) orelse return null;
+                                v.* = self.exprType(program, entry.array.items[1], line, col) orelse return null;
+                            } else {
+                                // Check against the declared/inferred K,V so integer
+                                // literals widen to an `f64`/`i64` slot (matching the
+                                // `new Set<number>([...])` and `number[]` behavior)
+                                // rather than a strict equality that rejects them.
+                                self.ensureAssignable(program, k.*, entry.array.items[0], line, col) catch return null;
+                                self.ensureAssignable(program, v.*, entry.array.items[1], line, col) catch return null;
+                            }
+                        }
+                        if (ne.type_args.len == 0 and ne.args[0].array.items.len == 0) {
+                            _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
                             return null;
                         }
-                        if (ne.type_args.len == 0 and ei == 0) {
-                            // Infer K/V from the first entry.
-                            k.* = self.exprType(program, entry.array.items[0], line, col) orelse return null;
-                            v.* = self.exprType(program, entry.array.items[1], line, col) orelse return null;
-                        } else {
-                            // Check against the declared/inferred K,V so integer
-                            // literals widen to an `f64`/`i64` slot (matching the
-                            // `new Set<number>([...])` and `number[]` behavior)
-                            // rather than a strict equality that rejects them.
-                            self.ensureAssignable(program, k.*, entry.array.items[0], line, col) catch return null;
-                            self.ensureAssignable(program, v.*, entry.array.items[1], line, col) catch return null;
+                    } else {
+                        // A non-literal entries expression can't seed K/V inference,
+                        // so explicit type arguments are required.
+                        if (ne.type_args.len == 0) {
+                            _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
+                            return null;
                         }
-                    }
-                    if (ne.type_args.len == 0 and ne.args[0].array.items.len == 0) {
-                        _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
-                        return null;
+                        const pair = self.arena.alloc(types.Type, 2) catch return null;
+                        pair[0] = k.*;
+                        pair[1] = v.*;
+                        const want = (types.arrayOfAlloc(self.arena, .{ .tuple_type = pair }) catch return null) orelse {
+                            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                            return null;
+                        };
+                        self.ensureAssignable(program, want, ne.args[0], line, col) catch return null;
                     }
                 } else if (ne.args.len != 0) {
                     _ = self.fail(line, col, "E_ARG_COUNT") catch {};

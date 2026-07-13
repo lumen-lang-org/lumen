@@ -723,6 +723,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.print(arena, "break :__mapi{d} __c; }})", .{s});
                     return;
                 }
+                // `new Map(entries)` from a non-literal `[K, V][]` expression:
+                // init, then set each tuple pair via its `@"0"`/`@"1"` fields.
+                if (ct == .map_type and ne.args.len == 1) {
+                    g_global_pred_seq += 1;
+                    const s = g_global_pred_seq;
+                    try w.print(arena, "(__mape{d}: {{ const __c = {s}.__init(); const __src = ", .{ s, tname });
+                    try emitExpr(ne.args[0], w, arena);
+                    try w.print(arena, "; for (__src) |__e| {{ __c.set(__e.@\"0\", __e.@\"1\"); }} break :__mape{d} __c; }})", .{s});
+                    return;
+                }
                 try w.print(arena, "{s}.__init()", .{tname});
                 return;
             }
