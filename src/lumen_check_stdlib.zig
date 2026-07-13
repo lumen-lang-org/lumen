@@ -918,6 +918,15 @@ pub fn mathCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = if (std.mem.eql(u8, call.name, "sign")) .i32 else if (std.mem.eql(u8, call.name, "sqrt")) .f64 else arg_type;
         return call.checked_type;
     }
+    // random(): number -- a pseudo-random f64 in [0, 1).
+    if (std.mem.eql(u8, call.name, "random")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        call.checked_type = .f64;
+        return .f64;
+    }
     // fround(x): number -- round to the nearest 32-bit float, back to f64.
     if (std.mem.eql(u8, call.name, "fround")) {
         if (call.args.len != 1) {

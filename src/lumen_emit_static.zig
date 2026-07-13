@@ -47,6 +47,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
             try w.appendSlice(arena, "))");
         }
         try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "random")) {
+        // A pseudo-random f64 in [0, 1) from a lazily-seeded global PRNG.
+        try w.appendSlice(arena, "__mathRandom()");
     } else if (std.mem.eql(u8, cl.namespace, "Math") and std.mem.eql(u8, cl.name, "fround")) {
         const arg_type = cl.checked_arg_type orelse return error.ParseError;
         try w.appendSlice(arena, "@as(f64, @as(f32, @floatCast(");

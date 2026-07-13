@@ -110,6 +110,16 @@ const PARSE_RT =
     \\    }
     \\    return __b.items;
     \\}
+    \\var __rng_state: std.Random.DefaultPrng = undefined;
+    \\var __rng_ready: bool = false;
+    \\fn __mathRandom() f64 {
+    \\    if (!__rng_ready) {
+    \\        var __anchor: u8 = 0;
+    \\        __rng_state = std.Random.DefaultPrng.init(@intFromPtr(&__anchor));
+    \\        __rng_ready = true;
+    \\    }
+    \\    return __rng_state.random().float(f64);
+    \\}
 ;
 // Compile-time regex specialization (Plan B): parses a literal pattern at build
 // time and emits a pattern-specific straight-line matcher. See regex_specialize.zig.
