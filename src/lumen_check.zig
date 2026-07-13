@@ -730,6 +730,88 @@ pub const Checker = struct {
         return &.{};
     }
 
+    /// Build the record type for a utility type (`Partial<P>`, `Required<P>`,
+    /// `Readonly<P>`, `Pick<P, K>`, `Omit<P, K>`) by transforming the fields of a
+    /// named source record, registering the result as a synthetic named record
+    /// and queuing it for emission (same mechanism as generic specialization).
+    /// Returns the synthetic type name.
+    pub fn synthUtilityRecord(self: *Checker, base: []const u8, args: []const []const u8, line: u32, col: u32) CompileError![]const u8 {
+        // Resolve the source argument to a concrete type; it must be a named
+        // record (which itself may be another utility type, so this nests).
+        const src_ty = try self.typeFromAnnotation(args[0], line, col);
+        if (src_ty != .named) {
+            const msg = std.fmt.allocPrint(self.arena, "`{s}<...>` expects a named record type as its first argument", .{base}) catch "utility type needs a record";
+            return self.fail(line, col, msg);
+        }
+        const src_fields = self.declFields(src_ty.named);
+
+        // Cache/mangle by base + every argument (sanitized to an identifier).
+        var mangle: std.ArrayListUnmanaged(u8) = .empty;
+        mangle.appendSlice(self.arena, "__U_") catch return error.OutOfMemory;
+        mangle.appendSlice(self.arena, base) catch return error.OutOfMemory;
+        for (args) |a| {
+            mangle.append(self.arena, '_') catch return error.OutOfMemory;
+            for (a) |ch| mangle.append(self.arena, if (std.ascii.isAlphanumeric(ch)) ch else '_') catch return error.OutOfMemory;
+        }
+        const mname = mangle.items;
+        if (self.type_decls.get(mname) != null) return mname;
+
+        // Pick/Omit take a second argument: a `"a" | "b"` (or single) key set.
+        const has_keys = std.mem.eql(u8, base, "Pick") or std.mem.eql(u8, base, "Omit");
+        var keys: std.ArrayListUnmanaged([]const u8) = .empty;
+        if (has_keys) {
+            if (args.len != 2) return self.fail(line, col, "E_TYPE_ARG_COUNT");
+            var it = std.mem.splitScalar(u8, args[1], '|');
+            while (it.next()) |part| {
+                var k = std.mem.trim(u8, part, " ");
+                if (k.len >= 2 and (k[0] == '"' or k[0] == '\'')) k = k[1 .. k.len - 1];
+                if (k.len > 0) keys.append(self.arena, k) catch return error.OutOfMemory;
+            }
+        }
+
+        var out: std.ArrayListUnmanaged(ast.TypeField) = .empty;
+        for (src_fields) |f| {
+            if (has_keys) {
+                var found = false;
+                for (keys.items) |k| {
+                    if (std.mem.eql(u8, k, f.name)) found = true;
+                }
+                const pick = std.mem.eql(u8, base, "Pick");
+                if (pick and !found) continue; // Pick keeps only listed keys
+                if (!pick and found) continue; // Omit drops listed keys
+            }
+            var ann = f.annotation;
+            var readonly = f.is_readonly;
+            if (std.mem.eql(u8, base, "Partial")) {
+                if (!std.mem.endsWith(u8, ann, "?")) ann = std.fmt.allocPrint(self.arena, "{s}?", .{ann}) catch return error.OutOfMemory;
+            } else if (std.mem.eql(u8, base, "Required")) {
+                if (std.mem.endsWith(u8, ann, "?")) ann = ann[0 .. ann.len - 1];
+            } else if (std.mem.eql(u8, base, "Readonly")) {
+                readonly = true;
+            }
+            out.append(self.arena, .{
+                .name = f.name,
+                .annotation = ann,
+                .checked_type = try self.typeFromAnnotation(ann, line, col),
+                .is_readonly = readonly,
+            }) catch return error.OutOfMemory;
+        }
+        if (has_keys and out.items.len == 0) {
+            const msg = std.fmt.allocPrint(self.arena, "`{s}<{s}, ...>` selected no fields — check the key names", .{ base, src_ty.named }) catch "no fields selected";
+            return self.fail(line, col, msg);
+        }
+
+        const fields = out.toOwnedSlice(self.arena) catch return error.OutOfMemory;
+        self.type_decls.put(self.arena, mname, .{ .fields = fields }) catch return error.OutOfMemory;
+        // Queue a `type_decl` statement so the synthetic record emits as a struct.
+        const spec = self.arena.create(ast.TypeDecl) catch return error.OutOfMemory;
+        spec.* = .{ .name = mname, .fields = fields, .type_params = &.{}, .line = line, .col = col };
+        const stmt_ptr = self.arena.create(ast.Stmt) catch return error.OutOfMemory;
+        stmt_ptr.* = .{ .type_decl = spec.* };
+        self.pending_specializations.append(self.arena, stmt_ptr) catch return error.OutOfMemory;
+        return mname;
+    }
+
     /// The declared type of one record field, or null if the type is not a known
     /// record or lacks that field.
     pub fn recordFieldType(self: *Checker, type_name: []const u8, field: []const u8) ?types.Type {
@@ -935,8 +1017,9 @@ pub const Checker = struct {
                     return self.fail(line, col, "Record<K, V> is not supported — use `Map<K, V>` for dynamic key/value storage, or a named `type` with fixed fields");
                 }
                 if (std.mem.eql(u8, base, "Partial") or std.mem.eql(u8, base, "Readonly") or std.mem.eql(u8, base, "Required") or std.mem.eql(u8, base, "Pick") or std.mem.eql(u8, base, "Omit")) {
-                    const msg = std.fmt.allocPrint(self.arena, "the `{s}<...>` utility type is not supported — declare an explicit named `type` with the fields you need", .{base}) catch "unsupported utility type";
-                    return self.fail(line, col, msg);
+                    // Transform a named record's fields at compile time (spec 378).
+                    const mname = try self.synthUtilityRecord(base, args, line, col);
+                    return .{ .named = mname };
                 }
                 return self.fail(line, col, "unknown generic type");
             }

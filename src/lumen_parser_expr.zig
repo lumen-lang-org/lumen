@@ -228,6 +228,10 @@ pub fn parseTypeAnnotation(self: *Parser) CompileError![]const u8 {
         } else if (eq(u8, base, "null") or eq(u8, base, "undefined")) {
             base = member;
             optional = true;
+        } else if (base.len > 0 and base[0] == '"' and member.len > 0 and member[0] == '"') {
+            // A union of string literals (`"a" | "b"`) — kept as a joined
+            // annotation string for the checker (e.g. a `Pick`/`Omit` key set).
+            base = std.fmt.allocPrint(self.arena, "{s}|{s}", .{ base, member }) catch return error.OutOfMemory;
         } else {
             // General unions (`i32 | string`) aren't supported inline; only
             // `T | null` and named discriminated unions (`type U = A | B` over
