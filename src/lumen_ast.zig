@@ -621,7 +621,7 @@ pub const FieldBuiltin = enum {
 
 /// A variable captured by a closure: stored by its outer emit-name in a heap
 /// environment struct.
-pub const Capture = struct { emit_name: []const u8, ty: types.Type };
+pub const Capture = struct { emit_name: []const u8, ty: types.Type, is_this: bool = false };
 
 /// Arrow function expression `(x: T) => expr` (V1: typed params, expression
 /// body; may capture enclosing locals by value into a heap environment).

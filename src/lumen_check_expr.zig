@@ -1013,6 +1013,17 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 _ = self.fail(line, col, "'this' is only valid inside a class method") catch {};
                 return null;
             };
+            // An arrow that reads `this` closes over the instance pointer (`self`
+            // in the generated Zig): record it as a capture so the closure env
+            // carries `self` and the body reads `__env.self` instead of a `self`
+            // that is out of scope inside the arrow's own function.
+            if (self.current_captures) |caps| {
+                var present = false;
+                for (caps.items) |c| {
+                    if (c.is_this) present = true;
+                }
+                if (!present) caps.append(self.arena, .{ .emit_name = "self", .ty = .{ .class_type = cls }, .is_this = true }) catch return null;
+            }
             break :blk .{ .class_type = cls };
         },
         .new_expr => |*ne| {

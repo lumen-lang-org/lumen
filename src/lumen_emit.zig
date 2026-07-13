@@ -654,7 +654,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try emitExpr(c.r, w, arena);
             try w.append(arena, ')');
         },
-        .this_expr => try w.appendSlice(arena, "self"),
+        .this_expr => {
+            // Inside an arrow body the instance pointer lives in the closure
+            // env (captured as `self`); read it from there. In a plain method
+            // body it is the `self` parameter directly.
+            if (g_cur_arrow_env != 0) {
+                try w.print(arena, "__env{d}.self", .{g_cur_arrow_env});
+            } else {
+                try w.appendSlice(arena, "self");
+            }
+        },
         .new_expr => |ne| {
             if (ne.container_type) |ct| {
                 // `new Error("msg")` -> the message string (same as `Error(...)`).
