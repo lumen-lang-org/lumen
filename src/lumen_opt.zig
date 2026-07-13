@@ -21,6 +21,7 @@
 
 const std = @import("std");
 const ast = @import("lumen_ast.zig");
+const types = @import("lumen_types.zig");
 const diag_mod = @import("lumen_diag.zig");
 
 const CompileError = diag_mod.CompileError;
@@ -272,65 +273,70 @@ fn accBadRef(e: *const Expr, name: []const u8) bool {
     };
 }
 
-fn accDisqBody(body: []const Stmt, name: []const u8, arena: std.mem.Allocator) CompileError!bool {
-    for (body) |*s| if (try accDisqStmt(s, name, arena)) return true;
+fn accDisqBody(body: []const Stmt, name: []const u8, is_array: bool, arena: std.mem.Allocator) CompileError!bool {
+    for (body) |*s| if (try accDisqStmt(s, name, is_array, arena)) return true;
     return false;
 }
 
 /// Disqualify `name` from the accumulator transform if it is mutated by anything
 /// other than an append, captured, deref'd, or rebound.
-fn accDisqStmt(stmt: *const Stmt, name: []const u8, arena: std.mem.Allocator) CompileError!bool {
+fn accDisqStmt(stmt: *const Stmt, name: []const u8, is_array: bool, arena: std.mem.Allocator) CompileError!bool {
     switch (stmt.*) {
         .var_decl => |d| return accBadRef(d.init, name),
         .assign => |a| {
             if (std.mem.eql(u8, a.name, name)) {
                 if (!std.mem.eql(u8, a.op, "=")) return true;
+                if (is_array) return !accIsArrayAppend(a.value, name);
                 return !(try accIsAppend(a.value, name, arena));
             }
             return accBadRef(a.value, name);
         },
         .member_assign => |ma| return accBadRef(ma.value, name) or (ma.obj != null and accBadRef(ma.obj.?, name)),
-        .console_log => |log| return accBadRef(log.value, name),
+        .console_log => |log| {
+            if (accBadRef(log.value, name)) return true;
+            for (log.extra_values) |ev| if (accBadRef(ev, name)) return true;
+            return false;
+        },
         .return_stmt => |r| return if (r.value) |x| accBadRef(x, name) else false,
         .throw_stmt => |t| return accBadRef(t.value, name),
         .expr_stmt => |x| return accBadRef(x.value, name),
-        .while_stmt => |w| return accBadRef(w.cond, name) or (try accDisqBody(w.body, name, arena)),
-        .do_while_stmt => |w| return accBadRef(w.cond, name) or (try accDisqBody(w.body, name, arena)),
+        .while_stmt => |w| return accBadRef(w.cond, name) or (try accDisqBody(w.body, name, is_array, arena)),
+        .do_while_stmt => |w| return accBadRef(w.cond, name) or (try accDisqBody(w.body, name, is_array, arena)),
         .for_stmt => |f| {
             if (f.update) |u| if (std.mem.eql(u8, u.name, name)) return true;
-            return (f.init != null and accBadRef(f.init.?.init, name)) or (f.cond != null and accBadRef(f.cond.?, name)) or (f.update != null and accBadRef(f.update.?.value, name)) or (try accDisqBody(f.body, name, arena));
+            return (f.init != null and accBadRef(f.init.?.init, name)) or (f.cond != null and accBadRef(f.cond.?, name)) or (f.update != null and accBadRef(f.update.?.value, name)) or (try accDisqBody(f.body, name, is_array, arena));
         },
         .for_of_stmt => |f| {
             if (std.mem.eql(u8, f.binding, name)) return true;
-            return accBadRef(f.iterable, name) or (try accDisqBody(f.body, name, arena));
+            return accBadRef(f.iterable, name) or (try accDisqBody(f.body, name, is_array, arena));
         },
         .for_in_stmt => |f| {
             if (std.mem.eql(u8, f.binding, name)) return true;
-            return accBadRef(f.iterable, name) or (try accDisqBody(f.body, name, arena));
+            return accBadRef(f.iterable, name) or (try accDisqBody(f.body, name, is_array, arena));
         },
-        .if_stmt => |b| return accBadRef(b.cond, name) or (try accDisqBody(b.then_body, name, arena)) or (b.else_body != null and (try accDisqBody(b.else_body.?, name, arena))),
+        .if_stmt => |b| return accBadRef(b.cond, name) or (try accDisqBody(b.then_body, name, is_array, arena)) or (b.else_body != null and (try accDisqBody(b.else_body.?, name, is_array, arena))),
         .switch_stmt => |sw| {
             if (accBadRef(sw.value, name)) return true;
             for (sw.cases) |cse| {
                 if (accBadRef(cse.value, name)) return true;
-                if (try accDisqBody(cse.body, name, arena)) return true;
+                if (try accDisqBody(cse.body, name, is_array, arena)) return true;
             }
-            if (sw.default_body) |db| if (try accDisqBody(db, name, arena)) return true;
+            if (sw.default_body) |db| if (try accDisqBody(db, name, is_array, arena)) return true;
             return false;
         },
-        .try_stmt => |t| return (try accDisqBody(t.try_body, name, arena)) or (try accDisqBody(t.catch_body, name, arena)) or (t.finally_body != null and (try accDisqBody(t.finally_body.?, name, arena))),
-        .defer_stmt => |d| return accDisqBody(d.body, name, arena),
+        .try_stmt => |t| return (try accDisqBody(t.try_body, name, is_array, arena)) or (try accDisqBody(t.catch_body, name, is_array, arena)) or (t.finally_body != null and (try accDisqBody(t.finally_body.?, name, is_array, arena))),
+        .defer_stmt => |d| return accDisqBody(d.body, name, is_array, arena),
         .destructure_decl => |d| {
             for (d.bindings) |b| if (std.mem.eql(u8, b.name, name)) return true;
             return accBadRef(d.source, name);
         },
         .using_decl => |u| {
-            if (u.defer_body) |b| if (try accDisqBody(b, name, arena)) return true;
+            if (u.defer_body) |b| if (try accDisqBody(b, name, is_array, arena)) return true;
             if (u.dispose_call) |dc| if (accBadRef(dc, name)) return true;
             return accBadRef(u.init, name);
         },
         .function_decl => |fd| return bodyUsesName(fd.body, name),
-        .block_stmt => |b| return accDisqBody(b.body, name, arena),
+        .block_stmt => |b| return accDisqBody(b.body, name, is_array, arena),
         else => return false,
     }
 }
@@ -362,21 +368,26 @@ fn accCountDeclsStmt(stmt: *const Stmt, name: []const u8) usize {
     };
 }
 
-fn markAccBody(body: []Stmt, name: []const u8) void {
-    for (body) |*s| markAccStmt(s, name);
+fn markAccBody(body: []Stmt, name: []const u8, is_array: bool) void {
+    for (body) |*s| markAccStmt(s, name, is_array);
 }
-fn markAccStmt(stmt: *Stmt, name: []const u8) void {
+fn markAccStmt(stmt: *Stmt, name: []const u8, is_array: bool) void {
     switch (stmt.*) {
         .var_decl => |*d| markAccExpr(d.init, name),
         .assign => |*a| {
-            if (std.mem.eql(u8, a.name, name)) a.is_accumulator = true;
+            if (std.mem.eql(u8, a.name, name)) {
+                if (is_array) a.is_array_accumulator = true else a.is_accumulator = true;
+            }
             markAccExpr(a.value, name);
         },
         .member_assign => |*ma| {
             markAccExpr(ma.value, name);
             if (ma.obj) |o| markAccExpr(o, name);
         },
-        .console_log => |*log| markAccExpr(log.value, name),
+        .console_log => |*log| {
+            markAccExpr(log.value, name);
+            for (log.extra_values) |ev| markAccExpr(ev, name);
+        },
         .return_stmt => |*r| {
             if (r.value) |x| markAccExpr(x, name);
         },
@@ -384,48 +395,48 @@ fn markAccStmt(stmt: *Stmt, name: []const u8) void {
         .expr_stmt => |*x| markAccExpr(x.value, name),
         .while_stmt => |*w| {
             markAccExpr(w.cond, name);
-            markAccBody(w.body, name);
+            markAccBody(w.body, name, is_array);
         },
         .do_while_stmt => |*w| {
             markAccExpr(w.cond, name);
-            markAccBody(w.body, name);
+            markAccBody(w.body, name, is_array);
         },
         .for_stmt => |*f| {
             if (f.init) |*i| markAccExpr(i.init, name);
             if (f.cond) |c| markAccExpr(c, name);
             if (f.update) |*u| markAccExpr(u.value, name);
-            markAccBody(f.body, name);
+            markAccBody(f.body, name, is_array);
         },
         .for_of_stmt => |*f| {
             markAccExpr(f.iterable, name);
-            markAccBody(f.body, name);
+            markAccBody(f.body, name, is_array);
         },
         .for_in_stmt => |*f| {
             markAccExpr(f.iterable, name);
-            markAccBody(f.body, name);
+            markAccBody(f.body, name, is_array);
         },
         .if_stmt => |*b| {
             markAccExpr(b.cond, name);
-            markAccBody(b.then_body, name);
-            if (b.else_body) |eb| markAccBody(eb, name);
+            markAccBody(b.then_body, name, is_array);
+            if (b.else_body) |eb| markAccBody(eb, name, is_array);
         },
         .switch_stmt => |*sw| {
             markAccExpr(sw.value, name);
             for (sw.cases) |*cse| {
                 markAccExpr(cse.value, name);
-                markAccBody(cse.body, name);
+                markAccBody(cse.body, name, is_array);
             }
-            if (sw.default_body) |db| markAccBody(db, name);
+            if (sw.default_body) |db| markAccBody(db, name, is_array);
         },
         .try_stmt => |*t| {
-            markAccBody(t.try_body, name);
-            markAccBody(t.catch_body, name);
-            if (t.finally_body) |fb| markAccBody(fb, name);
+            markAccBody(t.try_body, name, is_array);
+            markAccBody(t.catch_body, name, is_array);
+            if (t.finally_body) |fb| markAccBody(fb, name, is_array);
         },
-        .defer_stmt => |*d| markAccBody(d.body, name),
-        .block_stmt => |*b| markAccBody(b.body, name),
+        .defer_stmt => |*d| markAccBody(d.body, name, is_array),
+        .block_stmt => |*b| markAccBody(b.body, name, is_array),
         .using_decl => |*u| {
-            if (u.defer_body) |b| markAccBody(b, name);
+            if (u.defer_body) |b| markAccBody(b, name, is_array);
             if (u.dispose_call) |dc| markAccExpr(dc, name);
             markAccExpr(u.init, name);
         },
@@ -501,14 +512,38 @@ pub fn markAccumulators(stmts: []Stmt, params: []const ast.FunctionParam, arena:
         if (s.* == .var_decl) {
             const d = s.var_decl;
             if (d.mutable and d.reassigned and d.checked_type != null and d.checked_type.? == .string and accIsEmptyStr(d.init) and
-                accCountDecls(stmts, d.name) == 1 and !accParamHas(params, d.name) and !(try accDisqBody(stmts, d.name, arena)))
+                accCountDecls(stmts, d.name) == 1 and !accParamHas(params, d.name) and !(try accDisqBody(stmts, d.name, false, arena)))
             {
                 s.var_decl.is_accumulator = true;
-                markAccBody(stmts, d.name);
+                markAccBody(stmts, d.name, false);
+            } else if (d.mutable and d.reassigned and d.checked_type != null and types.isArray(d.checked_type.?) and accIsEmptyArray(d.init) and
+                accCountDecls(stmts, d.name) == 1 and !accParamHas(params, d.name) and !(try accDisqBody(stmts, d.name, true, arena)))
+            {
+                // `a = [...a, x]` array-builder: same shape as the string builder,
+                // but a growable ArrayList(T) whose appends are amortized O(1).
+                s.var_decl.is_array_accumulator = true;
+                markAccBody(stmts, d.name, true);
             }
         }
     }
     for (stmts) |*s| try accRecurseFns(s, arena);
+}
+
+fn accIsEmptyArray(e: *const Expr) bool {
+    return e.* == .array and e.array.items.len == 0;
+}
+
+/// `value` is an array append into `name`: an array literal `[...name, e1, ...]`
+/// whose first element spreads `name` and where `name` appears nowhere else (so
+/// the source slice stays valid across the in-place append).
+fn accIsArrayAppend(value: *const Expr, name: []const u8) bool {
+    if (value.* != .array) return false;
+    const items = value.array.items;
+    if (items.len == 0) return false;
+    const first = items[0];
+    if (!(first.* == .spread and first.spread.* == .var_ref and std.mem.eql(u8, first.spread.var_ref.name, name))) return false;
+    for (items[1..]) |it| if (exprUsesName(it, name)) return false;
+    return true;
 }
 fn accParamHas(params: []const ast.FunctionParam, name: []const u8) bool {
     for (params) |p| if (std.mem.eql(u8, p.name, name)) return true;

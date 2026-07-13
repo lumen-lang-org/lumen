@@ -179,6 +179,7 @@ pub const VarDecl = struct {
     line: u32,
     col: u32,
     is_accumulator: bool = false, // string-builder local: emitted as a growable ArrayList(u8)
+    is_array_accumulator: bool = false, // array-builder local (`a = [...a, x]` in a loop): emitted as a growable ArrayList(T) so the append is amortized O(1) instead of O(n)
     stack_alloc: bool = false, // `const v = new C(...)` whose instance never escapes: construct on the stack (no heap alloc) and bind `v` to its address (escape analysis, spec 344)
 };
 
@@ -239,6 +240,7 @@ pub const Assign = struct {
     // through the pointer as `name.* = ...`.
     deref: bool = false,
     is_accumulator: bool = false, // `v = v + ...` append into a string-builder local
+    is_array_accumulator: bool = false, // `a = [...a, x, ...]` append into an array-builder local
     // The LHS (target) type, recorded by the checker for compound assignments
     // whose lowering needs it -- `<<=`/`>>=` (shl/shr) and `**=` (powi/pow)
     // pick their helper by operand type (spec 052).

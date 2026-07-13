@@ -40,6 +40,12 @@ fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: s
         // String-builder: a growable buffer instead of an immutable slice. The
         // init is always `""`, so it starts empty.
         try body.print(arena, "    var {s}: std.ArrayListUnmanaged(u8) = .empty;\n", .{decl.emit_name orelse decl.name});
+    } else if (decl.is_array_accumulator) {
+        // Array-builder: a growable ArrayList(T) instead of an immutable slice,
+        // so `a = [...a, x]` appends in amortized O(1). Init is always `[]`.
+        const at = decl.checked_type orelse return error.ParseError;
+        const et = types.arrayElem(at) orelse return error.ParseError;
+        try body.print(arena, "    var {s}: std.ArrayListUnmanaged({s}) = .empty;\n", .{ decl.emit_name orelse decl.name, try types.zigName(arena, et) });
     } else if (decl.no_init) {
         // `let x: T;` with no initializer -> `var x: T = undefined;` (always
         // `var`: an uninitialized binding is meant to be assigned before use).
@@ -580,7 +586,24 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             }
         },
         .assign => |assignment| {
-            if (assignment.is_accumulator) {
+            if (assignment.is_array_accumulator) {
+                // `a = [...a, e1, e2, ...]` -> append each element after the
+                // leading `...a` spread in place. A `...other` element appends
+                // that slice; a plain element appends the single value.
+                const vname = assignment.emit_name orelse assignment.name;
+                const items = assignment.value.array.items;
+                for (items[1..]) |it| {
+                    if (it.* == .spread) {
+                        try body.print(arena, "    {s}.appendSlice(__sa(), ", .{vname});
+                        try emitExpr(it.spread, body, arena);
+                        try body.appendSlice(arena, ") catch std.process.exit(1);\n");
+                    } else {
+                        try body.print(arena, "    {s}.append(__sa(), ", .{vname});
+                        try emitExpr(it, body, arena);
+                        try body.appendSlice(arena, ") catch std.process.exit(1);\n");
+                    }
+                }
+            } else if (assignment.is_accumulator) {
                 // `v = v + a + b` -> append a, b in place (skip the leading `v`).
                 var parts: std.ArrayListUnmanaged(*const Expr) = .empty;
                 try collectStrConcat(assignment.value, &parts, arena);
