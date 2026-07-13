@@ -536,8 +536,21 @@ pub fn parseTypeParams(self: *Parser) CompileError![][]const u8 {
         }
         if (self.isOp(',')) try self.advance() else break;
     }
-    if (!self.isCmp(">")) return error.ParseError;
-    try self.advance(); // '>'
+    // `type Box<T>=…` glues the closing `>` to the alias `=` as one `>=` token;
+    // rewrite it to a bare `=` so the caller's `expectOp('=')` consumes it. A
+    // trailing `>>`/`>>=` from a nested constraint (`<T extends Box<Y>>`) leaves
+    // the outer `>`/`>=` for this level.
+    if (self.isCmp(">")) {
+        try self.advance(); // '>'
+    } else if (self.isCmp(">=")) {
+        self.cur = .{ .op = '=' };
+    } else if (self.isOp2(">>")) {
+        self.cur = .{ .cmp = ">" };
+    } else if (self.isOp2(">>=")) {
+        self.cur = .{ .cmp = ">=" };
+    } else {
+        return error.ParseError;
+    }
     return params.toOwnedSlice(self.arena);
 }
 
