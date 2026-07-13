@@ -561,6 +561,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 _ = self.failTypeMismatch(line, col, then_type, else_type) catch {};
                 return null;
             }
+            // Pin a scalar-numeric ternary to its type so the emitter casts both
+            // branches with `@as(T, …)`. Without this, two integer-literal
+            // branches (`cond ? 1 : 0`) stay `comptime_int`, which Zig rejects in
+            // a runtime arithmetic context (`x + (cond ? 1 : 0)`).
+            if (ternary.result_type == null and (then_type == .i32 or then_type == .i64 or then_type == .f64)) {
+                ternary.result_type = then_type;
+            }
             return then_type;
         },
         .arrow => |arrow| {

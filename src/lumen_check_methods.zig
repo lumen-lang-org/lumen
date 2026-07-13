@@ -171,24 +171,39 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             }
             break :blk_acc (self.exprType(program, mc.args[1], line, col) orelse return null);
         };
+        var acc_ty = acc;
         // The callback returns the accumulator type; hint it so an object/array
         // literal body (`(a, x) => ({ ...a })`) types against it.
-        self.arrow_return_hint = acc;
-        const cb_type_opt = self.checkCbArg(program, mc.args[0], &.{ acc, elem, .i32 }, line, col);
+        self.arrow_return_hint = acc_ty;
+        var cb_type_opt = self.checkCbArg(program, mc.args[0], &.{ acc_ty, elem, .i32 }, line, col);
         self.arrow_return_hint = null;
-        const cb_type = cb_type_opt orelse return null;
+        var cb_type = cb_type_opt orelse return null;
+        // An integer-literal seed whose body actually folds at a wider numeric
+        // type (e.g. `acc + tuple[1]` where the tuple field is `f64`): re-fold
+        // with the accumulator widened to the callback's return type (spec 419).
+        if (cb_type == .func_type and mc.args.len == 2 and mc.args[1].* == .num and
+            acc_ty == .i32 and (cb_type.func_type.ret.* == .f64 or cb_type.func_type.ret.* == .i64))
+        {
+            const wider = cb_type.func_type.ret.*;
+            self.ensureAssignable(program, wider, mc.args[1], line, col) catch return null;
+            acc_ty = wider;
+            self.arrow_return_hint = acc_ty;
+            cb_type_opt = self.checkCbArg(program, mc.args[0], &.{ acc_ty, elem, .i32 }, line, col);
+            self.arrow_return_hint = null;
+            cb_type = cb_type_opt orelse return null;
+        }
         const p = if (cb_type == .func_type) cb_type.func_type.params else &[_]types.Type{};
         const shape_ok = (p.len == 2 or p.len == 3) and
-            types.same(p[0], acc) and types.same(p[1], elem) and
+            types.same(p[0], acc_ty) and types.same(p[1], elem) and
             (p.len == 2 or types.isInteger(p[2]));
-        if (cb_type != .func_type or !shape_ok or !types.same(cb_type.func_type.ret.*, acc)) {
+        if (cb_type != .func_type or !shape_ok or !types.same(cb_type.func_type.ret.*, acc_ty)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
         mc.cb_wants_index = p.len == 3;
-        mc.array_acc_type = acc;
-        mc.array_result_type = acc;
-        return acc;
+        mc.array_acc_type = acc_ty;
+        mc.array_result_type = acc_ty;
+        return acc_ty;
     }
 
     // findIndex((T) => bool): int  — first matching index, or -1.
