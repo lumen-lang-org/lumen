@@ -939,9 +939,19 @@ pub fn numberInstanceMethod(self: *Checker, program: *ast.Program, mc: anytype, 
         }
         return .string;
     }
+    // toLocaleString(): en-US default grouping — integer part split into
+    // comma-separated thousands, up to 3 trimmed fraction digits.
+    if (std.mem.eql(u8, name, "toLocaleString")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.needs_to_locale = true;
+        return .string;
+    }
     {
         const tn = types.tsName(self.arena, obj_type) catch "number";
-        _ = self.failUnknownMethod(line, col, tn, name, &.{ "toFixed", "toPrecision", "toExponential", "toString" }) catch {};
+        _ = self.failUnknownMethod(line, col, tn, name, &.{ "toFixed", "toPrecision", "toExponential", "toString", "toLocaleString" }) catch {};
     }
     return null;
 }

@@ -408,6 +408,35 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\
         );
     }
+    // `number.toLocaleString()` -> en-US grouped decimal: comma thousands
+    // separators on the integer part, up to 3 trailing-zero-trimmed fraction
+    // digits (the ECMAScript default). Emitted only when used.
+    if (program.needs_to_locale) {
+        try out.appendSlice(arena,
+            \\fn __numLocaleString(__x: f64) []const u8 {
+            \\    const __neg = __x < 0;
+            \\    // Round to 3 fraction digits, then split integer / fraction text.
+            \\    const __raw = std.fmt.allocPrint(__sa(), "{d:.3}", .{@abs(__x)}) catch return "";
+            \\    const __dot = std.mem.indexOfScalar(u8, __raw, '.') orelse __raw.len;
+            \\    const __int = __raw[0..__dot];
+            \\    var __frac: []const u8 = if (__dot < __raw.len) __raw[__dot + 1 ..] else "";
+            \\    while (__frac.len > 0 and __frac[__frac.len - 1] == '0') __frac = __frac[0 .. __frac.len - 1];
+            \\    var __ob: std.ArrayListUnmanaged(u8) = .empty;
+            \\    if (__neg) __ob.append(__sa(), '-') catch return "";
+            \\    // Group the integer digits into threes from the right.
+            \\    for (__int, 0..) |__c, __i| {
+            \\        if (__i > 0 and (__int.len - __i) % 3 == 0) __ob.append(__sa(), ',') catch return "";
+            \\        __ob.append(__sa(), __c) catch return "";
+            \\    }
+            \\    if (__frac.len > 0) {
+            \\        __ob.append(__sa(), '.') catch return "";
+            \\        __ob.appendSlice(__sa(), __frac) catch return "";
+            \\    }
+            \\    return __ob.items;
+            \\}
+            \\
+        );
+    }
     // Regex literal value: the source/flags strings. Matching methods are added in
     // later cycles; for now it carries `.source` and `.flags`. Only emitted when
     // the program actually uses a regex -- the runtime's short capture names

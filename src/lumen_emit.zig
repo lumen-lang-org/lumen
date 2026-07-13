@@ -898,6 +898,19 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, ", @as(usize, @intCast(");
                     try emitExpr(mc.args[0], w, arena);
                     try w.appendSlice(arena, ")))");
+                } else if (std.mem.eql(u8, mc.name, "toLocaleString")) {
+                    // en-US grouped formatting via the __numLocaleString helper.
+                    try w.appendSlice(arena, "__numLocaleString(");
+                    if (recv_type == .f64) {
+                        try w.appendSlice(arena, "@as(f64, ");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.append(arena, ')');
+                    } else {
+                        try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.appendSlice(arena, "))");
+                    }
+                    try w.appendSlice(arena, ")");
                 } else { // toString
                     if (mc.args.len == 1) {
                         // Integer receiver, arbitrary radix, via std.fmt.printInt.
