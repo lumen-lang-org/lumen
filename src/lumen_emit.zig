@@ -394,7 +394,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 try w.appendSlice(arena, "); } }.__t }");
             } else {
-                if (ref.capture) try w.appendSlice(arena, "__env."); // captured outer binding
+                if (ref.capture) try w.print(arena, "__env{d}.", .{g_cur_arrow_env}); // captured outer binding
                 try w.appendSlice(arena, ref.emit_name orelse ref.name);
                 if (ref.is_accumulator) try w.appendSlice(arena, ".items"); // string-builder read
                 if (ref.deref) try w.appendSlice(arena, ".*"); // scalar by-reference (`Ref<T>`) param read
@@ -893,6 +893,12 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             if (throws) try emitThrowingCallSuffix(w, arena);
         },
         .arrow => |arrow| {
+            // A unique id per arrow so nested arrows (`(a) => (b) => ...`) don't
+            // collide on the fixed helper names (`__ctx`, `__env`, `Env`, `__e`,
+            // and the `blk` label): Zig rejects a parameter/label that shadows an
+            // enclosing one, and an inner arrow is emitted inside the outer's body.
+            g_arrow_seq += 1;
+            const aid = g_arrow_seq;
             // An arrow body is its own (non-error-union) function: calls to
             // throwing functions inside it must not `try`-forward or break to
             // an outer try label across the function boundary (spec 245).
@@ -914,14 +920,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             const ret_zig = try types.zigName(arena, ret);
 
             const Local = struct {
-                fn emitCallFn(a: std.mem.Allocator, ww: *std.ArrayListUnmanaged(u8), ar: *const ast.ArrowExpr, rz: []const u8, capturing: bool) CompileError!void {
-                    try ww.appendSlice(a, "struct { fn __afn(__ctx: *const anyopaque");
+                fn emitCallFn(a: std.mem.Allocator, ww: *std.ArrayListUnmanaged(u8), ar: *const ast.ArrowExpr, rz: []const u8, capturing: bool, id: usize) CompileError!void {
+                    try ww.print(a, "struct {{ fn __afn(__ctx{d}: *const anyopaque", .{id});
                     for (ar.params) |p| try ww.print(a, ", {s}: {s}", .{ p.name, try types.zigName(a, p.checked_type.?) });
                     try ww.print(a, ") {s} {{ ", .{rz});
                     if (capturing) {
-                        try ww.appendSlice(a, "const __env: *const Env = @ptrCast(@alignCast(__ctx)); ");
+                        try ww.print(a, "const __env{d}: *const Env{d} = @ptrCast(@alignCast(__ctx{d})); ", .{ id, id, id });
                     } else {
-                        try ww.appendSlice(a, "_ = __ctx; ");
+                        try ww.print(a, "_ = __ctx{d}; ", .{id});
                     }
                     // JS allows unused parameters; Zig does not. Mark each used
                     // so a body that ignores a parameter still compiles.
@@ -949,19 +955,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
             };
 
+            const saved_cur_env = g_cur_arrow_env;
+            g_cur_arrow_env = aid;
+            defer g_cur_arrow_env = saved_cur_env;
             if (arrow.captures.len == 0) {
                 try w.print(arena, "{s}{{ .ctx = undefined, .call = ", .{sname});
-                try Local.emitCallFn(arena, w, arrow, ret_zig, false);
+                try Local.emitCallFn(arena, w, arrow, ret_zig, false, aid);
                 try w.appendSlice(arena, " }");
             } else {
-                // (blk: { const Env = struct {...}; const __e = heap; __e.* = {...};
-                //         break :blk Fn{ .ctx = __e, .call = struct {...}.__a }; })
-                try w.appendSlice(arena, "(blk: { const Env = struct { ");
+                // (blkN: { const EnvN = struct {...}; const __eN = heap; __eN.* = {...};
+                //          break :blkN Fn{ .ctx = __eN, .call = struct {...}.__afn }; })
+                try w.print(arena, "(blk{d}: {{ const Env{d} = struct {{ ", .{ aid, aid });
                 for (arrow.captures) |c| try w.print(arena, "{s}: {s}, ", .{ c.emit_name, try types.zigName(arena, c.ty) });
-                try w.appendSlice(arena, "}; const __e = __sa().create(Env) catch unreachable; __e.* = .{ ");
+                try w.print(arena, "}}; const __e{d} = __sa().create(Env{d}) catch unreachable; __e{d}.* = .{{ ", .{ aid, aid, aid });
                 for (arrow.captures) |c| try w.print(arena, ".{s} = {s}, ", .{ c.emit_name, c.emit_name });
-                try w.print(arena, "}}; break :blk {s}{{ .ctx = __e, .call = ", .{sname});
-                try Local.emitCallFn(arena, w, arrow, ret_zig, true);
+                try w.print(arena, "}}; break :blk{d} {s}{{ .ctx = __e{d}, .call = ", .{ aid, sname, aid });
+                try Local.emitCallFn(arena, w, arrow, ret_zig, true, aid);
                 try w.appendSlice(arena, " }; })");
             }
         },
@@ -1199,6 +1208,11 @@ pub var g_number_toexp_seq: usize = 0;
 
 // Unique labels for global isNaN/isFinite predicate blocks.
 pub var g_global_pred_seq: usize = 0;
+// Per-arrow unique id, so nested arrows don't collide on the fixed helper names
+// (`__ctx`/`__env`/`Env`/`__e`/`blk`). g_cur_arrow_env is the id of the arrow
+// whose body is currently being emitted, used when reading a captured binding.
+var g_arrow_seq: usize = 0;
+var g_cur_arrow_env: usize = 0;
 
 // The Zig spelling of an async function's resolved value type while emitting its
 // body, so a `return v;` lowers to `return __promiseResolved(<T>, v);`. Null
