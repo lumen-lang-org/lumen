@@ -652,14 +652,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             // `a ?? b ?? d`), via Zig peer-type resolution of the two branches.
             g_global_pred_seq += 1;
             const s = g_global_pred_seq;
-            // Pin the then-branch to the result type so Zig peer-resolution keeps
-            // the whole expression optional when `r` is optional (chained `??`).
+            // Pin BOTH branches to the result type. Casting only the then-branch
+            // left the else (a bare string literal like `"x"`) to peer-resolve
+            // against `[]const u8`, which fails in a context with no coercion
+            // target (`(m.get(k) ?? "x").length`); an explicit `@as` on each
+            // branch makes them identical types (spec 421).
             const rt = try types.zigName(arena, c.result_type orelse .none);
             try w.appendSlice(arena, "(if (");
             try emitExpr(c.l, w, arena);
-            try w.print(arena, ") |__cv{d}| @as({s}, __cv{d}) else ", .{ s, rt, s });
+            try w.print(arena, ") |__cv{d}| @as({s}, __cv{d}) else @as({s}, ", .{ s, rt, s, rt });
             try emitExpr(c.r, w, arena);
-            try w.append(arena, ')');
+            try w.appendSlice(arena, "))");
         },
         .this_expr => {
             // Inside an arrow body the instance pointer lives in the closure
