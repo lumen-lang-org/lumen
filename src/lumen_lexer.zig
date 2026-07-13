@@ -396,6 +396,10 @@ pub const Lexer = struct {
                 self.err_code = "E_INVALID_NUMBER";
                 return error.ParseError;
             };
+            // BigInt literal suffix `100n`: consume the `n`. Lumen's integer
+            // literal is already an i64 (which backs `bigint`), so the value is
+            // unchanged — the suffix is just accepted and dropped.
+            if (self.i < self.src.len and self.src[self.i] == 'n') self.i += 1;
             return .{ .num = v };
         }
         if (isIdentStart(c)) {
