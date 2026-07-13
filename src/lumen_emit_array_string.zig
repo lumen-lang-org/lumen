@@ -76,6 +76,58 @@ var g_array_method_seq: usize = 0;
 /// Lower an array higher-order / value method `arr.m(args)` to an inline Zig
 /// expression block over the underlying slice. Callbacks are invoked through the
 /// uniform function-value representation (`__cb.call(__cb.ctx, ...)`).
+// The block-scoped local names an array-method block declares. Nested calls
+// (`grid.map(row => row.reduce(...))`) emit one block lexically inside another's
+// callback, and Zig forbids a local shadowing an enclosing-scope local — so each
+// block's own locals are suffixed with its unique sequence number after emission.
+const ARRAY_METHOD_LOCALS = [_][]const u8{
+    "__arr", "__cb", "__r", "__acc", "__e", "__i", "__j", "__idx", "__found",
+    "__len", "__start", "__ub", "__from", "__end", "__sep", "__ce", "__cnt",
+    "__cs", "__ct", "__fv", "__hi", "__k", "__kend", "__ri", "__lt",
+};
+
+fn isIdentByte(c: u8) bool {
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_';
+}
+
+/// Suffix this block's own local names (from `start` onward in `w`) with `seq`.
+/// A name already followed by a digit (an inner block's suffixed local) is left
+/// alone, so renaming an outer block never touches an inner one's identifiers.
+fn suffixArrayLocals(w: *std.ArrayListUnmanaged(u8), start: usize, seq: usize, arena: std.mem.Allocator) void {
+    const body = w.items[start..];
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var i: usize = 0;
+    while (i < body.len) {
+        // A local name starts at `__` preceded by a non-identifier byte.
+        if (body[i] == '_' and i + 1 < body.len and body[i + 1] == '_' and (i == 0 or !isIdentByte(body[i - 1]))) {
+            var j = i + 2;
+            while (j < body.len and body[j] >= 'a' and body[j] <= 'z') j += 1;
+            const tok = body[i..j];
+            const next_is_alnum = j < body.len and ((body[j] >= '0' and body[j] <= '9') or (body[j] >= 'A' and body[j] <= 'Z'));
+            var matched = false;
+            if (!next_is_alnum) {
+                for (ARRAY_METHOD_LOCALS) |n| {
+                    if (std.mem.eql(u8, tok, n)) {
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (matched) {
+                out.print(arena, "{s}{d}", .{ tok, seq }) catch return;
+            } else {
+                out.appendSlice(arena, tok) catch return;
+            }
+            i = j;
+            continue;
+        }
+        out.append(arena, body[i]) catch return;
+        i += 1;
+    }
+    w.items.len = start;
+    w.appendSlice(arena, out.items) catch return;
+}
+
 pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
     const elem = mc.array_elem_type orelse return error.ParseError;
     const result = mc.array_result_type orelse return error.ParseError;
@@ -83,7 +135,12 @@ pub fn emitArrayMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.m
     const eq = std.mem.eql;
     const name = mc.name;
     g_array_method_seq += 1;
+    const seq = g_array_method_seq;
     const lbl = try std.fmt.allocPrint(arena, "__am{d}", .{g_array_method_seq});
+    // Suffix this block's own locals with `seq` once its body (including any
+    // nested array-method blocks, already suffixed with their own seq) is emitted.
+    const rename_start = w.items.len;
+    defer suffixArrayLocals(w, rename_start, seq, arena);
 
     if (eq(u8, name, "map")) {
         const u = types.arrayElem(result) orelse return error.ParseError;
