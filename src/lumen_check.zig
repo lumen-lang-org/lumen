@@ -472,6 +472,19 @@ pub const Checker = struct {
     }
 
     pub fn narrowTarget(self: *Checker, cond: *ast.Expr) ?struct { name: []const u8, in_then: bool } {
+        // `A && B`: a `!= null` null-check in either operand holds in the
+        // then-branch (both must be true to enter it), so `if (x != null && ...)`
+        // narrows `x` in the body. Only in-then narrowings propagate through `&&`
+        // (an else-branch can't tell which operand was false).
+        if (cond.* == .bool_bin and std.mem.eql(u8, cond.bool_bin.op, "&&")) {
+            if (self.narrowTarget(cond.bool_bin.l)) |nt| {
+                if (nt.in_then) return nt;
+            }
+            if (self.narrowTarget(cond.bool_bin.r)) |nt| {
+                if (nt.in_then) return nt;
+            }
+            return null;
+        }
         if (cond.* != .cmp) return null;
         const c = cond.cmp;
         const is_ne = std.mem.eql(u8, c.op, "!=");
