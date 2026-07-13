@@ -953,6 +953,18 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     if (self.resolveField(class_name, field.name)) |rf| {
                         if (!self.visibilityOk(rf.field.visibility, rf.owner, line, col)) return null;
                         field.class_name = rf.owner;
+                        // A narrowed optional field path (`if (this.x != null)`)
+                        // reads as its inner type, unwrapped at emit — same as a
+                        // record field (spec 261).
+                        if (rf.field.checked_type != null and rf.field.checked_type.? == .optional) {
+                            if (self.narrowPath(e)) |path| {
+                                if (self.isNarrowed(path)) {
+                                    field.unwrap = true;
+                                    break :blk3 rf.field.checked_type.?.optional.*;
+                                }
+                            }
+                        }
+                        field.unwrap = false;
                         break :blk3 rf.field.checked_type;
                     }
                     // Getter accessor read: `obj.prop`.

@@ -463,6 +463,7 @@ pub const Checker = struct {
     /// (re-reading it might not be side-effect-free / stable), so return null.
     pub fn narrowPath(self: *Checker, e: *ast.Expr) ?[]const u8 {
         if (e.* == .var_ref) return e.var_ref.name;
+        if (e.* == .this_expr) return "this";
         if (e.* == .field and !e.field.optional_chain) {
             const base = self.narrowPath(e.field.obj) orelse return null;
             return std.fmt.allocPrint(self.arena, "{s}.{s}", .{ base, e.field.name }) catch null;
