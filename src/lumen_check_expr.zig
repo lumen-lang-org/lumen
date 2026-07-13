@@ -1580,7 +1580,10 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     break :blk elems[pos];
                 }
                 const index_type = self.exprType(program, index.value, line, col) orelse return null;
-                if (!types.same(.i32, index_type) and !types.same(.i64, index_type)) {
+                // A numeric enum index backs as an integer, so it's a valid index
+                // (`names[Color.Green]`) — spec 427.
+                const enum_index = index_type == .enum_type and !index_type.enum_type.is_string;
+                if (!enum_index and !types.same(.i32, index_type) and !types.same(.i64, index_type)) {
                     // A `number` (f64) index truncates to an integer (spec 426).
                     if (index_type == .f64) {
                         const inner = self.arena.create(ast.Expr) catch return null;
