@@ -227,8 +227,19 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             var has_spread = false;
             for (value.array.items) |item| {
                 if (item.* == .spread) {
-                    // `...src` must itself be an array of the same element type.
                     has_spread = true;
+                    // A `...set` / `...str` spread contributes its elements; rewrite
+                    // it to `...Array.from(x)` so it flows through the array path,
+                    // matching the inference side (spec 397/414).
+                    const src_type = self.exprType(program, item.spread, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
+                    if (src_type == .set_type or types.isStringLike(src_type)) {
+                        const from_call = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                        const from_args = self.arena.alloc(*ast.Expr, 1) catch return error.OutOfMemory;
+                        from_args[0] = item.spread;
+                        from_call.* = .{ .static_call = .{ .namespace = "Array", .name = "from", .args = from_args } };
+                        item.spread = from_call;
+                    }
+                    // `...src` must itself be an array of the same element type.
                     try self.ensureAssignable(program, expected, item.spread, line, col);
                 } else {
                     try self.ensureAssignable(program, elem_type, item, line, col);
