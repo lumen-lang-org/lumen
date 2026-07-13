@@ -761,6 +761,24 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.print(arena, "(__ia{d}: {{ _ = &(", .{seq});
         try em.emitExpr(cl.args[0], w, arena);
         try w.print(arena, "); break :__ia{d} {s}; }})", .{ seq, if ((cl.checked_arg_type orelse .void) == .bool) "true" else "false" });
+    } else if (std.mem.eql(u8, cl.namespace, "Object") and cl.object_entries) {
+        // Object.entries(record): [key, value] tuples. Bind the receiver once,
+        // then build an array of positional tuple structs.
+        em.g_global_pred_seq += 1;
+        const seq = em.g_global_pred_seq;
+        const tup_zig = try types.zigName(arena, types.arrayElem(cl.checked_type.?).?);
+        try w.print(arena, "(__oe{d}: {{ const __rec = ", .{seq});
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.print(arena, "; break :__oe{d} @as([]const {s}, &.{{ ", .{ seq, tup_zig });
+        for (cl.object_keys orelse &.{}, 0..) |k, i| {
+            if (i > 0) try w.appendSlice(arena, ", ");
+            try w.appendSlice(arena, ".{ .@\"0\" = ");
+            try em.emitStrLit(w, arena, k);
+            try w.appendSlice(arena, ", .@\"1\" = __rec.");
+            try em.emitFieldName(w, arena, k);
+            try w.appendSlice(arena, " }");
+        }
+        try w.appendSlice(arena, " }); })");
     } else if (std.mem.eql(u8, cl.namespace, "Object") and cl.object_values) {
         // Object.values(record): read each field into a homogeneous array,
         // binding the receiver once so a complex expression isn't re-evaluated.

@@ -1956,8 +1956,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return at;
                 }
                 const is_values = std.mem.eql(u8, call.name, "values");
-                if (!std.mem.eql(u8, call.name, "keys") and !is_values) {
-                    _ = self.fail(line, col, "only Object.keys, Object.values and Object.freeze are supported — records have static, immutable shapes, so read fields directly") catch {};
+                const is_entries = std.mem.eql(u8, call.name, "entries");
+                if (!std.mem.eql(u8, call.name, "keys") and !is_values and !is_entries) {
+                    _ = self.fail(line, col, "only Object.keys, Object.values, Object.entries and Object.freeze are supported — records have static, immutable shapes, so read fields directly") catch {};
                     return null;
                 }
                 if (call.args.len != 1) {
@@ -1979,23 +1980,42 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 const names = self.arena.alloc([]const u8, decl.fields.len) catch return null;
                 for (decl.fields, 0..) |f, i| names[i] = f.name;
                 call.object_keys = names;
-                if (is_values) {
-                    // Object.values(record): all fields must share one element type
-                    // so the result is a homogeneous array.
+                if (is_values or is_entries) {
+                    // Object.values / Object.entries: all fields must share one
+                    // element type so the result is a homogeneous array (of the
+                    // value, or of `[key, value]` tuples).
+                    const fn_name = call.name;
                     if (decl.fields.len == 0) {
-                        _ = self.fail(line, col, "Object.values needs a record with at least one field") catch {};
+                        const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs a record with at least one field", .{fn_name}) catch "E_EMPTY_RECORD";
+                        _ = self.fail(line, col, msg) catch {};
                         return null;
                     }
                     const elem = decl.fields[0].checked_type orelse (self.typeFromAnnotation(decl.fields[0].annotation, line, col) catch null) orelse {
-                        _ = self.fail(line, col, "Object.values: could not resolve the field type") catch {};
+                        const msg = std.fmt.allocPrint(self.arena, "Object.{s}: could not resolve the field type", .{fn_name}) catch "E_TYPE_MISMATCH";
+                        _ = self.fail(line, col, msg) catch {};
                         return null;
                     };
                     for (decl.fields[1..]) |f| {
                         const ft = f.checked_type orelse (self.typeFromAnnotation(f.annotation, line, col) catch null) orelse continue;
                         if (!types.same(elem, ft)) {
-                            _ = self.fail(line, col, "Object.values needs all fields to share one type — mixed field types have no single array element type") catch {};
+                            const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs all fields to share one type — mixed field types have no single array element type", .{fn_name}) catch "E_TYPE_MISMATCH";
+                            _ = self.fail(line, col, msg) catch {};
                             return null;
                         }
+                    }
+                    if (is_entries) {
+                        // `[key, value][]`: element is a `[string, elem]` tuple.
+                        const tup = self.arena.alloc(types.Type, 2) catch return null;
+                        tup[0] = .string;
+                        tup[1] = elem;
+                        const tuple_ty = types.Type{ .tuple_type = tup };
+                        const arr = types.arrayOfAlloc(self.arena, tuple_ty) catch return null orelse {
+                            _ = self.fail(line, col, "Object.entries: this field type has no array form") catch {};
+                            return null;
+                        };
+                        call.object_entries = true;
+                        call.checked_type = arr;
+                        return arr;
                     }
                     const arr = types.arrayOf(elem) orelse {
                         _ = self.fail(line, col, "Object.values: this field type has no array form") catch {};

@@ -439,6 +439,7 @@ pub const StaticCall = struct {
     cb_wants_index: bool = false, // Array.from(src, (v, i) => ...) — the map callback takes the element index
     object_keys: ?[]const []const u8 = null, // Object.keys(record): the static field-name list (spec 264)
     object_values: bool = false, // Object.values(record): emit field values, using object_keys as the field list
+    object_entries: bool = false, // Object.entries(record): emit [key, value] tuples, using object_keys as the field list
     from_length: ?*Expr = null, // Array.from({length: N}, cb): the N expression for an array-like source
 };
 
