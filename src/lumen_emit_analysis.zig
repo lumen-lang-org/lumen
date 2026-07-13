@@ -349,6 +349,76 @@ pub fn emitUnusedParamDiscards(params: []const ast.FunctionParam, body: []const 
     }
 }
 
+/// The signature-level identifier for a parameter: when the body reassigns it,
+/// the incoming value is named `<name>__mp` and a mutable local `<name>` is
+/// bound to it (Zig params are const). Otherwise the parameter keeps its name.
+pub fn paramSigName(arena: std.mem.Allocator, param: ast.FunctionParam, body: []const Stmt) CompileError![]const u8 {
+    if (!param.is_ref and bodyReassignsBinding(body, param.name)) {
+        return std.fmt.allocPrint(arena, "{s}__mp", .{param.name});
+    }
+    return param.name;
+}
+
+/// Emit `var <name> = <name>__mp;` for each non-ref parameter the body
+/// reassigns, turning a const parameter into a mutable local.
+pub fn emitReassignedParamCopies(params: []const ast.FunctionParam, body: []const Stmt, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    for (params) |param| {
+        if (!param.is_ref and bodyReassignsBinding(body, param.name)) {
+            try w.print(arena, "    var {s} = {s}__mp;\n", .{ param.name, param.name });
+        }
+    }
+}
+
+/// Whether a function body reassigns the binding `name` — a plain `name = …`
+/// (not a `Ref<T>` deref write) or an `++`/`--`. Zig function parameters are
+/// const, so a reassigned parameter must be copied into a mutable local.
+pub fn bodyReassignsBinding(body: []const Stmt, name: []const u8) bool {
+    for (body) |*s| if (stmtReassignsBinding(s, name)) return true;
+    return false;
+}
+fn stmtReassignsBinding(stmt: *const Stmt, name: []const u8) bool {
+    return switch (stmt.*) {
+        .assign => |a| (std.mem.eql(u8, a.name, name) and !a.deref) or exprReassignsBinding(a.value, name),
+        .var_decl => |d| exprReassignsBinding(d.init, name),
+        .destructure_decl => |d| exprReassignsBinding(d.source, name),
+        .member_assign => |ma| exprReassignsBinding(ma.value, name) or (ma.obj != null and exprReassignsBinding(ma.obj.?, name)),
+        .console_log => |log| blk: {
+            if (exprReassignsBinding(log.value, name)) break :blk true;
+            for (log.extra_values) |ev| if (exprReassignsBinding(ev, name)) break :blk true;
+            break :blk false;
+        },
+        .return_stmt => |r| if (r.value) |x| exprReassignsBinding(x, name) else false,
+        .throw_stmt => |t| exprReassignsBinding(t.value, name),
+        .expr_stmt => |x| exprReassignsBinding(x.value, name),
+        .while_stmt => |w| exprReassignsBinding(w.cond, name) or bodyReassignsBinding(w.body, name),
+        .do_while_stmt => |w| exprReassignsBinding(w.cond, name) or bodyReassignsBinding(w.body, name),
+        .for_stmt => |f| blk: {
+            if (f.update) |u| if (std.mem.eql(u8, u.name, name)) break :blk true; // `for (…; …; p = …)`
+            break :blk (f.init != null and exprReassignsBinding(f.init.?.init, name)) or (f.cond != null and exprReassignsBinding(f.cond.?, name)) or bodyReassignsBinding(f.body, name);
+        },
+        .for_of_stmt => |f| bodyReassignsBinding(f.body, name),
+        .for_in_stmt => |f| bodyReassignsBinding(f.body, name),
+        .if_stmt => |b| exprReassignsBinding(b.cond, name) or bodyReassignsBinding(b.then_body, name) or (b.else_body != null and bodyReassignsBinding(b.else_body.?, name)),
+        .switch_stmt => |sw| blk: {
+            for (sw.cases) |cse| if (bodyReassignsBinding(cse.body, name)) break :blk true;
+            if (sw.default_body) |db| if (bodyReassignsBinding(db, name)) break :blk true;
+            break :blk false;
+        },
+        .try_stmt => |t| bodyReassignsBinding(t.try_body, name) or bodyReassignsBinding(t.catch_body, name) or (t.finally_body != null and bodyReassignsBinding(t.finally_body.?, name)),
+        .defer_stmt => |d| bodyReassignsBinding(d.body, name),
+        .block_stmt => |b| bodyReassignsBinding(b.body, name),
+        else => false,
+    };
+}
+fn exprReassignsBinding(e: *const Expr, name: []const u8) bool {
+    // Reassignment shows up as an `inc_dec` on the binding; ordinary reads and
+    // arrow bodies don't reassign the *outer* binding (captures are read-only).
+    return switch (e.*) {
+        .inc_dec => |id| id.target.* == .var_ref and std.mem.eql(u8, id.target.var_ref.name, name),
+        else => false,
+    };
+}
+
 pub fn printFormat(t: types.Type) []const u8 {
     return switch (t) {
         .string, .string_literal_union => "{s}",

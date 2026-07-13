@@ -108,7 +108,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     }
     for (ctor_owner.ctor_params, 0..) |param, i| {
         if (i > 0) try decls.appendSlice(arena, ", ");
-        try decls.print(arena, "{s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
+        try decls.print(arena, "{s}: {s}", .{ try analysis.paramSigName(arena, param, ctor_owner.ctor_body), try types.zigName(arena, param.checked_type orelse return error.ParseError) });
     }
     // A throwing constructor chain returns an error union (spec 248).
     const ctor_throws = analysis.g_method_arena != null and analysis.ctorThrows(analysis.g_method_arena.?, c.name);
@@ -127,6 +127,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         emit_mod.g_fn_can_error = ctor_throws;
         defer emit_mod.g_fn_can_error = saved_can_error;
         try emitUnusedParamDiscards(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
+        try analysis.emitReassignedParamCopies(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
         try emit_stmt.emitBody(ctor_owner.ctor_body, decls, decls, arena, throw_target, switch_break_target, options);
     }
     try decls.appendSlice(arena, "    return self;\n    }\n");
@@ -139,7 +140,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         try decls.print(arena, "    fn __initv(", .{});
         for (ctor_owner.ctor_params, 0..) |param, i| {
             if (i > 0) try decls.appendSlice(arena, ", ");
-            try decls.print(arena, "{s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
+            try decls.print(arena, "{s}: {s}", .{ try analysis.paramSigName(arena, param, ctor_owner.ctor_body), try types.zigName(arena, param.checked_type orelse return error.ParseError) });
         }
         try decls.print(arena, ") {s} {{\n", .{c.name});
         // A ctor that writes fields needs `var self`; one that never touches
@@ -153,6 +154,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
             emit_mod.g_fn_can_error = false;
             defer emit_mod.g_fn_can_error = saved_can_error;
             try emitUnusedParamDiscards(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
+            try analysis.emitReassignedParamCopies(ctor_owner.ctor_params, ctor_owner.ctor_body, decls, arena);
             try emit_stmt.emitBody(ctor_owner.ctor_body, decls, decls, arena, throw_target, switch_break_target, options);
         }
         try decls.appendSlice(arena, "    return self;\n    }\n");
@@ -218,7 +220,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
             try decls.print(arena, "    fn __static_m_{s}(", .{m.name});
             for (m.params, 0..) |param, i| {
                 if (i > 0) try decls.appendSlice(arena, ", ");
-                try decls.print(arena, "{s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
+                try decls.print(arena, "{s}: {s}", .{ try analysis.paramSigName(arena, param, m.body), try types.zigName(arena, param.checked_type orelse return error.ParseError) });
             }
             if (m_throws) {
                 try decls.print(arena, ") error{{LumenThrow}}!{s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
@@ -239,6 +241,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
             }
             defer emit_mod.g_async_inner = s_prev_async;
             try emitUnusedParamDiscards(m.params, m.body, decls, arena);
+            try analysis.emitReassignedParamCopies(m.params, m.body, decls, arena);
             try emit_stmt.emitBody(m.body, decls, decls, arena, throw_target, switch_break_target, options);
             if (m.is_async and s_ret == .promise_type and s_ret.promise_type.* == .void and !analysis.bodyAlwaysReturns(m.body)) {
                 try decls.appendSlice(arena, "    return __promiseResolved(void, {});\n");
@@ -302,7 +305,7 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
     for (m.params) |param| {
         const pt = param.checked_type orelse return error.ParseError;
         const ztype = if (param.is_ref) try types.refZigName(arena, pt) else try types.zigName(arena, pt);
-        try decls.print(arena, ", {s}: {s}", .{ param.name, ztype });
+        try decls.print(arena, ", {s}: {s}", .{ try analysis.paramSigName(arena, param, m.body), ztype });
     }
     if (m_throws) {
         try decls.print(arena, ") error{{LumenThrow}}!{s} {{\n", .{try types.zigName(arena, m.checked_return_type orelse return error.ParseError)});
@@ -328,6 +331,7 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
         try decls.print(arena, "    __lumenPush(\"{s}.{s}\"); defer __lumenPop();\n", .{ frame_owner, src_name });
     }
     try emitUnusedParamDiscards(m.params, m.body, decls, arena);
+    try analysis.emitReassignedParamCopies(m.params, m.body, decls, arena);
     try emit_stmt.emitBody(m.body, decls, decls, arena, throw_target, switch_break_target, options);
     // An async `Promise<void>` method may fall through without a `return`; emit a
     // trailing resolved promise so it still returns a value.

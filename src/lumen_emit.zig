@@ -921,18 +921,25 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
 
             const Local = struct {
                 fn emitCallFn(a: std.mem.Allocator, ww: *std.ArrayListUnmanaged(u8), ar: *const ast.ArrowExpr, rz: []const u8, capturing: bool, id: usize) CompileError!void {
+                    const abody: []const ast.Stmt = ar.body_block orelse &.{};
                     try ww.print(a, "struct {{ fn __afn(__ctx{d}: *const anyopaque", .{id});
-                    for (ar.params) |p| try ww.print(a, ", {s}: {s}", .{ p.name, try types.zigName(a, p.checked_type.?) });
+                    for (ar.params) |p| try ww.print(a, ", {s}: {s}", .{ try analysis.paramSigName(a, p, abody), try types.zigName(a, p.checked_type.?) });
                     try ww.print(a, ") {s} {{ ", .{rz});
                     if (capturing) {
                         try ww.print(a, "const __env{d}: *const Env{d} = @ptrCast(@alignCast(__ctx{d})); ", .{ id, id, id });
                     } else {
                         try ww.print(a, "_ = __ctx{d}; ", .{id});
                     }
+                    // A reassigned parameter is copied into a mutable local; that
+                    // copy both consumes the incoming value and marks it used.
+                    try analysis.emitReassignedParamCopies(ar.params, abody, ww, a);
                     // JS allows unused parameters; Zig does not. Mark each used
-                    // so a body that ignores a parameter still compiles.
+                    // so a body that ignores a parameter still compiles (skip the
+                    // reassigned ones — their mutable copy already reads them).
                     for (ar.params) |p| {
-                        if (!std.mem.eql(u8, p.name, "_")) try ww.print(a, "_ = &{s}; ", .{p.name});
+                        if (std.mem.eql(u8, p.name, "_")) continue;
+                        if (analysis.bodyReassignsBinding(abody, p.name)) continue;
+                        try ww.print(a, "_ = &{s}; ", .{p.name});
                     }
                     // Stack-trace frame: named after the binding when known
                     // (`const g = ... => ...` traces as `g`), else <anonymous>.

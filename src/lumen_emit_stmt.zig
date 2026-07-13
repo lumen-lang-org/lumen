@@ -452,7 +452,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 if (i > 0) try decls.appendSlice(arena, ", ");
                 const param_type = param.checked_type orelse types.fromAnnotation(param.annotation);
                 const ztype = if (param.is_ref) try types.refZigName(arena, param_type) else try types.zigName(arena, param_type);
-                try decls.print(arena, "{s}: {s}", .{ param.name, ztype });
+                try decls.print(arena, "{s}: {s}", .{ try analysis.paramSigName(arena, param, decl.body), ztype });
             }
             // An async function returns its declared `*LumenPromise(T)`; `return v`
             // statements in the body resolve the promise with `v`.
@@ -480,6 +480,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 try decls.print(arena, "    __lumenPush(\"{s}\"); defer __lumenPop();\n", .{decl.name});
             }
             try analysis.emitUnusedParamDiscards(decl.params, decl.body, decls, arena);
+            try analysis.emitReassignedParamCopies(decl.params, decl.body, decls, arena);
             try emitBody(decl.body, decls, decls, arena, null, null, options);
             // An async `Promise<void>` body may legally fall through without a
             // `return`; emit a trailing resolved promise so the Promise-returning
