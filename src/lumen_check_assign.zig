@@ -283,9 +283,10 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // this is purely a checker-side gap, not an emit-side one.
             if (value.* == .num) return;
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
-            // JS-style numeric promotion (spec 255/256): an integer value
+            // JS-style numeric promotion (spec 255/256): an integer value —
+            // or a numeric enum, whose backing value is an integer (spec 294) —
             // flows into an f64 slot through the runtime Number() conversion.
-            if (types.isInteger(actual_type)) {
+            if (types.isInteger(actual_type) or (actual_type == .enum_type and !actual_type.enum_type.is_string)) {
                 const inner = self.arena.create(ast.Expr) catch return error.OutOfMemory;
                 inner.* = value.*;
                 const args = self.arena.alloc(*ast.Expr, 1) catch return error.OutOfMemory;
