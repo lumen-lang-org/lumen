@@ -307,6 +307,41 @@ pub fn parseInterfaceDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt 
     return .{ .type_decl = .{ .name = tname, .fields = try fields.toOwnedSlice(self.arena), .type_params = type_params, .parents = try parents.toOwnedSlice(self.arena), .line = line, .col = col } };
 }
 
+/// Constant-fold a numeric enum member initializer over integer literals,
+/// arithmetic/bitwise operators, unary minus, and references to
+/// previously-defined members of the same enum.
+fn foldEnumConst(e: *const Expr, prior: []const ast.EnumMember) CompileError!i64 {
+    return switch (e.*) {
+        .num => |v| v,
+        .neg => |inner| -(try foldEnumConst(inner, prior)),
+        .bnot => |inner| ~(try foldEnumConst(inner, prior)),
+        .var_ref => |r| blk: {
+            for (prior) |m| {
+                if (std.mem.eql(u8, m.name, r.name)) break :blk m.int_value;
+            }
+            break :blk error.ParseError; // reference to an unknown/forward member
+        },
+        .bin => |b| blk: {
+            const l = try foldEnumConst(b.l, prior);
+            const rr = try foldEnumConst(b.r, prior);
+            break :blk switch (b.op) {
+                '+' => l + rr,
+                '-' => l - rr,
+                '*' => l * rr,
+                '/' => if (rr == 0) error.ParseError else @divTrunc(l, rr),
+                '%' => if (rr == 0) error.ParseError else @rem(l, rr),
+                '&' => l & rr,
+                '|' => l | rr,
+                '^' => l ^ rr,
+                'L' => l << @as(u6, @intCast(rr & 63)), // '<<' lexes to 'L'
+                'R' => l >> @as(u6, @intCast(rr & 63)), // '>>' lexes to 'R'
+                else => error.ParseError,
+            };
+        },
+        else => error.ParseError,
+    };
+}
+
 /// `enum Name { A, B = 2, C }` (numeric) or `enum Name { Up = "up" }` (string).
 pub fn parseEnumDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     try self.advance(); // 'enum'
@@ -324,15 +359,18 @@ pub fn parseEnumDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
         var member: ast.EnumMember = .{ .name = mname };
         if (self.isOp('=')) {
             try self.advance();
-            if (self.cur == .num) {
-                member.int_value = self.cur.num;
-                auto = self.cur.num + 1;
-                try self.advance();
-            } else if (self.cur == .str) {
+            if (self.cur == .str) {
                 member.str_value = self.cur.str;
                 is_string = true;
                 try self.advance();
-            } else return error.ParseError;
+            } else {
+                // A numeric initializer — a constant expression over integer
+                // literals and previously-defined members (`B = A * 2`). Parse
+                // the expression, then fold it at compile time.
+                const expr = try self.parseExpr();
+                member.int_value = try foldEnumConst(expr, members.items);
+                auto = member.int_value + 1;
+            }
         } else {
             member.int_value = auto;
             auto += 1;
