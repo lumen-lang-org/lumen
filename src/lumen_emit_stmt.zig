@@ -99,14 +99,60 @@ fn emitArrayLogString(value: *ast.Expr, elem: types.Type, body: *std.ArrayListUn
     } else {
         try emitExpr(value, body, arena);
     }
-    try body.appendSlice(arena, "; var __lb: std.ArrayListUnmanaged(u8) = .empty; __lb.append(__sa(), '[') catch unreachable; for (__arr, 0..) |__le, __li| { if (__li > 0) __lb.appendSlice(__sa(), \", \") catch unreachable; ");
+    try body.appendSlice(arena, "; ");
+    try emitArrayToStringTail(elem, n, body, arena);
+    try body.appendSlice(arena, " })");
+}
+
+/// Given `__arr` already bound in scope, emit the loop that renders it to a
+/// `[]const u8` and `break :__la{n}`s with the result. Callers open the
+/// `(__la{n}: { ... })` block around this.
+fn emitArrayToStringTail(elem: types.Type, n: u64, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    try body.appendSlice(arena, "var __lb: std.ArrayListUnmanaged(u8) = .empty; __lb.append(__sa(), '[') catch unreachable; for (__arr, 0..) |__le, __li| { if (__li > 0) __lb.appendSlice(__sa(), \", \") catch unreachable; ");
     if (types.isStringLike(elem)) {
         try body.appendSlice(arena, "__lb.append(__sa(), '\\'') catch unreachable; __lb.appendSlice(__sa(), __le) catch unreachable; __lb.append(__sa(), '\\'') catch unreachable;");
     } else {
         const spec = if (elem == .bool) "{}" else "{d}";
         try body.print(arena, "__lb.appendSlice(__sa(), std.fmt.allocPrint(__sa(), \"{s}\", .{{__le}}) catch unreachable) catch unreachable;", .{spec});
     }
-    try body.print(arena, " }} __lb.append(__sa(), ']') catch unreachable; break :__la{d} @as([]const u8, __lb.items); }})", .{n});
+    try body.print(arena, " }} __lb.append(__sa(), ']') catch unreachable; break :__la{d} @as([]const u8, __lb.items);", .{n});
+}
+
+/// Is this a `T[] | null` optional whose payload is an array we render
+/// bracket-style?
+fn isOptionalArray(t: types.Type) bool {
+    return t == .optional and types.isArray(t.optional.*);
+}
+
+/// The `console.log` format spec for one argument: `{s}` for arrays and
+/// optional arrays (both rendered to a string first), else `printFormat`.
+fn logArgFormat(t: types.Type) []const u8 {
+    if (types.isArray(t) or isOptionalArray(t)) return "{s}";
+    return analysis.printFormat(t);
+}
+
+/// Emit one `console.log` argument, choosing the array / optional-array
+/// string renderer or a plain expression.
+fn emitLogArg(value: *ast.Expr, t: types.Type, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    if (isOptionalArray(t)) {
+        try emitOptionalArrayLogString(value, types.arrayElem(t.optional.*) orelse .i32, body, arena);
+    } else if (types.isArray(t)) {
+        try emitArrayLogString(value, types.arrayElem(t) orelse .i32, body, arena);
+    } else {
+        try emitExpr(value, body, arena);
+    }
+}
+
+/// `console.log` of an optional array (`T[] | null`): render "null" when the
+/// value is null, otherwise the same bracketed form as a plain array.
+fn emitOptionalArrayLogString(value: *ast.Expr, elem: types.Type, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    g_log_seq += 1;
+    const n = g_log_seq;
+    try body.print(arena, "(__lo{d}: {{ const __opt = ", .{n});
+    try emitExpr(value, body, arena);
+    try body.print(arena, "; if (__opt) |__arr| {{ break :__lo{d} (__la{d}: {{ ", .{ n, n });
+    try emitArrayToStringTail(elem, n, body, arena);
+    try body.print(arena, " }}); }} else {{ break :__lo{d} @as([]const u8, \"null\"); }} }})", .{n});
 }
 
 pub fn emitStmt(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions) CompileError!void {
@@ -649,25 +695,17 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             // Format string: each argument's spec, space-separated (JS joins
             // console.log args with spaces), then a newline.
             try body.print(arena, "    {s}", .{dest});
-            try body.appendSlice(arena, if (types.isArray(log_type)) "{s}" else analysis.printFormat(log_type));
+            try body.appendSlice(arena, logArgFormat(log_type));
             for (log.extra_types) |et| {
                 try body.appendSlice(arena, " ");
-                try body.appendSlice(arena, if (types.isArray(et)) "{s}" else analysis.printFormat(et));
+                try body.appendSlice(arena, logArgFormat(et));
             }
             try body.appendSlice(arena, "\\n\", .{");
             // Arguments.
-            if (types.isArray(log_type)) {
-                try emitArrayLogString(log.value, types.arrayElem(log_type) orelse .i32, body, arena);
-            } else {
-                try emitExpr(log.value, body, arena);
-            }
+            try emitLogArg(log.value, log_type, body, arena);
             for (log.extra_values, log.extra_types) |ev, et| {
                 try body.appendSlice(arena, ", ");
-                if (types.isArray(et)) {
-                    try emitArrayLogString(ev, types.arrayElem(et) orelse .i32, body, arena);
-                } else {
-                    try emitExpr(ev, body, arena);
-                }
+                try emitLogArg(ev, et, body, arena);
             }
             try body.appendSlice(arena, "});\n");
         },
