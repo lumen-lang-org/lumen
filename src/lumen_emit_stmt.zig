@@ -250,7 +250,10 @@ fn labelPrefix(arena: std.mem.Allocator, label: ?[]const u8, loop_body: []const 
 }
 
 pub fn emitSwitchCaseMatch(switch_type: types.Type, switch_value: *const Expr, case_value: *const Expr, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
-    if (types.isStringLike(switch_type)) {
+    // A string enum lowers to its `[]const u8` value, so it compares by bytes.
+    const string_like = types.isStringLike(switch_type) or
+        (switch_type == .enum_type and switch_type.enum_type.is_string);
+    if (string_like) {
         try body.appendSlice(arena, "std.mem.eql(u8, ");
         try emitExpr(switch_value, body, arena);
         try body.appendSlice(arena, ", ");
