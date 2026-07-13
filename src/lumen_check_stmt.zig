@@ -1157,6 +1157,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             for (switch_stmt.cases) |*case| {
                 switch (switch_type) {
                     .string_literal_union, .int_literal_union => try self.ensureAssignable(program, switch_type, case.value, case.line, case.col),
+                    // A numeric discriminant accepts an integer-literal case that
+                    // widens to it (`switch (n: number) { case 1: … }`), matching
+                    // JS where every numeric literal is `number`; `ensureAssignable`
+                    // performs the same i32→f64/i64 widening used elsewhere.
+                    .f64, .i64 => try self.ensureAssignable(program, switch_type, case.value, case.line, case.col),
                     else => {
                         const case_type = self.exprType(program, case.value, case.line, case.col) orelse
                             return self.inferenceFail(case.line, case.col, "cannot infer switch case type");
