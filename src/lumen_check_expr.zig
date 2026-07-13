@@ -717,6 +717,24 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         .template => |parts| {
             for (parts) |*part| {
                 if (part.expr) |hole| {
+                    // A ternary hole whose branches mix a string and a numeric/
+                    // bool value (`${c ? "(" + n + ")" : n}`) can't unify to one
+                    // type, but every branch stringifies inside a template —
+                    // coerce the non-string, stringifiable branch to string so
+                    // the ternary itself unifies to `string`.
+                    if (hole.* == .ternary) {
+                        const tern = &hole.ternary;
+                        if (self.exprType(program, tern.then_expr, line, col)) |tt| {
+                            if (self.exprType(program, tern.else_expr, line, col)) |et| {
+                                const t_str = types.isStringLike(tt);
+                                const e_str = types.isStringLike(et);
+                                if (t_str != e_str) {
+                                    if (!t_str and (types.isNumeric(tt) or tt == .bool)) tern.then_expr = self.wrapStringify(tern.then_expr) catch return null;
+                                    if (!e_str and (types.isNumeric(et) or et == .bool)) tern.else_expr = self.wrapStringify(tern.else_expr) catch return null;
+                                }
+                            }
+                        }
+                    }
                     // An enum interpolates as its backing type (spec 294).
                     const ht = enumBacking(self.exprType(program, hole, line, col) orelse return null);
                     if (!types.isStringLike(ht) and !types.isNumeric(ht) and ht != .bool) {
