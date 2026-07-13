@@ -142,6 +142,18 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
         },
         .union_type => |union_name| {
             const uinfo = self.unions.get(union_name) orelse return self.fail(line, col, "unknown type name");
+            // A ternary whose branches are different variants (`flag ? a : b`)
+            // is assignable to the union when each branch is: check each side
+            // against the union so both coerce independently (spec 385).
+            if (value.* == .ternary) {
+                const t = value.ternary;
+                const ct = self.exprType(program, t.cond, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
+                if (!types.same(.bool, ct)) return self.failCondition(line, col, "ternary", ct);
+                try self.ensureAssignable(program, expected, t.then_expr, line, col);
+                try self.ensureAssignable(program, expected, t.else_expr, line, col);
+                value.ternary.result_type = expected;
+                return;
+            }
             // A union value flows through (same union, narrowed variant, or a
             // value already typed as one of the variants).
             if (value.* != .obj) {
