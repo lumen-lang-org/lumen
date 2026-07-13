@@ -334,6 +334,39 @@ pub fn unifyAnnotation(self: *Checker, type_params: []const []const u8, found: [
         }
         return;
     }
+    // A user generic-type/class pattern `Base<...>` against a specialized
+    // argument (`unwrap<T>(b: Box<T>)` given a `Box<number>`): recover the
+    // argument's concrete type arguments from the specialization registry and
+    // unify each pattern arg against them positionally (spec 424).
+    if ((arg_type == .named or arg_type == .class_type) and std.mem.indexOfScalar(u8, pattern, '<') != null and std.mem.endsWith(u8, pattern, ">")) {
+        const mname = if (arg_type == .named) arg_type.named else arg_type.class_type;
+        if (self.spec_type_args.get(mname)) |conc_args| {
+            const lt = std.mem.indexOfScalar(u8, pattern, '<').?;
+            const inner = pattern[lt + 1 .. pattern.len - 1];
+            var depth: i32 = 0;
+            var idx: usize = 0;
+            var part_start: usize = 0;
+            var i: usize = 0;
+            while (i <= inner.len) : (i += 1) {
+                const at_end = i == inner.len;
+                const ch = if (at_end) @as(u8, ',') else inner[i];
+                switch (ch) {
+                    '<', '[', '(' => depth += 1,
+                    '>', ']', ')' => depth -= 1,
+                    else => {},
+                }
+                if (ch == ',' and depth == 0) {
+                    if (idx >= conc_args.len) return self.fail(line, col, "E_TYPE_MISMATCH");
+                    const part = std.mem.trim(u8, inner[part_start..i], " ");
+                    const conc = self.typeFromAnnotation(conc_args[idx], line, col) catch return self.fail(line, col, "E_TYPE_INFER");
+                    if (part.len > 0) try self.unifyAnnotation(type_params, found, part, conc, line, col);
+                    idx += 1;
+                    part_start = i + 1;
+                }
+            }
+            return;
+        }
+    }
     // Function-type pattern `(P, ...) => R`: unify the return pattern against the
     // callback's return type, and each parameter pattern against its parameter
     // type. This lets a type parameter be inferred from a callback's return
@@ -432,6 +465,7 @@ pub fn specializeClass(self: *Checker, decl: *const ast.ClassDecl, type_args: []
     _ = line;
     _ = col;
     const mname = try self.mangledName(decl.name, type_args);
+    self.spec_type_args.put(self.arena, mname, self.arena.dupe([]const u8, type_args) catch return error.OutOfMemory) catch return error.OutOfMemory;
     if (self.specialized.get(mname) != null) return mname;
     self.specialized.put(self.arena, mname, {}) catch return error.OutOfMemory;
 
@@ -509,6 +543,7 @@ pub fn specializeClass(self: *Checker, decl: *const ast.ClassDecl, type_args: []
 /// declared under the mangled name; returns that name.
 pub fn specializeType(self: *Checker, decl: *const ast.TypeDecl, type_args: []const []const u8, line: u32, col: u32) CompileError![]const u8 {
     const mname = try self.mangledName(decl.name, type_args);
+    self.spec_type_args.put(self.arena, mname, self.arena.dupe([]const u8, type_args) catch return error.OutOfMemory) catch return error.OutOfMemory;
     if (self.type_decls.get(mname) != null) return mname;
     const new_fields = self.arena.alloc(ast.TypeField, decl.fields.len) catch return error.OutOfMemory;
     for (decl.fields, 0..) |f, i| {

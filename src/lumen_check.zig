@@ -196,6 +196,10 @@ pub const Checker = struct {
     generic_funcs: std.StringHashMapUnmanaged(*ast.FunctionDecl) = .empty,
     generic_classes: std.StringHashMapUnmanaged(*ast.ClassDecl) = .empty,
     generic_types: std.StringHashMapUnmanaged(*ast.TypeDecl) = .empty,
+    // A specialized type/class's mangled name -> the concrete type-argument
+    // annotations it was built from, so generic inference can recover `T` from a
+    // `Box<T>`-typed parameter given a `Box<number>` argument (spec 424).
+    spec_type_args: std.StringHashMapUnmanaged([]const []const u8) = .empty,
     // Mangled names of already-emitted specializations (dedup) and the new
     // concrete declarations to append to the program for the emitter.
     specialized: std.StringHashMapUnmanaged(void) = .empty,
