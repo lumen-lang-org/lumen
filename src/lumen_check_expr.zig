@@ -753,6 +753,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 c.result_type = inner;
                 return inner;
             }
+            // An object-literal fallback (`map.get(k) ?? { ... }`) can't self-type;
+            // check it against the left's inner record type instead (spec 422).
+            if (c.r.* == .obj and inner == .named) {
+                self.ensureAssignable(program, inner, c.r, line, col) catch return null;
+                c.result_type = inner;
+                return inner;
+            }
             const right_type = self.exprType(program, c.r, line, col) orelse return null;
             if (right_type == .optional and types.same(right_type.optional.*, inner)) {
                 c.result_type = left_type;
