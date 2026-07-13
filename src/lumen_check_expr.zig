@@ -1168,6 +1168,32 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     _ = self.fail(line, col, "E_TYPE_ARG_COUNT") catch {};
                     return null;
                 }
+                // `new Map(otherMap)`: clone another map. K/V come from (or must
+                // match) the source; emission copies via a keys/values loop
+                // rather than an entries-array walk. A source is only a map when
+                // it isn't an array literal, so array initializers skip this.
+                if (ne.args.len == 1 and ne.args[0].* != .array) {
+                    if (self.exprType(program, ne.args[0], line, col)) |at0| {
+                        if (at0 == .map_type) {
+                            if (ne.type_args.len == 2) {
+                                if (!types.same(k.*, at0.map_type.key.*) or !types.same(v.*, at0.map_type.value.*)) {
+                                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                                    return null;
+                                }
+                            } else {
+                                k.* = at0.map_type.key.*;
+                                v.* = at0.map_type.value.*;
+                            }
+                            ne.copy_container = true;
+                            const m = self.arena.create(types.MapType) catch return null;
+                            m.* = .{ .key = k, .value = v };
+                            const ct = types.Type{ .map_type = m };
+                            ne.container_type = ct;
+                            program.needs_map = true;
+                            return ct;
+                        }
+                    }
+                }
                 // Optional entries initializer: an array of `[key, value]` pairs.
                 // An inline literal (`new Map([["a", 1]])`) is checked entry by
                 // entry so integer literals widen and K/V can be inferred; any

@@ -606,7 +606,7 @@ pub const Expr = union(enum) {
     arrow: *ArrowExpr, // (x: T) => expr
     this_expr, // `this` inside a method/constructor
     super_call: struct { name: []const u8, args: []*Expr, parent: ?[]const u8 = null }, // super.m(args)
-    new_expr: struct { class_name: []const u8, args: []*Expr, type_args: [][]const u8 = &.{}, container_type: ?types.Type = null }, // new C(args) / new C<T>(args) / new Map/Set<...>()
+    new_expr: struct { class_name: []const u8, args: []*Expr, type_args: [][]const u8 = &.{}, container_type: ?types.Type = null, copy_container: bool = false }, // new C(args) / new C<T>(args) / new Map/Set<...>(); copy_container: `new Map(otherMap)` — the single arg is a Map to clone (emit a keys/values copy loop)
     method_call: struct { obj: *Expr, name: []const u8, args: []*Expr, class_name: ?[]const u8 = null, is_static: bool = false, array_elem_type: ?types.Type = null, array_acc_type: ?types.Type = null, array_result_type: ?types.Type = null, string_method: bool = false, container_type: ?types.Type = null, optional_chain: bool = false, chain_result_type: ?types.Type = null, cb_wants_index: bool = false, number_method: bool = false, is_console: bool = false, regex_arg: bool = false, sized_fill: bool = false, bool_method: bool = false, iface_name: ?[]const u8 = null }, // obj.m(args) / Class.m(args) / Map|Set method; is_console: console.log/error/... used as a void expression; regex_arg: a string method (replace) whose first arg is a regex; sized_fill: `new Array(n).fill(v)` fused initializer
     template: []TemplatePart, // `text ${expr} ...`
     obj: []FieldInit,

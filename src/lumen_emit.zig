@@ -708,6 +708,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.print(arena, "; for (__src) |__e| {{ __c.add(__e); }} break :__seti{d} __c; }})", .{s});
                     return;
                 }
+                // `new Map(otherMap)`: init then copy each key/value pair from
+                // the source map's parallel keys/values slices.
+                if (ct == .map_type and ne.copy_container) {
+                    g_global_pred_seq += 1;
+                    const s = g_global_pred_seq;
+                    try w.print(arena, "(__mapc{d}: {{ const __c = {s}.__init(); const __src = ", .{ s, tname });
+                    try emitExpr(ne.args[0], w, arena);
+                    try w.print(arena, "; for (__src.keys(), __src.values()) |__k, __v| {{ __c.set(__k, __v); }} break :__mapc{d} __c; }})", .{s});
+                    return;
+                }
                 // `new Map([[k, v], ...])`: init then set each entry.
                 if (ct == .map_type and ne.args.len == 1 and ne.args[0].* == .array) {
                     g_global_pred_seq += 1;
