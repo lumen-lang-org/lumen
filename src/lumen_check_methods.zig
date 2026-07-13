@@ -22,6 +22,19 @@ pub fn cbParamsMatch(params: []const types.Type, elem: types.Type) bool {
     return false;
 }
 
+/// An integer-position argument accepts an integer directly, or a `number`
+/// (f64) that truncates to an integer — matching JS/TS where index/count
+/// arguments take `number` (spec 426). Rewrites an f64 argument in place to a
+/// truncating cast. Returns false for a non-numeric argument.
+fn coerceIntArg(self: *Checker, arg: *ast.Expr, at: types.Type) bool {
+    if (types.isInteger(at)) return true;
+    if (at != .f64) return false;
+    const inner = self.arena.create(ast.Expr) catch return false;
+    inner.* = arg.*;
+    arg.* = .{ .cast = .{ .inner = inner, .annotation = "int", .checked_type = .i32, .float_to_int = true } };
+    return true;
+}
+
 pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
     const elem = types.arrayElem(obj_type) orelse {
         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
@@ -259,7 +272,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         };
         if (mc.args.len == 2) {
             const ft = self.exprType(program, mc.args[1], line, col) orelse return null;
-            if (!types.isInteger(ft)) {
+            if (!coerceIntArg(self, mc.args[1], ft)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             }
@@ -277,7 +290,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             return null;
         }
         const at = self.exprType(program, mc.args[0], line, col) orelse return null;
-        if (!types.isInteger(at)) {
+        if (!coerceIntArg(self, mc.args[0], at)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
@@ -297,7 +310,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         }
         for (mc.args) |arg| {
             const at = self.exprType(program, arg, line, col) orelse return null;
-            if (!types.isInteger(at)) {
+            if (!coerceIntArg(self, arg, at)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             }
@@ -318,7 +331,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         };
         for (mc.args[1..]) |arg| {
             const at = self.exprType(program, arg, line, col) orelse return null;
-            if (!types.isInteger(at)) {
+            if (!coerceIntArg(self, arg, at)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             }
@@ -336,7 +349,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             return null;
         }
         const it = self.exprType(program, mc.args[0], line, col) orelse return null;
-        if (!types.isInteger(it)) {
+        if (!coerceIntArg(self, mc.args[0], it)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
@@ -413,7 +426,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         }
         for (mc.args) |arg| {
             const at = self.exprType(program, arg, line, col) orelse return null;
-            if (!types.isInteger(at)) {
+            if (!coerceIntArg(self, arg, at)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             }
@@ -829,7 +842,7 @@ pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
             return null;
         }
         const at = self.exprType(program, mc.args[0], line, col) orelse return null;
-        if (!types.isInteger(at)) {
+        if (!coerceIntArg(self, mc.args[0], at)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
@@ -842,7 +855,7 @@ pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
         }
         for (mc.args) |arg| {
             const at = self.exprType(program, arg, line, col) orelse return null;
-            if (!types.isInteger(at)) {
+            if (!coerceIntArg(self, arg, at)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
             }
@@ -875,7 +888,7 @@ pub fn numberInstanceMethod(self: *Checker, program: *ast.Program, mc: anytype, 
             return null;
         }
         const at = self.exprType(program, mc.args[0], line, col) orelse return null;
-        if (!types.isInteger(at)) {
+        if (!coerceIntArg(self, mc.args[0], at)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }

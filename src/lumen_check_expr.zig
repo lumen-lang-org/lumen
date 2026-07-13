@@ -1581,8 +1581,15 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
                 const index_type = self.exprType(program, index.value, line, col) orelse return null;
                 if (!types.same(.i32, index_type) and !types.same(.i64, index_type)) {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                    return null;
+                    // A `number` (f64) index truncates to an integer (spec 426).
+                    if (index_type == .f64) {
+                        const inner = self.arena.create(ast.Expr) catch return null;
+                        inner.* = index.value.*;
+                        index.value.* = .{ .cast = .{ .inner = inner, .annotation = "int", .checked_type = .i32, .float_to_int = true } };
+                    } else {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
                 }
                 // `s[i]` on a string is the single-character substring at `i`
                 // (a string), matching JS/TS.

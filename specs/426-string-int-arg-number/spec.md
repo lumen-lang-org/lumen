@@ -29,3 +29,11 @@ unchanged. This applies uniformly to `repeat`, `padStart`/`padEnd`, `slice`,
 - Integer arguments unchanged.
 - Full `zig build` + test suite green, plus a comprehensive end-to-end program
   exercising this session's fixes.
+
+## Follow-up — array methods and index access
+
+The same `number`-in-integer-position coercion was extended to array methods
+(`at`, `slice`, `fill`, `copyWithin`, `indexOf`/`includes` start), index access
+`a[i]` / `s[i]`, and number methods (`toFixed`/`toPrecision` precision) via a
+shared `coerceIntArg` helper. So `a[i]`, `a.slice(i)`, `"abc"[i]` with `i:
+number` all truncate the index, and a non-numeric index still errors.
