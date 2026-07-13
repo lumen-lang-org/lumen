@@ -225,6 +225,27 @@ pub fn inferTypeArgs(self: *Checker, program: *ast.Program, type_params: []const
                 }
             }
         }
+        // A tuple-typed parameter (`t: [A, B]`) whose argument is a bare array
+        // literal (`swap([1, "a"])`) can't self-type as a tuple, so type each
+        // element individually and unify against the tuple pattern (spec 423).
+        if (args[idx].* == .array and std.mem.startsWith(u8, p.annotation, "[") and
+            std.mem.endsWith(u8, p.annotation, "]") and !std.mem.endsWith(u8, p.annotation, "[]"))
+        {
+            const items = args[idx].array.items;
+            const elems = self.arena.alloc(types.Type, items.len) catch return error.OutOfMemory;
+            var ok = true;
+            for (items, 0..) |it, ei| {
+                elems[ei] = self.exprType(program, it, line, col) orelse {
+                    ok = false;
+                    break;
+                };
+            }
+            if (ok) {
+                self.arrow_param_hint = null;
+                try self.unifyAnnotation(type_params, found, p.annotation, .{ .tuple_type = elems }, line, col);
+                continue;
+            }
+        }
         const arg_type = self.exprType(program, args[idx], line, col) orelse {
             self.arrow_param_hint = null;
             return self.fail(line, col, "E_TYPE_INFER");
@@ -284,6 +305,34 @@ pub fn unifyAnnotation(self: *Checker, type_params: []const []const u8, found: [
     if (arg_type == .set_type and std.mem.startsWith(u8, pattern, "Set<") and std.mem.endsWith(u8, pattern, ">")) {
         const inner = std.mem.trim(u8, pattern["Set<".len .. pattern.len - 1], " ");
         return self.unifyAnnotation(type_params, found, inner, arg_type.set_type.*, line, col);
+    }
+    // Tuple pattern `[A, B, ...]` binds each parameter to the argument tuple's
+    // positional element types (`swap<A, B>(t: [A, B])`). A `T[]` array pattern
+    // ends with `[]` and is handled above; a tuple pattern starts with `[`.
+    if (arg_type == .tuple_type and std.mem.startsWith(u8, pattern, "[") and std.mem.endsWith(u8, pattern, "]")) {
+        const inner = pattern[1 .. pattern.len - 1];
+        const elems = arg_type.tuple_type;
+        var depth: i32 = 0;
+        var idx: usize = 0;
+        var part_start: usize = 0;
+        var i: usize = 0;
+        while (i <= inner.len) : (i += 1) {
+            const at_end = i == inner.len;
+            const ch = if (at_end) @as(u8, ',') else inner[i];
+            switch (ch) {
+                '<', '[', '(' => depth += 1,
+                '>', ']', ')' => depth -= 1,
+                else => {},
+            }
+            if ((ch == ',' and depth == 0) or (at_end and depth == 0)) {
+                if (idx >= elems.len) return self.fail(line, col, "E_TYPE_MISMATCH");
+                const part = std.mem.trim(u8, inner[part_start..i], " ");
+                if (part.len > 0) try self.unifyAnnotation(type_params, found, part, elems[idx], line, col);
+                idx += 1;
+                part_start = i + 1;
+            }
+        }
+        return;
     }
     // Function-type pattern `(P, ...) => R`: unify the return pattern against the
     // callback's return type, and each parameter pattern against its parameter
