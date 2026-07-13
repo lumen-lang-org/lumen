@@ -1331,7 +1331,11 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     e.* = .{ .ternary = .{ .cond = cond, .then_expr = then_call, .else_expr = else_null } };
                     return self.exprType(program, e, line, col);
                 }
-                _ = self.fail(line, col, "E_UNSUPPORTED_OPTIONAL_CALL") catch {};
+                // Only an impure receiver reaches here (a pure one desugared
+                // above): the receiver would have to be evaluated twice, so
+                // point at the single-evaluation workaround instead of the bare
+                // "not supported" code.
+                _ = self.fail(line, col, "optional method call on a temporary (`expr?.m()`) is not supported — bind the receiver first: `const v = expr; v?.m()`") catch {};
                 return null;
             }
             // `console.log(x)` (and .info/.debug/.error/.warn/.trace) used as a
