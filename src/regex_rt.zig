@@ -541,6 +541,21 @@ pub const __lumen_regex = struct {
     /// spans, not per-group spans.
     pub fn matchRegex(a: __re_std.mem.Allocator, pattern: []const u8, flags: []const u8, input: []const u8) ?[]const []const u8 {
         const c = __reCompilePattern(a, pattern, flags) orelse return null;
+        // With the `g` flag, JS `String.match` returns every non-overlapping
+        // full match (no capture groups); a zero-width match advances one byte
+        // to guarantee progress. Without `g`, a single-element `[fullMatch]` is
+        // returned (capture groups are not tracked by this engine).
+        if (c.global) {
+            var out: __re_std.ArrayListUnmanaged([]const u8) = .empty;
+            var i: usize = 0;
+            while (i <= input.len) {
+                const m = __reFind(c, input, i) orelse break;
+                out.append(a, input[m.start..m.end]) catch return null;
+                i = if (m.end > m.start) m.end else m.start + 1;
+            }
+            if (out.items.len == 0) return null;
+            return out.items;
+        }
         const m = __reFind(c, input, 0) orelse return null;
         const out = a.alloc([]const u8, 1) catch return null;
         out[0] = input[m.start..m.end];
