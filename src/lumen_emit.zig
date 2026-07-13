@@ -737,14 +737,22 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.print(arena, "(__id{d}: {{ const __rcv = ", .{s});
                 try emitExpr(mc.obj, w, arena);
                 try w.appendSlice(arena, "; break :__id");
-                try w.print(arena, "{d} __rcv.__vt.", .{s});
+                try w.print(arena, "{d} ", .{s});
+                // A throwing interface method returns an error union through its
+                // vtable slot; wrap the dispatch so the throw routes to the
+                // enclosing try/catch just like a direct class-method call (431).
+                const iface_throws = analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, mc.name);
+                if (iface_throws) try emitThrowingCallPrefix(w, arena);
+                try w.appendSlice(arena, "__rcv.__vt.");
                 try emitFieldName(w, arena, mc.name);
                 try w.appendSlice(arena, "(__rcv.__ptr");
                 for (mc.args) |arg| {
                     try w.appendSlice(arena, ", ");
                     try emitExpr(arg, w, arena);
                 }
-                try w.appendSlice(arena, "); })");
+                try w.appendSlice(arena, ")");
+                if (iface_throws) try emitThrowingCallSuffix(w, arena);
+                try w.appendSlice(arena, "; })");
                 return;
             }
             if (mc.sized_fill) {

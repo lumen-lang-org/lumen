@@ -423,6 +423,20 @@ fn ifaceMethods(name: []const u8) ?[]const ast.TypeField {
     return null;
 }
 
+/// An interface method's vtable return type: `error{LumenThrow}!R` when any
+/// implementation of a like-named method throws (the throwing analysis is
+/// name-based, so every same-named method shares the throwing signature), else
+/// plain `R` (spec 431).
+pub fn ifaceMethodThrows(name: []const u8) bool {
+    return analysis.g_method_arena != null and analysis.methodThrows(analysis.g_method_arena.?, name);
+}
+
+fn vtRetType(name: []const u8, ret: types.Type, arena: std.mem.Allocator) CompileError![]const u8 {
+    const r = try types.zigName(arena, ret);
+    if (ifaceMethodThrows(name)) return std.fmt.allocPrint(arena, "error{{LumenThrow}}!{s}", .{r});
+    return r;
+}
+
 /// Emit an interface's vtable type and fat-pointer struct:
 ///   const VT_<Name> = struct { m: *const fn(*anyopaque, P...) R, ... };
 ///   const LumenIface_<Name> = struct { __ptr: *anyopaque, __vt: *const VT_<Name> };
@@ -435,7 +449,7 @@ pub fn emitIfaceDecl(decl: *const ast.TypeDecl, decls: *std.ArrayListUnmanaged(u
         try emit_mod.emitFieldName(decls, arena, f.name);
         try decls.appendSlice(arena, ": *const fn (*anyopaque");
         for (ft.func_type.params) |p| try decls.print(arena, ", {s}", .{try types.zigName(arena, p)});
-        try decls.print(arena, ") {s},\n", .{try types.zigName(arena, ft.func_type.ret.*)});
+        try decls.print(arena, ") {s},\n", .{try vtRetType(f.name, ft.func_type.ret.*, arena)});
     }
     try decls.appendSlice(arena, "};\n");
     try decls.print(arena, "const LumenIface_{s} = struct {{ __ptr: *anyopaque, __vt: *const VT_{s} }};\n", .{ decl.name, decl.name });
@@ -455,7 +469,7 @@ pub fn emitClassVtables(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(
             try emit_mod.emitFieldName(decls, arena, f.name);
             try decls.appendSlice(arena, " = &struct {\n        fn __w(__p: *anyopaque");
             for (ft.func_type.params, 0..) |p, i| try decls.print(arena, ", __a{d}: {s}", .{ i, try types.zigName(arena, p) });
-            try decls.print(arena, ") {s} {{\n            return @as(*{s}, @ptrCast(@alignCast(__p))).", .{ try types.zigName(arena, ft.func_type.ret.*), c.name });
+            try decls.print(arena, ") {s} {{\n            return @as(*{s}, @ptrCast(@alignCast(__p))).", .{ try vtRetType(f.name, ft.func_type.ret.*, arena), c.name });
             try emit_mod.emitFieldName(decls, arena, f.name);
             try decls.appendSlice(arena, "(");
             for (ft.func_type.params, 0..) |_, i| {

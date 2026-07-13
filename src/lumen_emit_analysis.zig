@@ -108,7 +108,7 @@ pub fn exprCanThrow(e: *const Expr) bool {
             break :blk false;
         },
         .method_call => |mc| blk: {
-            if (mc.class_name != null and !mc.is_console) {
+            if ((mc.class_name != null or mc.iface_name != null) and !mc.is_console) {
                 if (g_method_arena) |ma| if (methodThrows(ma, mc.name)) break :blk true;
             }
             if (exprCanThrow(mc.obj)) break :blk true;
