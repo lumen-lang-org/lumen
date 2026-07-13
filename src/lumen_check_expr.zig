@@ -1900,18 +1900,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     e.* = call.args[0].*;
                     return at;
                 }
-                if (!std.mem.eql(u8, call.name, "keys")) {
-                    _ = self.fail(line, col, "only Object.keys and Object.freeze are supported — records have static, immutable shapes, so read fields directly") catch {};
+                const is_values = std.mem.eql(u8, call.name, "values");
+                if (!std.mem.eql(u8, call.name, "keys") and !is_values) {
+                    _ = self.fail(line, col, "only Object.keys, Object.values and Object.freeze are supported — records have static, immutable shapes, so read fields directly") catch {};
                     return null;
                 }
                 if (call.args.len != 1) {
-                    _ = self.fail(line, col, "'Object.keys' expects 1 argument") catch {};
+                    const msg = std.fmt.allocPrint(self.arena, "'Object.{s}' expects 1 argument", .{call.name}) catch "E_ARITY";
+                    _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
                 const at = self.exprType(program, call.args[0], line, col) orelse return null;
                 if (at != .named) {
                     const tn = types.tsName(self.arena, at) catch "?";
-                    const msg = std.fmt.allocPrint(self.arena, "Object.keys needs a record type, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs a record type, got `{s}`", .{ call.name, tn }) catch "E_TYPE_MISMATCH";
                     _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
@@ -1922,6 +1924,32 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 const names = self.arena.alloc([]const u8, decl.fields.len) catch return null;
                 for (decl.fields, 0..) |f, i| names[i] = f.name;
                 call.object_keys = names;
+                if (is_values) {
+                    // Object.values(record): all fields must share one element type
+                    // so the result is a homogeneous array.
+                    if (decl.fields.len == 0) {
+                        _ = self.fail(line, col, "Object.values needs a record with at least one field") catch {};
+                        return null;
+                    }
+                    const elem = decl.fields[0].checked_type orelse (self.typeFromAnnotation(decl.fields[0].annotation, line, col) catch null) orelse {
+                        _ = self.fail(line, col, "Object.values: could not resolve the field type") catch {};
+                        return null;
+                    };
+                    for (decl.fields[1..]) |f| {
+                        const ft = f.checked_type orelse (self.typeFromAnnotation(f.annotation, line, col) catch null) orelse continue;
+                        if (!types.same(elem, ft)) {
+                            _ = self.fail(line, col, "Object.values needs all fields to share one type — mixed field types have no single array element type") catch {};
+                            return null;
+                        }
+                    }
+                    const arr = types.arrayOf(elem) orelse {
+                        _ = self.fail(line, col, "Object.values: this field type has no array form") catch {};
+                        return null;
+                    };
+                    call.object_values = true;
+                    call.checked_type = arr;
+                    return arr;
+                }
                 call.checked_type = .string_array;
                 return .string_array;
             }
