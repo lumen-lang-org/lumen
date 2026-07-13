@@ -723,6 +723,17 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             }
         },
         .assign => |*assignment| {
+            // Whether the target was referenced before this statement (peeked
+            // without marking, since accumulator promotion below is only safe
+            // when this write is the first use — see spec 432).
+            const was_used = blk: {
+                var i = self.scopes.items.len;
+                while (i > 0) {
+                    i -= 1;
+                    if (self.scopes.items[i].getPtr(assignment.name)) |b| break :blk b.used;
+                }
+                break :blk true;
+            };
             const found_binding = self.bindingPtr(assignment.name) orelse
                 return self.undefined_(assignment.name, assignment.line, assignment.col);
             if (!found_binding.mutable) {
@@ -739,6 +750,28 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                         return self.fail(assignment.line, assignment.col, "E_CAPTURED_MUTATION");
                     }
                 }
+            }
+            // Accumulator widening (spec 432): a `let n = 0` inferred as an
+            // integer, then assigned a `number` (`n = n + x` / `n += x` where x
+            // is float), promotes to `number` — matching TS, where every numeric
+            // is `number`. Only an unannotated, still-integer `let` binding
+            // promotes, so explicit `let n: int` and integer loop counters keep
+            // their width; the promotion also floats the original initializer.
+            promote: {
+                const op = assignment.op;
+                const eqs = std.mem.eql;
+                const arith = eqs(u8, op, "=") or eqs(u8, op, "+=") or eqs(u8, op, "-=") or
+                    eqs(u8, op, "*=") or eqs(u8, op, "/=") or eqs(u8, op, "%=") or eqs(u8, op, "**=");
+                if (!arith) break :promote;
+                if (was_used) break :promote;
+                if (!types.isInteger(found_binding.ty)) break :promote;
+                const decl = found_binding.decl orelse break :promote;
+                if (decl.annotation != null) break :promote;
+                const rhs = self.exprType(program, assignment.value, assignment.line, assignment.col) orelse break :promote;
+                if (rhs != .f64) break :promote;
+                decl.checked_type = .f64;
+                decl.init = self.wrapFloat(decl.init) catch return error.OutOfMemory;
+                found_binding.ty = .f64;
             }
             const expected_type = found_binding.ty;
             if (std.mem.eql(u8, assignment.op, "=")) {
