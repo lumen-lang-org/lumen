@@ -306,6 +306,19 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
             try w.appendSlice(arena, ") & 0xFF); ");
         }
         try w.print(arena, "break :{s} @as([]const u8, __b); }})", .{fcc_lbl});
+    } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "from") and cl.from_length != null) {
+        // Array.from({length: N}, cb): allocate N slots and fill each from the
+        // callback, passing a placeholder value (0) and the index.
+        const rt = cl.checked_type orelse return error.ParseError;
+        const rz = try types.zigName(arena, types.arrayElem(rt) orelse return error.ParseError);
+        const idx_arg = if (cl.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
+        em.g_global_pred_seq += 1;
+        const s = em.g_global_pred_seq;
+        try w.print(arena, "(__afl{d}: {{ const __n: usize = @intCast(", .{s});
+        try em.emitExpr(cl.from_length.?, w, arena);
+        try w.appendSlice(arena, "); const __cb = ");
+        try em.emitExpr(cl.args[1], w, arena);
+        try w.print(arena, "; const __r = __sa().alloc({s}, __n) catch unreachable; for (0..__n) |__i| {{ __r[__i] = __cb.call(__cb.ctx, @as(i32, 0){s}); }} break :__afl{d} @as([]const {s}, __r); }})", .{ rz, idx_arg, s, rz });
     } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "from") and cl.args.len == 2) {
         // Array.from(src, cb): build the source slice, then map each
         // element through the closure into the result array.

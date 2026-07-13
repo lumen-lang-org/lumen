@@ -1244,6 +1244,33 @@ pub fn arrayCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCal
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
+        // Array.from({length: N}, (v, i) => u): the array-like form generates
+        // `N` elements, each produced by the callback from its index. The value
+        // argument is `undefined` in JS; here it is an unused `i32` placeholder,
+        // so idiomatic `(_, i) => …` works. Requires the mapping callback.
+        if (call.args.len == 2 and call.args[0].* == .obj and call.args[0].obj.len == 1 and
+            std.mem.eql(u8, call.args[0].obj[0].name, "length"))
+        {
+            const len_expr = call.args[0].obj[0].value;
+            const len_ty = self.exprType(program, len_expr, line, col) orelse return null;
+            if (!types.isInteger(len_ty)) {
+                _ = self.fail(line, col, "Array.from({ length: N }) needs an integer length") catch {};
+                return null;
+            }
+            const cb_type = self.checkCbArg(program, call.args[1], &.{ .i32, .i32 }, line, col) orelse return null;
+            if (cb_type != .func_type) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
+            call.cb_wants_index = cb_type.func_type.params.len == 2;
+            call.from_length = len_expr;
+            const res = types.arrayOf(cb_type.func_type.ret.*) orelse {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            };
+            call.checked_type = res;
+            return res;
+        }
         const src = self.exprType(program, call.args[0], line, col) orelse return null;
         call.checked_arg_type = src;
         if (call.args.len == 2) {
