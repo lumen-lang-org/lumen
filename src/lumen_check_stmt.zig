@@ -1060,6 +1060,14 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     }
                 }
             }
+            // A user-defined type guard used as the condition (`if (isA(u))`)
+            // narrows the guarded argument to the predicate's variant.
+            if (!var_narrowed) {
+                if (self.predicateVariantNarrow(branch.cond)) |pn| {
+                    self.narrowed_variants.append(self.arena, .{ .name = pn.name, .variant = pn.variant }) catch return error.OutOfMemory;
+                    var_narrowed = true;
+                }
+            }
             {
                 // Narrow every `!= null` check in the condition's `&&`-chain in
                 // the then-branch (`if (x != null && y != null) { use x, y }`),

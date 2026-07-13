@@ -362,10 +362,32 @@ pub fn parseFunctionDecl(self: *Parser, line: u32, col: u32, is_async: bool) Com
     // value-returning function still needs an explicit `: T` annotation.
     var return_annotation: []const u8 = "void";
     var infer_return = true;
+    var predicate_param: ?[]const u8 = null;
+    var predicate_type: ?[]const u8 = null;
     if (self.isOp(':')) {
         try self.advance();
-        return_annotation = try self.parseTypeAnnotation();
-        infer_return = false;
+        // A type-guard predicate `param is Type` (returns bool, narrows the arg).
+        if (self.cur == .ident) {
+            const save = self.lex;
+            const save_cur = self.cur;
+            const pname = self.cur.ident;
+            try self.advance();
+            if (self.cur == .ident and std.mem.eql(u8, self.cur.ident, "is")) {
+                try self.advance();
+                predicate_param = pname;
+                predicate_type = try self.parseTypeAnnotation();
+                return_annotation = "bool";
+                infer_return = false;
+            } else {
+                self.lex = save;
+                self.cur = save_cur;
+                return_annotation = try self.parseTypeAnnotation();
+                infer_return = false;
+            }
+        } else {
+            return_annotation = try self.parseTypeAnnotation();
+            infer_return = false;
+        }
     }
     const body = try self.parseBlock();
     return .{ .function_decl = .{
@@ -373,6 +395,8 @@ pub fn parseFunctionDecl(self: *Parser, line: u32, col: u32, is_async: bool) Com
         .params = params,
         .return_annotation = return_annotation,
         .infer_return = infer_return,
+        .predicate_param = predicate_param,
+        .predicate_type = predicate_type,
         .body = body,
         .type_params = type_params,
         .is_async = is_async,

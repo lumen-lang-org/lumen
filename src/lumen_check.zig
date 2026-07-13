@@ -51,6 +51,10 @@ const FunctionInfo = struct {
     params: []ast.FunctionParam,
     return_type: types.Type,
     is_extern: bool = false,
+    // A user-defined type guard `function isA(u): u is A`: which parameter is
+    // guarded and the type a truthy result narrows it to.
+    predicate_param: ?usize = null,
+    predicate_type: ?[]const u8 = null,
 };
 
 const EnumInfo = struct {
@@ -515,6 +519,27 @@ pub const Checker = struct {
         if (c.l.* == .null_lit) name = self.narrowPath(c.r);
         const n = name orelse return null;
         return .{ .name = n, .in_then = is_ne };
+    }
+
+    /// If `cond` is a call to a user-defined type guard (`isA(u)`) whose
+    /// guarded argument is a union-typed variable and whose target is a variant
+    /// of that union, returns the variable name and the variant to narrow to.
+    pub fn predicateVariantNarrow(self: *Checker, cond: *ast.Expr) ?struct { name: []const u8, variant: []const u8 } {
+        if (cond.* != .call) return null;
+        const call = cond.call;
+        const info = self.funcs.get(call.name) orelse return null;
+        const pidx = info.predicate_param orelse return null;
+        const ptype = info.predicate_type orelse return null;
+        if (pidx >= call.args.len) return null;
+        const arg = call.args[pidx];
+        if (arg.* != .var_ref) return null;
+        const b = self.binding(arg.var_ref.name) orelse return null;
+        if (b.ty != .union_type) return null;
+        const uinfo = self.unions.get(b.ty.union_type) orelse return null;
+        for (uinfo.variants) |v| {
+            if (std.mem.eql(u8, v.name, ptype)) return .{ .name = arg.var_ref.name, .variant = ptype };
+        }
+        return null;
     }
 
     /// If `expr` is `s.disc` where `s` is a union binding and `disc` is that
@@ -1178,7 +1203,17 @@ pub const Checker = struct {
             }
         }
         decl.checked_return_type = return_type;
-        self.funcs.put(self.arena, decl.name, .{ .params = decl.params, .return_type = return_type }) catch return error.OutOfMemory;
+        // Record a type-guard predicate: map the guarded parameter name to its
+        // index, so a call `isA(x)` narrows `x` to `predicate_type` at the site.
+        var pred_idx: ?usize = null;
+        if (decl.predicate_param) |pname| {
+            for (decl.params, 0..) |p, i| {
+                if (std.mem.eql(u8, p.name, pname)) pred_idx = i;
+            }
+            if (pred_idx == null) return self.fail(decl.line, decl.col, "a type-guard predicate must name one of the function's parameters");
+            _ = try self.typeFromAnnotation(decl.predicate_type.?, decl.line, decl.col); // validate the target type
+        }
+        self.funcs.put(self.arena, decl.name, .{ .params = decl.params, .return_type = return_type, .predicate_param = pred_idx, .predicate_type = decl.predicate_type }) catch return error.OutOfMemory;
     }
 
     /// Validates structural default-value and rest-parameter rules over a resolved

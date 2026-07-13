@@ -168,6 +168,11 @@ pub const FunctionDecl = struct {
     // `async function ...` — the declared return type must be `Promise<T>`; a
     // `return v;` resolves the promise with `v`.
     is_async: bool = false,
+    // A user-defined type guard `function isA(u): u is A`: the guarded parameter
+    // name and the narrowed-to type. The function returns `bool`; a truthy result
+    // narrows the argument to `predicate_type` at the call site.
+    predicate_param: ?[]const u8 = null,
+    predicate_type: ?[]const u8 = null,
     // Type parameters for a generic function, e.g. `f<T, U>`. When non-empty the
     // function is a template; concrete copies are generated per call instance.
     type_params: [][]const u8 = &.{},
