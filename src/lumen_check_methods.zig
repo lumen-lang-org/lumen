@@ -1046,6 +1046,16 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
             },
         }
     }
+    // `str.at(i)` is `string | undefined` in JS/TS — out-of-range yields
+    // undefined, so the result is optional (matching array `.at`). `charAt`
+    // keeps returning `""` for out-of-range, so it stays a plain string.
+    if (eq(u8, name, "at")) {
+        const inner = self.arena.create(types.Type) catch return null;
+        inner.* = .string;
+        const res = types.Type{ .optional = inner };
+        mc.array_result_type = res;
+        return res;
+    }
     mc.array_result_type = spec.result;
     return spec.result;
 }

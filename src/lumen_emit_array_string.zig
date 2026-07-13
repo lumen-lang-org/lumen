@@ -537,9 +537,10 @@ pub fn emitStringMethod(mc: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.
     }
 
     if (eq(u8, name, "at")) {
+        // `str.at(i)`: `string | undefined` — out-of-range yields null.
         try A.idx("__i0", mc.args[0], w, arena);
         try w.appendSlice(arena, "const __len: isize = @intCast(__s.len); const __i: isize = if (__i0 < 0) __len + __i0 else __i0; ");
-        try w.print(arena, "break :{s} @as([]const u8, if (__i >= 0 and __i < __len) __s[@intCast(__i)..@as(usize, @intCast(__i)) + 1] else \"\"); }})", .{lbl});
+        try w.print(arena, "break :{s} @as(?[]const u8, if (__i >= 0 and __i < __len) __s[@intCast(__i)..@as(usize, @intCast(__i)) + 1] else null); }})", .{lbl});
         return;
     }
 
