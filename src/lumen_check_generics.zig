@@ -329,6 +329,14 @@ pub fn specializeFunction(self: *Checker, decl: *const ast.FunctionDecl, type_ar
         .return_annotation = ret_ann,
         .body = body,
         .type_params = &.{},
+        // Preserve modifiers that drive body checking/codegen: `async` (a
+        // `return v` resolves the promise's inner type), visibility/static, and
+        // the accessor kind.
+        .is_async = decl.is_async,
+        .infer_return = decl.infer_return,
+        .visibility = decl.visibility,
+        .is_static = decl.is_static,
+        .accessor = decl.accessor,
         .line = decl.line,
         .col = decl.col,
     };
