@@ -1055,8 +1055,17 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
             .int => {
                 const at = self.exprType(program, arg, line, col) orelse return null;
                 if (!types.isInteger(at)) {
-                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                    return null;
+                    // A `number` (f64) argument in an integer position — e.g.
+                    // `s.repeat(n)` where `n: number` — truncates to an integer,
+                    // matching JS/TS where these take `number` (spec 426).
+                    if (at == .f64) {
+                        const inner = self.arena.create(ast.Expr) catch return null;
+                        inner.* = arg.*;
+                        arg.* = .{ .cast = .{ .inner = inner, .annotation = "int", .checked_type = .i32, .float_to_int = true } };
+                    } else {
+                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                        return null;
+                    }
                 }
             },
         }
