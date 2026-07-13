@@ -220,6 +220,16 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
         .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array, .nested_array => {
             if (value.* != .array) {
                 const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
+                // An `i32[]` value flowing into a `number[]` (`f64[]`) slot widens
+                // elementwise — arrays are immutable, so the conversion copy is
+                // safe. Matches TS, where every numeric array is `number[]`
+                // (spec 415).
+                if (expected == .f64_array and actual_type == .i32_array) {
+                    const inner = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                    inner.* = value.*;
+                    value.* = .{ .cast = .{ .inner = inner, .annotation = "number[]", .checked_type = .f64_array, .int_array_to_float = true } };
+                    return;
+                }
                 if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
                 return;
             }

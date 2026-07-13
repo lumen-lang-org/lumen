@@ -2065,6 +2065,11 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return self.staticCallType(program, call, line, col);
         },
         .cast => |*c| {
+            // A synthesized `i32[]` -> `number[]` widening cast (spec 415): it
+            // already carries its resolved type, so re-typing is idempotent (the
+            // checker may re-run over the same node). Return it directly rather
+            // than re-validating the (disallowed) `i32[] as f64[]` assertion.
+            if (c.int_array_to_float) return c.checked_type orelse .f64_array;
             // `expr as const` -- a const assertion. Lumen has no value-level
             // literal types, so it is an identity assertion: keep the operand's
             // own type instead of resolving `const` as a (nonexistent) type.

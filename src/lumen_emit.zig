@@ -1207,6 +1207,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ")))");
                 return;
             }
+            // An `i32[]` value flowing into a `number[]` slot: copy each element
+            // through @floatFromInt into a fresh f64 slice (arrays are immutable,
+            // so the copy is safe). Spec 415.
+            if (c.int_array_to_float) {
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__i2f{d}: {{ const __src = ", .{s});
+                try emitExpr(c.inner, w, arena);
+                try w.print(arena, "; const __r = __sa().alloc(f64, __src.len) catch unreachable; for (__src, 0..) |__e, __i| {{ __r[__i] = @floatFromInt(__e); }} break :__i2f{d} @as([]const f64, __r); }})", .{s});
+                return;
+            }
             // `expr as T` is a checker-only assertion; the runtime value is the
             // same flat struct / scalar, so emit the operand unchanged.
             try emitExpr(c.inner, w, arena);
