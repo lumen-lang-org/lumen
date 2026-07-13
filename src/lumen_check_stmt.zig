@@ -224,6 +224,33 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
         break :blk false;
     };
 
+    // A derived class whose constructor is synthesized from field initializers
+    // (or otherwise lacks an explicit `super(...)`) still needs the base's
+    // initializers to run — otherwise inherited fields hold garbage. When the
+    // parent chain has a zero-argument constructor (its own or synthesized from
+    // field inits) and this ctor doesn't already open with `super(...)`, splice
+    // an implicit no-arg `super()` at the front, mirroring TS's implicit
+    // `constructor(...args) { super(...args); }`. Parameterized parents keep
+    // requiring an explicit `super(...)` (handled by `parent_needs_super`).
+    if (c.has_ctor and c.parent != null and !parent_needs_super) {
+        const parent_has_ctor = blk: {
+            var cur = c.parent;
+            while (cur) |pname| {
+                const pinfo = self.classes.get(pname) orelse break;
+                if (pinfo.has_ctor) break :blk true;
+                cur = pinfo.parent;
+            }
+            break :blk false;
+        };
+        const opens_with_super = c.ctor_body.len > 0 and c.ctor_body[0] == .super_ctor;
+        if (parent_has_ctor and !opens_with_super) {
+            var merged: std.ArrayListUnmanaged(ast.Stmt) = .empty;
+            try merged.append(self.arena, .{ .super_ctor = .{ .args = &.{}, .line = c.line, .col = c.col } });
+            try merged.appendSlice(self.arena, c.ctor_body);
+            c.ctor_body = try merged.toOwnedSlice(self.arena);
+        }
+    }
+
     if (c.has_ctor) {
         try self.pushScope();
         defer self.popScope();
