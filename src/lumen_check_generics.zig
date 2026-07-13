@@ -256,6 +256,35 @@ pub fn unifyAnnotation(self: *Checker, type_params: []const []const u8, found: [
         const elem = types.arrayElem(arg_type) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
         return self.unifyAnnotation(type_params, found, inner_pat, elem, line, col);
     }
+    // `Map<K, V>` binds K and V to the argument map's key and value types.
+    if (arg_type == .map_type and std.mem.startsWith(u8, pattern, "Map<") and std.mem.endsWith(u8, pattern, ">")) {
+        const inner = pattern["Map<".len .. pattern.len - 1];
+        // Split into the two type args at the top-level comma.
+        var depth: i32 = 0;
+        var comma: ?usize = null;
+        for (inner, 0..) |ch, i| {
+            switch (ch) {
+                '<', '[', '(' => depth += 1,
+                '>', ']', ')' => depth -= 1,
+                ',' => if (depth == 0 and comma == null) {
+                    comma = i;
+                },
+                else => {},
+            }
+        }
+        if (comma) |ci| {
+            const kpat = std.mem.trim(u8, inner[0..ci], " ");
+            const vpat = std.mem.trim(u8, inner[ci + 1 ..], " ");
+            try self.unifyAnnotation(type_params, found, kpat, arg_type.map_type.key.*, line, col);
+            try self.unifyAnnotation(type_params, found, vpat, arg_type.map_type.value.*, line, col);
+            return;
+        }
+    }
+    // `Set<T>` binds T to the argument set's element type.
+    if (arg_type == .set_type and std.mem.startsWith(u8, pattern, "Set<") and std.mem.endsWith(u8, pattern, ">")) {
+        const inner = std.mem.trim(u8, pattern["Set<".len .. pattern.len - 1], " ");
+        return self.unifyAnnotation(type_params, found, inner, arg_type.set_type.*, line, col);
+    }
     // Function-type pattern `(P, ...) => R`: unify the return pattern against the
     // callback's return type, and each parameter pattern against its parameter
     // type. This lets a type parameter be inferred from a callback's return
