@@ -1697,6 +1697,24 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 call.is_global_parse = true;
                 return .f64;
             }
+            // structuredClone(x): a deep copy. Lumen records are immutable value
+            // types and arrays are immutable, so a clone is observationally
+            // identical to the source — lower to the argument itself (value
+            // assignment already copies a record). Class instances are heap
+            // references whose deep copy isn't expressible here, so reject them.
+            if (std.mem.eql(u8, call.name, "structuredClone") and self.funcs.get(call.name) == null) {
+                if (call.args.len != 1) {
+                    _ = self.fail(line, col, "'structuredClone' expects 1 argument") catch {};
+                    return null;
+                }
+                const at = self.exprType(program, call.args[0], line, col) orelse return null;
+                if (at == .class_type) {
+                    _ = self.fail(line, col, "structuredClone of a class instance is not supported — clone its fields into a new instance, or use a record type") catch {};
+                    return null;
+                }
+                e.* = call.args[0].*;
+                return at;
+            }
             // Global Boolean(x) conversion: truthiness of number/bool/string.
             if (std.mem.eql(u8, call.name, "Boolean") and self.funcs.get(call.name) == null) {
                 if (call.args.len != 1) {
