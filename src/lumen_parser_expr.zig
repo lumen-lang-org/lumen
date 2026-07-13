@@ -117,6 +117,18 @@ pub fn consumeTypeArgClose(self: *Parser) CompileError!void {
         self.cur = .{ .cmp = ">" };
         return;
     }
+    // `Map<K, V>=` (a generic field/var type immediately before an initializer)
+    // lexes the `>=` as one comparison token; split off the `=` initializer.
+    if (self.isCmp(">=")) {
+        self.cur = .{ .op = '=' };
+        return;
+    }
+    // `Outer<Inner<X>>=` lexes the `>>=` as one op2 token; leave `>=` for the
+    // enclosing level to split.
+    if (self.isOp2(">>=")) {
+        self.cur = .{ .cmp = ">=" };
+        return;
+    }
     return error.ParseError;
 }
 
