@@ -808,7 +808,13 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             const expected_type = found_binding.ty;
             if (std.mem.eql(u8, assignment.op, "=")) {
                 switch (expected_type) {
-                    .named, .named_array, .union_type, .string_literal_union, .int_literal_union, .optional => {},
+                    // These targets need the destination type as context to check
+                    // the RHS: a bare `exprType` on an array-of-arrays literal
+                    // can't elementwise-widen its inner arrays (`[1,2]` is
+                    // `int[]`, the slot may be `number[][]`), so let the final
+                    // `ensureAssignable` (which has the target type) handle it —
+                    // matching the `const x: T = ...` declaration path.
+                    .named, .named_array, .nested_array, .union_type, .string_literal_union, .int_literal_union, .optional => {},
                     else => if (self.exprType(program, assignment.value, assignment.line, assignment.col)) |actual_type| {
                         if (!types.same(expected_type, actual_type)) {
                             // Let ensureAssignable below handle coercions
