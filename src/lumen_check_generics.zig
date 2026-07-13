@@ -266,7 +266,18 @@ pub fn unifyAnnotation(self: *Checker, type_params: []const []const u8, found: [
         if (std.mem.eql(u8, pattern, tp)) {
             const ann = (try types.toAnnotation(self.arena, arg_type)) orelse return self.fail(line, col, "E_TYPE_INFER");
             if (found[k]) |existing| {
-                if (!std.mem.eql(u8, existing, ann)) return self.fail(line, col, "E_TYPE_MISMATCH");
+                if (!std.mem.eql(u8, existing, ann)) {
+                    // Reconcile a numeric-width difference (an `int` literal and a
+                    // `number` argument both binding `T`) to the wider type,
+                    // matching JS where numeric literals are `number`.
+                    const a = types.fromAnnotation(existing);
+                    const b = types.fromAnnotation(ann);
+                    if (types.isNumeric(a) and types.isNumeric(b)) {
+                        if (a == .f64 or b == .f64) found[k] = "number" else if (a == .i64 or b == .i64) found[k] = "i64";
+                        return;
+                    }
+                    return self.fail(line, col, "E_TYPE_MISMATCH");
+                }
             } else found[k] = ann;
             return;
         }
@@ -276,6 +287,21 @@ pub fn unifyAnnotation(self: *Checker, type_params: []const []const u8, found: [
         const inner_pat = pattern[0 .. pattern.len - 2];
         const elem = types.arrayElem(arg_type) orelse return self.fail(line, col, "E_TYPE_MISMATCH");
         return self.unifyAnnotation(type_params, found, inner_pat, elem, line, col);
+    }
+    // Optional pattern `T?` / `T | null` / `T | undefined` binds `T` to the
+    // argument's non-null inner type (`orDefault<T>(x: T | null, d: T)`).
+    if (arg_type == .optional) {
+        var inner_pat: ?[]const u8 = null;
+        if (std.mem.endsWith(u8, pattern, "?")) {
+            inner_pat = std.mem.trim(u8, pattern[0 .. pattern.len - 1], " ");
+        } else if (std.mem.indexOfScalar(u8, pattern, '|') != null) {
+            var it = std.mem.splitScalar(u8, pattern, '|');
+            while (it.next()) |part| {
+                const t = std.mem.trim(u8, part, " ");
+                if (!std.mem.eql(u8, t, "null") and !std.mem.eql(u8, t, "undefined")) inner_pat = t;
+            }
+        }
+        if (inner_pat) |ip| return self.unifyAnnotation(type_params, found, ip, arg_type.optional.*, line, col);
     }
     // `Map<K, V>` binds K and V to the argument map's key and value types.
     if (arg_type == .map_type and std.mem.startsWith(u8, pattern, "Map<") and std.mem.endsWith(u8, pattern, ">")) {
