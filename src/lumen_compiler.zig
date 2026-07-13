@@ -559,7 +559,11 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\        fn keys(self: *Self) []const K { return self.keys_.items; }
             \\        fn values(self: *Self) []const V { return self.values_.items; }
             \\        fn forEach(self: *Self, cb: anytype) void {
-            \\            for (self.keys_.items, 0..) |k, i| { _ = cb.call(cb.ctx, self.values_.items[i], k); }
+            \\            const __np = @typeInfo(@typeInfo(@TypeOf(cb.call)).pointer.child).@"fn".params.len;
+            \\            for (self.keys_.items, 0..) |k, i| {
+            \\                if (__np == 3) { _ = cb.call(cb.ctx, self.values_.items[i], k); }
+            \\                else { _ = cb.call(cb.ctx, self.values_.items[i]); }
+            \\            }
             \\        }
             \\    };
             \\}

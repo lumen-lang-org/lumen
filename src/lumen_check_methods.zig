@@ -517,14 +517,16 @@ pub fn mapMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: t
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const want = self.makeFuncType(&.{ value, key }, .void) orelse return null;
-        self.arrow_param_hint = &.{ value, key };
-        self.ensureAssignable(program, want, mc.args[0], line, col) catch {
-            self.arrow_param_hint = null;
+        // The callback may take just the value (`(v) => ...`) or the value and
+        // key (`(v, k) => ...`), matching JS `Map.forEach`.
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ value, key }, line, col) orelse return null;
+        if (cb_type != .func_type or cb_type.func_type.params.len < 1 or cb_type.func_type.params.len > 2 or
+            !types.same(cb_type.func_type.params[0], value) or
+            (cb_type.func_type.params.len == 2 and !types.same(cb_type.func_type.params[1], key)))
+        {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
-        };
-        self.arrow_param_hint = null;
+        }
         return .void;
     }
     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
