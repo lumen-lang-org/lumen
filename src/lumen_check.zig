@@ -730,6 +730,58 @@ pub const Checker = struct {
         return &.{};
     }
 
+    /// The fixed string keys of a `Record<K, V>` key argument, or null if `K` is
+    /// a dynamic `string` (no static shape). Accepts a raw `"a" | "b"` literal
+    /// union, a `keyof P` operand, or a named string-literal-union type.
+    fn recordKeyLiterals(self: *Checker, key_ann: []const u8, line: u32, col: u32) CompileError!?[][]const u8 {
+        // Raw string-literal union `"a" | "b"` (parser joins these with `|`).
+        if (key_ann.len > 0 and key_ann[0] == '"') {
+            var out: std.ArrayListUnmanaged([]const u8) = .empty;
+            var it = std.mem.splitScalar(u8, key_ann, '|');
+            while (it.next()) |part| {
+                var k = std.mem.trim(u8, part, " ");
+                if (k.len >= 2 and k[0] == '"') k = k[1 .. k.len - 1];
+                if (k.len > 0) out.append(self.arena, k) catch return error.OutOfMemory;
+            }
+            return out.items;
+        }
+        // `keyof P` or a named string-literal-union: resolve and read its literals.
+        const kt = try self.typeFromAnnotation(key_ann, line, col);
+        if (kt == .string_literal_union) {
+            if (self.type_decls.get(kt.string_literal_union)) |info| {
+                if (info.string_literals) |lits| return lits;
+            }
+        }
+        return null;
+    }
+
+    /// Build (and register + queue for emission) a record type whose fields are
+    /// `keys`, each typed `value_ann`. Used by `Record<K, V>`.
+    fn synthRecordFromKeys(self: *Checker, keys: [][]const u8, value_ann: []const u8, line: u32, col: u32) CompileError![]const u8 {
+        const vt = try self.typeFromAnnotation(value_ann, line, col);
+        var mangle: std.ArrayListUnmanaged(u8) = .empty;
+        mangle.appendSlice(self.arena, "__Record_") catch return error.OutOfMemory;
+        for (keys) |k| {
+            for (k) |ch| mangle.append(self.arena, if (std.ascii.isAlphanumeric(ch)) ch else '_') catch return error.OutOfMemory;
+            mangle.append(self.arena, '_') catch return error.OutOfMemory;
+        }
+        for (value_ann) |ch| mangle.append(self.arena, if (std.ascii.isAlphanumeric(ch)) ch else '_') catch return error.OutOfMemory;
+        const mname = mangle.items;
+        if (self.type_decls.get(mname) != null) return mname;
+
+        const fields = self.arena.alloc(ast.TypeField, keys.len) catch return error.OutOfMemory;
+        for (keys, 0..) |k, i| {
+            fields[i] = .{ .name = k, .annotation = value_ann, .checked_type = vt };
+        }
+        self.type_decls.put(self.arena, mname, .{ .fields = fields }) catch return error.OutOfMemory;
+        const spec = self.arena.create(ast.TypeDecl) catch return error.OutOfMemory;
+        spec.* = .{ .name = mname, .fields = fields, .type_params = &.{}, .line = line, .col = col };
+        const stmt_ptr = self.arena.create(ast.Stmt) catch return error.OutOfMemory;
+        stmt_ptr.* = .{ .type_decl = spec.* };
+        self.pending_specializations.append(self.arena, stmt_ptr) catch return error.OutOfMemory;
+        return mname;
+    }
+
     /// Build the record type for a utility type (`Partial<P>`, `Required<P>`,
     /// `Readonly<P>`, `Pick<P, K>`, `Omit<P, K>`) by transforming the fields of a
     /// named source record, registering the result as a synthetic named record
@@ -1046,7 +1098,14 @@ pub const Checker = struct {
                     return .{ .class_type = mname };
                 }
                 if (std.mem.eql(u8, base, "Record")) {
-                    return self.fail(line, col, "Record<K, V> is not supported — use `Map<K, V>` for dynamic key/value storage, or a named `type` with fixed fields");
+                    if (args.len != 2) return self.fail(line, col, "E_TYPE_ARG_COUNT");
+                    // `Record<K, V>` with a fixed key set (`"a" | "b"`, or `keyof P`)
+                    // is a record with those keys, each typed `V` (spec 380). A
+                    // dynamic string key stays a `Map` (no static shape).
+                    if (try self.recordKeyLiterals(args[0], line, col)) |keys| {
+                        return .{ .named = try self.synthRecordFromKeys(keys, args[1], line, col) };
+                    }
+                    return self.fail(line, col, "Record<string, V> has no fixed shape — use `Map<string, V>` for dynamic keys, or `Record<\"a\" | \"b\", V>` / `Record<keyof T, V>` for a fixed key set");
                 }
                 if (std.mem.eql(u8, base, "Partial") or std.mem.eql(u8, base, "Readonly") or std.mem.eql(u8, base, "Required") or std.mem.eql(u8, base, "Pick") or std.mem.eql(u8, base, "Omit")) {
                     // Transform a named record's fields at compile time (spec 378).
