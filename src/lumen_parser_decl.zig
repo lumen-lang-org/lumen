@@ -534,6 +534,7 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
         var visibility: ast.Visibility = .public;
         var is_static = false;
         var is_readonly = false;
+        var is_async = false;
         var accessor: ast.Accessor = .none;
         while (self.cur == .ident) {
             const kw = self.cur.ident;
@@ -547,6 +548,20 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 is_static = true;
             } else if (std.mem.eql(u8, kw, "readonly")) {
                 is_readonly = true;
+            } else if (std.mem.eql(u8, kw, "async")) {
+                // `async` is a method modifier only when followed by a method
+                // name (an identifier); a member literally named `async` is a
+                // field or a method named `async`.
+                const save = self.lex;
+                const save_cur = self.cur;
+                try self.advance();
+                if (self.cur == .ident) {
+                    is_async = true;
+                    continue;
+                }
+                self.lex = save;
+                self.cur = save_cur;
+                break;
             } else if (std.mem.eql(u8, kw, "get") or std.mem.eql(u8, kw, "set")) {
                 // `get`/`set` is an accessor prefix only when followed by an
                 // identifier name (not e.g. a method literally named `get`).
@@ -610,6 +625,7 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 .body = body,
                 .visibility = visibility,
                 .is_static = is_static,
+                .is_async = is_async,
                 .accessor = accessor,
                 .line = m_line,
                 .col = m_col,

@@ -265,6 +265,16 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
     const saved_can_error = emit_mod.g_fn_can_error;
     emit_mod.g_fn_can_error = m_throws;
     defer emit_mod.g_fn_can_error = saved_can_error;
+    // An async method returns `*LumenPromise(T)`; `return v` in its body resolves
+    // the promise with `v` (same as an async free function, spec-established).
+    const return_type = m.checked_return_type orelse return error.ParseError;
+    const prev_async_inner = emit_mod.g_async_inner;
+    if (m.is_async and return_type == .promise_type) {
+        emit_mod.g_async_inner = try types.zigName(arena, return_type.promise_type.*);
+    } else {
+        emit_mod.g_async_inner = null;
+    }
+    defer emit_mod.g_async_inner = prev_async_inner;
     if (!bodyUsesThis(m.body)) try decls.appendSlice(arena, "    _ = self;\n");
     // Stack-trace frame for the method (shown as `Class.method`).
     if (options.runtime_locations) {
@@ -272,6 +282,11 @@ pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.A
     }
     try emitUnusedParamDiscards(m.params, m.body, decls, arena);
     try emit_stmt.emitBody(m.body, decls, decls, arena, throw_target, switch_break_target, options);
+    // An async `Promise<void>` method may fall through without a `return`; emit a
+    // trailing resolved promise so it still returns a value.
+    if (m.is_async and return_type == .promise_type and return_type.promise_type.* == .void and !analysis.bodyAlwaysReturns(m.body)) {
+        try decls.appendSlice(arena, "    return __promiseResolved(void, {});\n");
+    }
     try decls.appendSlice(arena, "    }\n");
 }
 
