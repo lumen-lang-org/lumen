@@ -491,11 +491,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             const narrow_then = narrow != null and narrow.?.in_then;
             const narrow_else = narrow != null and !narrow.?.in_then;
             if (narrow_then) self.narrowed.append(self.arena, narrow.?.name) catch return null;
+            // A type-guard call (`isA(u) ? … : …`) narrows the variant in the
+            // then-branch, matching the if-statement behavior (spec 384).
+            var pred_narrowed = false;
+            if (self.predicateVariantNarrow(ternary.cond)) |pn| {
+                self.narrowed_variants.append(self.arena, .{ .name = pn.name, .variant = pn.variant }) catch return null;
+                pred_narrowed = true;
+            }
             const then_type = self.exprType(program, ternary.then_expr, line, col) orelse {
                 if (narrow_then) self.narrowed.items.len -= 1;
+                if (pred_narrowed) self.narrowed_variants.items.len -= 1;
                 return null;
             };
             if (narrow_then) self.narrowed.items.len -= 1;
+            if (pred_narrowed) self.narrowed_variants.items.len -= 1;
             if (narrow_else) self.narrowed.append(self.arena, narrow.?.name) catch return null;
             const else_type = self.exprType(program, ternary.else_expr, line, col) orelse {
                 if (narrow_else) self.narrowed.items.len -= 1;
