@@ -152,18 +152,26 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                             // emitted anonymous literal coerces to the flat
                             // struct, defaults filling the other variants'
                             // fields (same trick as structural width subtyping).
-                            if (value.* == .var_ref or value.* == .field) {
-                                const vfields = self.declFields(v.name);
-                                const inits = self.arena.alloc(ast.FieldInit, vfields.len) catch return error.OutOfMemory;
-                                const src = self.arena.create(ast.Expr) catch return error.OutOfMemory;
-                                src.* = value.*;
-                                for (vfields, 0..) |vf, i| {
-                                    const fread = self.arena.create(ast.Expr) catch return error.OutOfMemory;
-                                    fread.* = .{ .field = .{ .obj = src, .name = vf.name } };
-                                    inits[i] = .{ .name = vf.name, .value = fread };
-                                }
-                                value.* = .{ .obj = inits };
+                            // Only a variable or field path is cheap to re-emit
+                            // (each target field re-reads the source). Any other
+                            // expression (a call result, a ternary) would be
+                            // re-evaluated per field, so it must be bound to a
+                            // local first — reject with that guidance rather than
+                            // emit code the backend can't type.
+                            if (!(value.* == .var_ref or value.* == .field)) {
+                                const msg = std.fmt.allocPrint(self.arena, "a `{s}` value coerces to `{s}` only from a variable or field — bind it to a `const` first (`const t = ...; ...: {s} = t`)", .{ actual_type.named, union_name, union_name }) catch "E_TYPE_MISMATCH";
+                                return self.fail(line, col, msg);
                             }
+                            const vfields = self.declFields(v.name);
+                            const inits = self.arena.alloc(ast.FieldInit, vfields.len) catch return error.OutOfMemory;
+                            const src = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                            src.* = value.*;
+                            for (vfields, 0..) |vf, i| {
+                                const fread = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                                fread.* = .{ .field = .{ .obj = src, .name = vf.name } };
+                                inits[i] = .{ .name = vf.name, .value = fread };
+                            }
+                            value.* = .{ .obj = inits };
                             return;
                         }
                     }
