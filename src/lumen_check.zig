@@ -1130,6 +1130,14 @@ pub const Checker = struct {
                 }
                 if (self.generic_types.get(base)) |gt| {
                     if (args.len != gt.type_params.len) return self.fail(line, col, "E_TYPE_ARG_COUNT");
+                    // An alias-bodied generic (`type Id<T> = T`, `type Opt<T> =
+                    // T | null` → `T?`, `type List<T> = T[]`) resolves by
+                    // substituting the type arguments into its target annotation
+                    // and resolving that, rather than synthesizing a record.
+                    if (gt.alias) |target| {
+                        const subst = try self.substAnnotation(target, gt.type_params, args);
+                        return try self.typeFromAnnotation(subst, line, col);
+                    }
                     const mname = try self.specializeType(gt, args, line, col);
                     return .{ .named = mname };
                 }

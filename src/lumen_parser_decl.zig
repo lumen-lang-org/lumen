@@ -169,7 +169,7 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     try self.expectSemi();
     const items = try members.toOwnedSlice(self.arena);
     if (items.len == 1) {
-        return .{ .type_decl = .{ .name = tname, .alias = items[0], .line = line, .col = col } };
+        return .{ .type_decl = .{ .name = tname, .alias = items[0], .type_params = type_params, .line = line, .col = col } };
     }
     // `T | null` / `T | undefined` -> optional alias.
     var nulls: usize = 0;
@@ -183,9 +183,9 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     }
     if (items.len == 2 and nulls == 1) {
         const opt = std.fmt.allocPrint(self.arena, "{s}?", .{non_null.?}) catch return error.OutOfMemory;
-        return .{ .type_decl = .{ .name = tname, .alias = opt, .line = line, .col = col } };
+        return .{ .type_decl = .{ .name = tname, .alias = opt, .type_params = type_params, .line = line, .col = col } };
     }
-    return .{ .type_decl = .{ .name = tname, .union_variants = items, .line = line, .col = col } };
+    return .{ .type_decl = .{ .name = tname, .union_variants = items, .type_params = type_params, .line = line, .col = col } };
 }
 
 /// Parses `[?] : Type` after a field/param name, returning the annotation with
