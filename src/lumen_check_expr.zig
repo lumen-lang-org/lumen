@@ -1381,6 +1381,15 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (types.isNumeric(obj_type)) {
                 return self.numberInstanceMethod(program, mc, obj_type, line, col);
             }
+            if (obj_type == .bool) {
+                // `b.toString()` -> "true" / "false" (the only bool method).
+                if (std.mem.eql(u8, mc.name, "toString") and mc.args.len == 0) {
+                    mc.bool_method = true;
+                    return .string;
+                }
+                _ = self.failUnknownMethod(line, col, "boolean", mc.name, &.{"toString"}) catch {};
+                return null;
+            }
             if (types.isMap(obj_type)) {
                 return self.mapMethod(program, mc, obj_type, line, col);
             }

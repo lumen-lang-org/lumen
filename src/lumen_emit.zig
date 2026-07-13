@@ -800,6 +800,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try emitExpr(arg, w, arena);
                 }
                 try w.append(arena, ')');
+            } else if (mc.bool_method) {
+                // b.toString() -> "true" / "false".
+                try w.appendSlice(arena, "(@as([]const u8, if (");
+                try emitExpr(mc.obj, w, arena);
+                try w.appendSlice(arena, ") \"true\" else \"false\"))");
             } else if (mc.number_method) {
                 const recv_type = mc.array_elem_type orelse return error.ParseError;
                 if (std.mem.eql(u8, mc.name, "toFixed")) {
