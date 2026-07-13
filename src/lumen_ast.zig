@@ -65,6 +65,15 @@ pub const TypeDecl = struct {
     // `interface B extends A, C { ... }` — parent interfaces whose fields are
     // merged in ahead of this one's own fields.
     parents: [][]const u8 = &.{},
+    // Mapped type `type M = { [K in keyof P]: V }`: `mapped_keys` is the key
+    // source (`keyof P` or a literal union), `mapped_value` the per-field value
+    // annotation (which may reference the key via `P[K]`, encoded with the key
+    // name in `mapped_key`), plus `?`/`readonly` modifiers.
+    mapped_keys: ?[]const u8 = null,
+    mapped_value: ?[]const u8 = null,
+    mapped_key: ?[]const u8 = null,
+    mapped_optional: bool = false,
+    mapped_readonly: bool = false,
     line: u32,
     col: u32,
 };

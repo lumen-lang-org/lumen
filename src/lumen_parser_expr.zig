@@ -89,6 +89,13 @@ pub fn parseTypeMember(self: *Parser) CompileError![]const u8 {
             try self.advance();
             try self.expectOp(']');
             base = std.fmt.allocPrint(self.arena, "{s}[\"{s}\"]", .{ base, field }) catch return error.OutOfMemory;
+        } else if (self.cur == .ident) {
+            // `P[K]` — an indexed access keyed by a mapped-type variable, kept
+            // verbatim for the mapped-type expansion to substitute (spec 381).
+            const key = self.cur.ident;
+            try self.advance();
+            try self.expectOp(']');
+            base = std.fmt.allocPrint(self.arena, "{s}[{s}]", .{ base, key }) catch return error.OutOfMemory;
         } else {
             try self.expectOp(']');
             base = std.fmt.allocPrint(self.arena, "{s}[]", .{base}) catch return error.OutOfMemory;

@@ -59,6 +59,53 @@ pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     // Object record body: `type T = { ... }`.
     if (self.isOp('{')) {
         try self.advance();
+        // Mapped type `{ [K in keyof P]: V }` (spec 381): a `readonly?`, then `[`
+        // followed by `ident in` marks the whole body as a mapped type.
+        {
+            const save_lex = self.lex;
+            const save_cur = self.cur;
+            var mapped_readonly = false;
+            if (self.cur == .ident and std.mem.eql(u8, self.cur.ident, "readonly")) {
+                try self.advance();
+                mapped_readonly = true;
+            }
+            if (self.isOp('[')) {
+                try self.advance();
+                if (self.cur == .ident) {
+                    const key_name = self.cur.ident;
+                    try self.advance();
+                    if (self.cur == .ident and std.mem.eql(u8, self.cur.ident, "in")) {
+                        try self.advance();
+                        const keys = try self.parseTypeAnnotation(); // `keyof P` / literal union
+                        try self.expectOp(']');
+                        var mapped_optional = false;
+                        if (self.isOp('?')) {
+                            try self.advance();
+                            mapped_optional = true;
+                        }
+                        try self.expectOp(':');
+                        const value = try self.parseTypeAnnotation();
+                        if (self.isOp(';') or self.isOp(',')) try self.advance();
+                        try self.expectOp('}');
+                        if (self.isOp(';')) try self.advance();
+                        return .{ .type_decl = .{
+                            .name = tname,
+                            .mapped_keys = keys,
+                            .mapped_value = value,
+                            .mapped_key = key_name,
+                            .mapped_optional = mapped_optional,
+                            .mapped_readonly = mapped_readonly,
+                            .type_params = type_params,
+                            .line = line,
+                            .col = col,
+                        } };
+                    }
+                }
+            }
+            // Not a mapped type: restore and parse as a normal object body.
+            self.lex = save_lex;
+            self.cur = save_cur;
+        }
         var fields: std.ArrayListUnmanaged(ast.TypeField) = .empty;
         while (!self.isOp('}')) {
             if (self.cur != .ident) return error.ParseError;

@@ -1434,6 +1434,36 @@ pub const Checker = struct {
                     for (stmt.type_decl.fields) |f| merged.append(self.arena, f) catch return error.OutOfMemory;
                     stmt.type_decl.fields = merged.toOwnedSlice(self.arena) catch return error.OutOfMemory;
                 }
+                // Mapped type `{ [K in keyof P]: V }`: expand into concrete
+                // fields, one per key, substituting the key into `V` (spec 381).
+                if (stmt.type_decl.mapped_keys) |keys_ann| {
+                    const td = &stmt.type_decl;
+                    const keys = (try self.recordKeyLiterals(keys_ann, td.line, td.col)) orelse
+                        return self.fail(td.line, td.col, "a mapped type needs a fixed key set — `[K in keyof T]` or `[K in \"a\" | \"b\"]`");
+                    const out = self.arena.alloc(ast.TypeField, keys.len) catch return error.OutOfMemory;
+                    for (keys, 0..) |k, i| {
+                        // Substitute the key variable in `V`: `P[K]` -> `P["k"]`.
+                        var vann = td.mapped_value.?;
+                        if (td.mapped_key) |kv| {
+                            const needle = std.fmt.allocPrint(self.arena, "[{s}]", .{kv}) catch return error.OutOfMemory;
+                            const repl = std.fmt.allocPrint(self.arena, "[\"{s}\"]", .{k}) catch return error.OutOfMemory;
+                            vann = std.mem.replaceOwned(u8, self.arena, vann, needle, repl) catch vann;
+                            // A bare `K` value type resolves to the key literal's
+                            // string type; leave other references as-is.
+                        }
+                        if (td.mapped_optional and !std.mem.endsWith(u8, vann, "?")) {
+                            vann = std.fmt.allocPrint(self.arena, "{s}?", .{vann}) catch return error.OutOfMemory;
+                        }
+                        out[i] = .{
+                            .name = k,
+                            .annotation = vann,
+                            .checked_type = try self.typeFromAnnotation(vann, td.line, td.col),
+                            .is_readonly = td.mapped_readonly,
+                        };
+                    }
+                    td.fields = out;
+                    td.mapped_keys = null; // now a plain record for emit + reuse
+                }
                 try self.declareType(stmt.type_decl.name, stmt.type_decl.fields, stmt.type_decl.string_literals, stmt.type_decl.int_literals, stmt.type_decl.line, stmt.type_decl.col);
             }
         }
