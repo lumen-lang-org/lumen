@@ -467,6 +467,7 @@ pub const Program = struct {
     stmts: []Stmt,
     uses_io: bool = false,
     uses_regex: bool = false,
+    needs_to_precision: bool = false, // any `number.toPrecision(p)` call — emits the __numToPrecision helper
     needs_args: bool = false,
     needs_read_file_sync: bool = false,
     needs_write_file_sync: bool = false,

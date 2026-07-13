@@ -872,6 +872,20 @@ pub fn numberInstanceMethod(self: *Checker, program: *ast.Program, mc: anytype, 
         }
         return .string;
     }
+    // toPrecision(digits): the number formatted to `digits` significant digits.
+    if (std.mem.eql(u8, name, "toPrecision")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const dt = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.isInteger(dt)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.needs_to_precision = true;
+        return .string;
+    }
     // toString(radix?): base-10 decimal for any number; with a radix, the
     // receiver must be an integer (arbitrary-base int formatting).
     if (std.mem.eql(u8, name, "toString")) {

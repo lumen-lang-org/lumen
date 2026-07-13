@@ -823,6 +823,21 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     try w.appendSlice(arena, " }) catch unreachable; ");
                     try w.appendSlice(arena, "var __ob: std.ArrayListUnmanaged(u8) = .empty; for (__raw, 0..) |__c, __ci| { __ob.append(__sa(), __c) catch unreachable; if (__c == 'e' and __ci + 1 < __raw.len and __raw[__ci + 1] != '-') __ob.append(__sa(), '+') catch unreachable; } ");
                     try w.print(arena, "break :__nte{d} @as([]const u8, __ob.items); }})", .{s});
+                } else if (std.mem.eql(u8, mc.name, "toPrecision")) {
+                    // Significant-digit formatting via the __numToPrecision helper.
+                    try w.appendSlice(arena, "__numToPrecision(");
+                    if (recv_type == .f64) {
+                        try w.appendSlice(arena, "@as(f64, ");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.append(arena, ')');
+                    } else {
+                        try w.appendSlice(arena, "@as(f64, @floatFromInt(");
+                        try emitExpr(mc.obj, w, arena);
+                        try w.appendSlice(arena, "))");
+                    }
+                    try w.appendSlice(arena, ", @as(usize, @intCast(");
+                    try emitExpr(mc.args[0], w, arena);
+                    try w.appendSlice(arena, ")))");
                 } else { // toString
                     if (mc.args.len == 1) {
                         // Integer receiver, arbitrary radix, via std.fmt.printInt.

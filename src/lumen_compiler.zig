@@ -329,6 +329,39 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     // (radix 0 sentinel). No valid digits -> null (JS NaN).
     try out.appendSlice(arena, PARSE_RT);
     try out.appendSlice(arena, "\n");
+    // `number.toPrecision(p)` -> ECMAScript significant-digit formatting. Only
+    // emitted when used (short helper, but keeps the prelude minimal).
+    if (program.needs_to_precision) {
+        try out.appendSlice(arena,
+            \\fn __numToPrecision(__x: f64, __p: usize) []const u8 {
+            \\    if (__x == 0) {
+            \\        if (__p <= 1) return "0";
+            \\        return std.fmt.allocPrint(__sa(), "{d:.[1]}", .{ @as(f64, 0), __p - 1 }) catch "0";
+            \\    }
+            \\    const __neg = __x < 0;
+            \\    const __ax = @abs(__x);
+            \\    const __e: i32 = @intFromFloat(@floor(@log10(__ax)));
+            \\    var __body: []const u8 = undefined;
+            \\    if (__e < -6 or __e >= @as(i32, @intCast(__p))) {
+            \\        // Exponential notation with p-1 fraction digits, JS '+' sign.
+            \\        const __raw = std.fmt.allocPrint(__sa(), "{e:.[1]}", .{ __ax, __p - 1 }) catch return "";
+            \\        var __ob: std.ArrayListUnmanaged(u8) = .empty;
+            \\        for (__raw, 0..) |__c, __ci| {
+            \\            __ob.append(__sa(), __c) catch return "";
+            \\            if (__c == 'e' and __ci + 1 < __raw.len and __raw[__ci + 1] != '-') __ob.append(__sa(), '+') catch return "";
+            \\        }
+            \\        __body = __ob.items;
+            \\    } else {
+            \\        const __frac: i32 = @as(i32, @intCast(__p)) - 1 - __e;
+            \\        const __fd: usize = if (__frac < 0) 0 else @intCast(__frac);
+            \\        __body = std.fmt.allocPrint(__sa(), "{d:.[1]}", .{ __ax, __fd }) catch return "";
+            \\    }
+            \\    if (__neg) return std.mem.concat(__sa(), u8, &.{ "-", __body }) catch return __body;
+            \\    return __body;
+            \\}
+            \\
+        );
+    }
     // Regex literal value: the source/flags strings. Matching methods are added in
     // later cycles; for now it carries `.source` and `.flags`. Only emitted when
     // the program actually uses a regex -- the runtime's short capture names
