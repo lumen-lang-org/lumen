@@ -498,6 +498,21 @@ pub fn checkVarDecl(self: *Checker, program: *ast.Program, decl: *ast.VarDecl) C
     if (final_type == .void) return self.fail(decl.line, decl.col, "E_VOID_VALUE");
     if (final_type == .none) return self.inferenceFail(decl.line, decl.col, "cannot infer type of null; annotate as T | null");
 
+    // Contextual typing for `const x: T = JSON.parse(s)`: `JSON.parse` needs an
+    // explicit result type (it can't be inferred from the string), but a
+    // variable annotation supplies exactly that — thread it in as the missing
+    // `<T>` so the natural spelling works, not just `JSON.parse<T>(s)`.
+    if (decl.annotation) |ann| {
+        if (decl.init.* == .static_call) {
+            const sc = &decl.init.static_call;
+            if (std.mem.eql(u8, sc.namespace, "JSON") and std.mem.eql(u8, sc.name, "parse") and sc.type_args.len == 0) {
+                const ta = self.arena.alloc([]const u8, 1) catch return error.OutOfMemory;
+                ta[0] = ann;
+                sc.type_args = ta;
+            }
+        }
+    }
+
     // A `let x: T;` declaration has no initializer to check; it binds the
     // annotated type directly (mutable, so it can be assigned before use).
     if (!decl.no_init) {
