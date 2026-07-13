@@ -491,12 +491,34 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             const narrow_then = narrow != null and narrow.?.in_then;
             const narrow_else = narrow != null and !narrow.?.in_then;
             if (narrow_then) self.narrowed.append(self.arena, narrow.?.name) catch return null;
-            // A type-guard call (`isA(u) ? … : …`) narrows the variant in the
-            // then-branch, matching the if-statement behavior (spec 384).
+            // A type-guard call (`isA(u) ? … : …`) or a discriminant check
+            // (`u.kind === "a" ? … : …`) narrows the variant in the then-branch,
+            // matching the if-statement behavior (spec 384/390).
             var pred_narrowed = false;
             if (self.predicateVariantNarrow(ternary.cond)) |pn| {
                 self.narrowed_variants.append(self.arena, .{ .name = pn.name, .variant = pn.variant }) catch return null;
                 pred_narrowed = true;
+            } else if (ternary.cond.* == .cmp) {
+                const c = ternary.cond.cmp;
+                if (std.mem.eql(u8, c.op, "==") or std.mem.eql(u8, c.op, "===")) {
+                    var de: ?*ast.Expr = null;
+                    var lit: ?[]const u8 = null;
+                    if (c.r.* == .str) {
+                        de = c.l;
+                        lit = c.r.str;
+                    } else if (c.l.* == .str) {
+                        de = c.r;
+                        lit = c.l.str;
+                    }
+                    if (de) |d| {
+                        if (self.discriminantAccess(d)) |da| {
+                            if (self.variantForValue(da.union_name, lit.?)) |variant| {
+                                self.narrowed_variants.append(self.arena, .{ .name = da.name, .variant = variant }) catch return null;
+                                pred_narrowed = true;
+                            }
+                        }
+                    }
+                }
             }
             const then_type = self.exprType(program, ternary.then_expr, line, col) orelse {
                 if (narrow_then) self.narrowed.items.len -= 1;

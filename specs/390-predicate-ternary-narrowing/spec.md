@@ -1,4 +1,4 @@
-# 390 — Type-guard narrowing in a ternary condition
+# 390 — Type-guard and discriminant narrowing in a ternary condition
 
 ## Problem
 
@@ -16,7 +16,7 @@ narrowing.
 ## Change
 
 `lumen_check_expr.zig`, the `.ternary` case of `exprType`: when the condition is
-a type-guard call (`predicateVariantNarrow`), push the narrowed variant while
+a type-guard call (`predicateVariantNarrow`), push the narrowed variant (from a type-guard call or a `u.kind === "lit"` discriminant check) while
 typing the then-branch and pop it before the else-branch — the same mechanism
 the `if` handler uses.
 
@@ -25,6 +25,8 @@ the `if` handler uses.
 `zig build` + `zig build test` green. Probes:
 
 - `isA(u) ? "a:" + u.x : "other"` → `f(a)="a:5"`, `f(b)="other"`.
+- `u.kind === "a" ? u.x : 0` (a discriminant check) narrows `u` to `A` in the
+  then-expr → `f(a)=5`, `f(b)=0`.
 - Predicate narrowing in an `if` (spec 384) still works.
 - Null-check ternary narrowing (`x != null ? x : 0`) unchanged.
 - Broad regression combining guards, computed enums, `Partial<Record<…>>`,
