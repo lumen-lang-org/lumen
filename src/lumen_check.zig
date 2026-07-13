@@ -43,6 +43,23 @@ fn isMethodField(f: ast.TypeField) bool {
     return std.mem.indexOf(u8, f.annotation, "=>") != null;
 }
 
+/// The bare named type of a field annotation, stripping a trailing `?`/`[]` and a
+/// `| null` / `| undefined` union member (used for recursive-record detection).
+fn baseTypeName(annotation: []const u8) []const u8 {
+    var a = std.mem.trim(u8, annotation, " ");
+    // Peel `| null` / `| undefined` — keep the non-null member.
+    if (std.mem.indexOfScalar(u8, a, '|') != null) {
+        var it = std.mem.splitScalar(u8, a, '|');
+        while (it.next()) |part| {
+            const t = std.mem.trim(u8, part, " ");
+            if (!std.mem.eql(u8, t, "null") and !std.mem.eql(u8, t, "undefined")) a = t;
+        }
+    }
+    while (std.mem.endsWith(u8, a, "?")) a = std.mem.trim(u8, a[0 .. a.len - 1], " ");
+    while (std.mem.endsWith(u8, a, "[]")) a = std.mem.trim(u8, a[0 .. a.len - 2], " ");
+    return a;
+}
+
 /// True when a declared interface has at least one method member.
 fn ifaceHasMethods(fields: []const ast.TypeField) bool {
     for (fields) |f| {
@@ -1598,6 +1615,21 @@ pub const Checker = struct {
                 for (stmt.type_decl.fields) |*f| {
                     if (isMethodField(f.*) and f.checked_type == null) {
                         f.checked_type = self.typeFromAnnotation(f.annotation, stmt.type_decl.line, stmt.type_decl.col) catch null;
+                    }
+                }
+            }
+        }
+        // A record type can't reference itself by value (a value struct can't
+        // contain itself) — point the user at a class, which is a heap reference
+        // and supports recursive shapes (spec 430).
+        for (program.stmts) |*stmt| {
+            if (stmt.* == .type_decl and !stmt.type_decl.is_interface and stmt.type_decl.fields.len > 0 and stmt.type_decl.alias == null) {
+                const tname = stmt.type_decl.name;
+                for (stmt.type_decl.fields) |f| {
+                    if (isMethodField(f)) continue;
+                    if (std.mem.eql(u8, baseTypeName(f.annotation), tname)) {
+                        const msg = std.fmt.allocPrint(self.arena, "record type `{s}` references itself (`{s}: {s}`) — a value record can't contain itself; use a `class` for a recursive/linked structure (its instances are heap references)", .{ tname, f.name, f.annotation }) catch "E_RECURSIVE_RECORD";
+                        return self.fail(stmt.type_decl.line, stmt.type_decl.col, msg);
                     }
                 }
             }
