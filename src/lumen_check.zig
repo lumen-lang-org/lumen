@@ -514,11 +514,27 @@ pub const Checker = struct {
         const is_ne = std.mem.eql(u8, c.op, "!=");
         const is_eq = std.mem.eql(u8, c.op, "==");
         if (!is_ne and !is_eq) return null;
+        // `typeof x === "string"` (or "number"/"boolean") narrows `x` to non-null
+        // in the then-branch — `null`'s typeof is "object", so a match rules it
+        // out. The symmetric `!==` narrows non-null in the else-branch.
+        if (self.typeofNonNullTarget(c.l, c.r) orelse self.typeofNonNullTarget(c.r, c.l)) |path| {
+            return .{ .name = path, .in_then = is_eq };
+        }
         var name: ?[]const u8 = null;
         if (c.r.* == .null_lit) name = self.narrowPath(c.l);
         if (c.l.* == .null_lit) name = self.narrowPath(c.r);
         const n = name orelse return null;
         return .{ .name = n, .in_then = is_ne };
+    }
+
+    /// If `a` is `typeof <path>` and `b` a non-null type-name literal
+    /// ("string"/"number"/"boolean"/"bigint"), returns the narrowable path.
+    fn typeofNonNullTarget(self: *Checker, a: *ast.Expr, b: *ast.Expr) ?[]const u8 {
+        if (a.* != .typeof_expr or b.* != .str) return null;
+        const ty = b.str;
+        // "object"/"undefined" don't exclude null, so they don't narrow to non-null.
+        if (std.mem.eql(u8, ty, "object") or std.mem.eql(u8, ty, "undefined")) return null;
+        return self.narrowPath(a.typeof_expr.operand);
     }
 
     /// If `cond` is a call to a user-defined type guard (`isA(u)`) whose

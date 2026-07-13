@@ -586,7 +586,7 @@ pub const Expr = union(enum) {
     not: *Expr,
     non_null: struct { inner: *Expr, unwraps: bool = false }, // `x!` — non-null assertion; `unwraps` when the operand is optional (emit `.?`, panics if null); a no-op on a non-optional operand
     bnot: *Expr, // bitwise ~
-    typeof_expr: struct { operand: *Expr, result: ?[]const u8 = null }, // `typeof x` — a compile-time type-name string ("number"/"string"/...)
+    typeof_expr: struct { operand: *Expr, result: ?[]const u8 = null, optional_runtime: bool = false }, // `typeof x` — a compile-time type-name string ("number"/"string"/...); optional_runtime: operand is `T | null`, so emit `x == null ? "object" : result` at runtime
     instanceof_expr: struct { value: *Expr, class_name: []const u8, result: ?bool = null }, // `x instanceof C` — a compile-time bool (classes are non-polymorphic; spec 292)
     inc_dec: struct { target: *Expr, is_inc: bool, is_prefix: bool, checked_type: ?types.Type = null }, // `x++` / `++x` / `x--` / `--x` as an expression value
     await_expr: *Expr, // `await <expr>` — operand is a Promise<T>; yields T

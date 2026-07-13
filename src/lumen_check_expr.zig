@@ -165,12 +165,16 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         .typeof_expr => |*to| {
             // `typeof x` resolves to a compile-time string from x's static type.
             const t = self.exprType(program, to.operand, line, col) orelse return null;
-            to.result = switch (t) {
+            // For `T | null`, typeof is a runtime value: "object" when null, else
+            // the inner type's typeof. Record the inner typeof and flag runtime.
+            const effective = if (t == .optional) t.optional.* else t;
+            to.optional_runtime = t == .optional;
+            to.result = switch (effective) {
                 .i32, .i64, .f64, .int_literal_union => "number",
                 .string, .string_literal_union => "string",
                 .bool => "boolean",
                 .func_type => "function",
-                .optional, .none => "undefined",
+                .none => "undefined",
                 else => "object",
             };
             return .string;

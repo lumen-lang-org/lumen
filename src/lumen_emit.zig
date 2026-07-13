@@ -428,16 +428,26 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             }
         },
         .typeof_expr => |to| {
-            // A compile-time constant string (the operand's static type name).
-            // The operand is still evaluated and discarded so its side effects
-            // run and its binding counts as used.
-            g_global_pred_seq += 1;
-            const s = g_global_pred_seq;
-            try w.print(arena, "(__tof{d}: {{ _ = ", .{s});
-            try emitExpr(to.operand, w, arena);
-            try w.print(arena, "; break :__tof{d} @as([]const u8, ", .{s});
-            try emitStrLit(w, arena, to.result orelse "object");
-            try w.appendSlice(arena, "); })");
+            if (to.optional_runtime) {
+                // `T | null` — a runtime value: "object" when null, else the
+                // inner type's typeof.
+                try w.appendSlice(arena, "(if (");
+                try emitExpr(to.operand, w, arena);
+                try w.appendSlice(arena, ") |_| @as([]const u8, ");
+                try emitStrLit(w, arena, to.result orelse "object");
+                try w.appendSlice(arena, ") else @as([]const u8, \"object\"))");
+            } else {
+                // A compile-time constant string (the operand's static type name).
+                // The operand is still evaluated and discarded so its side effects
+                // run and its binding counts as used.
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__tof{d}: {{ _ = ", .{s});
+                try emitExpr(to.operand, w, arena);
+                try w.print(arena, "; break :__tof{d} @as([]const u8, ", .{s});
+                try emitStrLit(w, arena, to.result orelse "object");
+                try w.appendSlice(arena, "); })");
+            }
         },
         .instanceof_expr => |io| {
             // Compile-time verdict; evaluate (discard) the operand.
