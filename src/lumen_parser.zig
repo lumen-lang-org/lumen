@@ -180,6 +180,23 @@ pub const Parser = struct {
         self.prev_line = save_prev;
         return result;
     }
+    /// Whether the token after the current one is the identifier `word`, without
+    /// consuming either (used for two-keyword forms like `const enum`).
+    fn peekIsKw(self: *Parser, word: []const u8) bool {
+        const save_lex = self.lex;
+        const save_cur = self.cur;
+        const save_line = self.cur_line;
+        const save_col = self.cur_col;
+        const save_prev = self.prev_line;
+        self.advance() catch {};
+        const result = self.cur == .ident and std.mem.eql(u8, self.cur.ident, word);
+        self.lex = save_lex;
+        self.cur = save_cur;
+        self.cur_line = save_line;
+        self.cur_col = save_col;
+        self.prev_line = save_prev;
+        return result;
+    }
     pub fn node(self: *Parser, e: Expr) CompileError!*Expr {
         const p = try self.arena.create(Expr);
         p.* = e;
@@ -320,6 +337,13 @@ pub const Parser = struct {
         if (eq(u8, kw, "type")) return self.parseTypeDecl(line, col);
         if (eq(u8, kw, "interface")) return self.parseInterfaceDecl(line, col);
         if (eq(u8, kw, "enum")) return self.parseEnumDecl(line, col);
+        // `const enum E { ... }` — TypeScript's inlined enum. Lumen already
+        // inlines every enum member at its use site, so a const enum lowers
+        // identically; just consume the `const` and parse the enum.
+        if (eq(u8, kw, "const") and self.peekIsKw("enum")) {
+            try self.advance(); // 'const'
+            return self.parseEnumDecl(line, col);
+        }
         if (eq(u8, kw, "extern")) return self.parseExternDecl(line, col);
         // `declare function NAME(...): R;` — the TypeScript-valid spelling for an
         // FFI declaration; identical lowering to `extern function`.
