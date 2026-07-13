@@ -243,7 +243,6 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             for (program.stmts) |*fs| {
                 switch (fs.*) {
                     .function_decl => |*f| {
-                        if (f.is_async) continue;
                         if (f.type_params.len > 0) continue; // generic template: only specializations emit
                         if (dest_map.get(f.name) != null) continue; // builder __into twins keep panic semantics
                         if (throwing_fns.get(f.name) != null) continue;
@@ -259,7 +258,6 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
                     .class_decl => |*c| {
                         for (c.methods) |*m| {
                             if (m.accessor != .none) continue;
-                            if (m.is_async) continue;
                             const key = try std.fmt.allocPrint(arena, "m:{s}", .{m.name});
                             if (throwing_fns.get(key) != null) continue;
                             if (emit_analysis.bodyCanThrow(m.body)) {
