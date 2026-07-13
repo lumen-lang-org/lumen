@@ -1095,6 +1095,13 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             }
         },
         .expr_stmt => |expr_stmt| {
+            // A statement whose value is a bare variable or literal is a no-op
+            // (e.g. `Object.freeze(p)` rewrites to `p`); emit nothing rather than
+            // `_ = p`, which Zig rejects for a const as a pointless discard.
+            switch (expr_stmt.value.*) {
+                .var_ref, .num, .float, .bool, .str, .null_lit, .this_expr => return,
+                else => {},
+            }
             const is_serve = expr_stmt.value.* == .call and std.mem.eql(u8, expr_stmt.value.call.name, "serve");
             try body.appendSlice(arena, if (is_serve) "    " else "    _ = ");
             try emitExpr(expr_stmt.value, body, arena);
