@@ -947,6 +947,38 @@ pub const Checker = struct {
                 return .{ .func_type = sig };
             }
         }
+        // `keyof P` — the string-literal union of record P's field names (379).
+        if (std.mem.startsWith(u8, annotation, "keyof ")) {
+            const operand = std.mem.trim(u8, annotation["keyof ".len..], " ");
+            // Resolve the operand first so `keyof Pick<P, ...>` (or any utility
+            // type) uses the transformed record's fields.
+            const op_ty = try self.typeFromAnnotation(operand, line, col);
+            const rec = if (op_ty == .named) op_ty.named else operand;
+            const fields = self.declFields(rec);
+            if (fields.len == 0) {
+                const msg = std.fmt.allocPrint(self.arena, "`keyof {s}` expects a record type with fields", .{operand}) catch "keyof needs a record";
+                return self.fail(line, col, msg);
+            }
+            const mname = std.fmt.allocPrint(self.arena, "__keyof_{s}", .{rec}) catch return error.OutOfMemory;
+            if (self.type_decls.get(mname) == null) {
+                const lits = self.arena.alloc([]const u8, fields.len) catch return error.OutOfMemory;
+                for (fields, 0..) |f, i| lits[i] = f.name;
+                self.type_decls.put(self.arena, mname, .{ .fields = &.{}, .string_literals = lits }) catch return error.OutOfMemory;
+            }
+            return .{ .string_literal_union = mname };
+        }
+        // Indexed-access type `P["field"]` — the declared type of that field (379).
+        if (std.mem.endsWith(u8, annotation, "\"]")) {
+            if (std.mem.indexOf(u8, annotation, "[\"")) |bi| {
+                const base_ann = annotation[0..bi];
+                const field = annotation[bi + 2 .. annotation.len - 2];
+                const base_ty = try self.typeFromAnnotation(base_ann, line, col);
+                const rec = if (base_ty == .named) base_ty.named else base_ann;
+                if (self.recordFieldType(rec, field)) |ft| return ft;
+                const msg = std.fmt.allocPrint(self.arena, "`{s}[\"{s}\"]`: `{s}` has no field '{s}'", .{ base_ann, field, base_ann, field }) catch "unknown indexed field";
+                return self.fail(line, col, msg);
+            }
+        }
         if (std.mem.endsWith(u8, annotation, "?")) {
             const inner = try self.typeFromAnnotation(annotation[0 .. annotation.len - 1], line, col);
             const p = self.arena.create(types.Type) catch return error.OutOfMemory;

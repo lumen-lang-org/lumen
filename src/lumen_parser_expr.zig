@@ -25,6 +25,20 @@ const FieldInit = ast.FieldInit;
 const Parser = parser_mod.Parser;
 
 pub fn parseTypeMember(self: *Parser) CompileError![]const u8 {
+    const kw = std.mem.eql;
+    // `keyof P` — handled here (not only in parseTypeAnnotation) so it also works
+    // in a bare alias RHS (`type K = keyof P`) which reads members directly.
+    if (self.cur == .ident and kw(u8, self.cur.ident, "keyof")) {
+        const save = self.lex;
+        const save_cur = self.cur;
+        try self.advance();
+        if (self.cur == .ident) {
+            const operand = try self.parseTypeMember();
+            return std.fmt.allocPrint(self.arena, "keyof {s}", .{operand}) catch error.OutOfMemory;
+        }
+        self.lex = save;
+        self.cur = save_cur;
+    }
     // A string-literal member type, e.g. a discriminant field `kind: "circle"`.
     // The annotation is recorded with quotes preserved so the checker can
     // recognize and compare the literal value.
@@ -66,11 +80,19 @@ pub fn parseTypeMember(self: *Parser) CompileError![]const u8 {
             base = buf.items;
         }
     }
-    // One or more `[]` suffixes: `T[]`, `T[][]`, ... (nested arrays, spec 289).
+    // One or more `[]` suffixes: `T[]`, `T[][]`, ... (nested arrays, spec 289),
+    // or an indexed-access type `P["field"]` (spec 379).
     while (self.isOp('[')) {
         try self.advance();
-        try self.expectOp(']');
-        base = std.fmt.allocPrint(self.arena, "{s}[]", .{base}) catch return error.OutOfMemory;
+        if (self.cur == .str) {
+            const field = self.cur.str;
+            try self.advance();
+            try self.expectOp(']');
+            base = std.fmt.allocPrint(self.arena, "{s}[\"{s}\"]", .{ base, field }) catch return error.OutOfMemory;
+        } else {
+            try self.expectOp(']');
+            base = std.fmt.allocPrint(self.arena, "{s}[]", .{base}) catch return error.OutOfMemory;
+        }
     }
     return base;
 }

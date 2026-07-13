@@ -33,7 +33,13 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                     opts.appendSlice(self.arena, literal) catch {};
                     opts.append(self.arena, '"') catch {};
                 }
-                const msg = std.fmt.allocPrint(self.arena, "\"{s}\" is not a valid `{s}` — expected {s}", .{ value.str, type_name, opts.items }) catch "E_TYPE_MISMATCH";
+                // A synthetic `keyof P` union displays as `keyof P`, not its
+                // internal mangled name.
+                const disp = if (std.mem.startsWith(u8, type_name, "__keyof_"))
+                    std.fmt.allocPrint(self.arena, "keyof {s}", .{type_name["__keyof_".len..]}) catch type_name
+                else
+                    type_name;
+                const msg = std.fmt.allocPrint(self.arena, "\"{s}\" is not a valid `{s}` — expected {s}", .{ value.str, disp, opts.items }) catch "E_TYPE_MISMATCH";
                 return self.fail(line, col, msg);
             }
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
@@ -300,6 +306,9 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                 if (expected == .i32 and !actual_type.enum_type.is_string) return;
                 if (expected == .string and actual_type.enum_type.is_string) return;
             }
+            // A string-literal union (incl. `keyof P`) widens to `string`; both
+            // erase to the same runtime representation.
+            if (expected == .string and actual_type == .string_literal_union) return;
             if (!types.same(expected, actual_type)) return self.failTypeMismatch(line, col, expected, actual_type);
         },
     }
