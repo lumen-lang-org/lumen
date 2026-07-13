@@ -1289,20 +1289,22 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             }
         },
         .expr_stmt => |expr_stmt| {
-            // `a.push(x, ...)` on a local array desugars to `a = [...a, x, ...]`,
-            // reusing the immutable-append path (which the optimizer turns into
-            // an amortized-O(1) growable list in a loop). Only a plain local
-            // array receiver used as a statement qualifies; a class-field or
-            // expression receiver keeps the immutable-array diagnostic, and the
-            // length-returning expression form (`const n = a.push(x)`) is not
-            // rewritten (it stays rejected).
+            // `a.push(x, ...)` / `a.unshift(x, ...)` on a local array desugar to
+            // `a = [...a, x, ...]` / `a = [x, ..., ...a]`, reusing the immutable-
+            // append path (which the optimizer turns into an amortized-O(1)
+            // growable list in a loop). Only a plain local array receiver used as
+            // a statement qualifies; a class-field or expression receiver keeps
+            // the immutable-array diagnostic, and the value-returning expression
+            // form (`const n = a.push(x)`) is not rewritten (it stays rejected).
             if (expr_stmt.value.* == .method_call) {
                 const mc = expr_stmt.value.method_call;
-                if (std.mem.eql(u8, mc.name, "push") and mc.obj.* == .var_ref and !mc.optional_chain) {
+                const is_push = std.mem.eql(u8, mc.name, "push");
+                const is_unshift = std.mem.eql(u8, mc.name, "unshift");
+                if ((is_push or is_unshift) and mc.obj.* == .var_ref and !mc.optional_chain) {
                     if (self.bindingPtr(mc.obj.var_ref.name)) |b| {
                         if (types.isArray(b.ty)) {
                             if (!b.mutable) {
-                                const msg = std.fmt.allocPrint(self.arena, "`push` reassigns '{s}' (arrays are immutable values in Lumen) — declare it with `let`, not `const`", .{mc.obj.var_ref.name}) catch "E_CONST_ASSIGNMENT";
+                                const msg = std.fmt.allocPrint(self.arena, "`{s}` reassigns '{s}' (arrays are immutable values in Lumen) — declare it with `let`, not `const`", .{ mc.name, mc.obj.var_ref.name }) catch "E_CONST_ASSIGNMENT";
                                 return self.fail(expr_stmt.line, expr_stmt.col, msg);
                             }
                             const items = self.arena.alloc(*ast.Expr, mc.args.len + 1) catch return error.OutOfMemory;
@@ -1310,8 +1312,15 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                             spread_inner.* = .{ .var_ref = .{ .name = mc.obj.var_ref.name } };
                             const spread_node = self.arena.create(ast.Expr) catch return error.OutOfMemory;
                             spread_node.* = .{ .spread = spread_inner };
-                            items[0] = spread_node;
-                            for (mc.args, 0..) |a, i| items[i + 1] = a;
+                            if (is_push) {
+                                // [...a, x, ...]
+                                items[0] = spread_node;
+                                for (mc.args, 0..) |a, i| items[i + 1] = a;
+                            } else {
+                                // [x, ..., ...a]
+                                for (mc.args, 0..) |a, i| items[i] = a;
+                                items[mc.args.len] = spread_node;
+                            }
                             const arr = self.arena.create(ast.Expr) catch return error.OutOfMemory;
                             arr.* = .{ .array = .{ .items = items } };
                             stmt.* = .{ .assign = .{ .name = mc.obj.var_ref.name, .value = arr, .line = expr_stmt.line, .col = expr_stmt.col } };
