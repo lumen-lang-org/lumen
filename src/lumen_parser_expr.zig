@@ -498,11 +498,16 @@ pub fn parseUnary(self: *Parser) CompileError!*Expr {
         try self.advance();
         return self.node(.{ .neg = try self.parseUnary() });
     }
-    // Unary plus `+x` — a no-op on a numeric operand (JS identity for numbers);
-    // parse and return the operand directly (spec 305).
+    // Unary plus `+x` — JS coerces the operand to a number. On a numeric
+    // operand this is the identity; on a string (`+"42"`) it parses to a number.
+    // Lower to `Number(x)`, which the checker resolves to identity for numeric
+    // operands and to a string→number conversion otherwise (spec 305/406).
     if (self.isOp('+')) {
         try self.advance();
-        return self.parseUnary();
+        const operand = try self.parseUnary();
+        const args = self.arena.alloc(*Expr, 1) catch return error.OutOfMemory;
+        args[0] = operand;
+        return self.node(.{ .call = .{ .name = "Number", .args = args, .is_global_parse = true } });
     }
     if (self.isOp('!')) {
         try self.advance();
