@@ -72,6 +72,44 @@ const PARSE_RT =
     \\    }
     \\    return null;
     \\}
+    \\fn __uriHex(__n: u8) u8 { return if (__n < 10) '0' + __n else 'A' + (__n - 10); }
+    \\fn __encodeURIComponent(__s: []const u8) []const u8 {
+    \\    var __b: std.ArrayListUnmanaged(u8) = .empty;
+    \\    for (__s) |__c| {
+    \\        const __unreserved = (__c >= 'A' and __c <= 'Z') or (__c >= 'a' and __c <= 'z') or (__c >= '0' and __c <= '9') or __c == '-' or __c == '_' or __c == '.' or __c == '!' or __c == '~' or __c == '*' or __c == '\'' or __c == '(' or __c == ')';
+    \\        if (__unreserved) {
+    \\            __b.append(__sa(), __c) catch unreachable;
+    \\        } else {
+    \\            __b.append(__sa(), '%') catch unreachable;
+    \\            __b.append(__sa(), __uriHex(__c >> 4)) catch unreachable;
+    \\            __b.append(__sa(), __uriHex(__c & 0x0f)) catch unreachable;
+    \\        }
+    \\    }
+    \\    return __b.items;
+    \\}
+    \\fn __uriUnhex(__c: u8) ?u8 {
+    \\    if (__c >= '0' and __c <= '9') return __c - '0';
+    \\    if (__c >= 'A' and __c <= 'F') return __c - 'A' + 10;
+    \\    if (__c >= 'a' and __c <= 'f') return __c - 'a' + 10;
+    \\    return null;
+    \\}
+    \\fn __decodeURIComponent(__s: []const u8) []const u8 {
+    \\    var __b: std.ArrayListUnmanaged(u8) = .empty;
+    \\    var __i: usize = 0;
+    \\    while (__i < __s.len) : (__i += 1) {
+    \\        if (__s[__i] == '%' and __i + 2 < __s.len) {
+    \\            const __hi = __uriUnhex(__s[__i + 1]);
+    \\            const __lo = __uriUnhex(__s[__i + 2]);
+    \\            if (__hi != null and __lo != null) {
+    \\                __b.append(__sa(), (__hi.? << 4) | __lo.?) catch unreachable;
+    \\                __i += 2;
+    \\                continue;
+    \\            }
+    \\        }
+    \\        __b.append(__sa(), __s[__i]) catch unreachable;
+    \\    }
+    \\    return __b.items;
+    \\}
 ;
 // Compile-time regex specialization (Plan B): parses a literal pattern at build
 // time and emits a pattern-specific straight-line matcher. See regex_specialize.zig.

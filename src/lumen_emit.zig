@@ -234,6 +234,10 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, "__parseFloat(");
                 try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ")");
+            } else if ((std.mem.eql(u8, cl.name, "encodeURIComponent") or std.mem.eql(u8, cl.name, "decodeURIComponent")) and cl.is_global_parse) {
+                try w.print(arena, "__{s}(", .{cl.name});
+                try emitExpr(cl.args[0], w, arena);
+                try w.appendSlice(arena, ")");
             } else if (std.mem.eql(u8, cl.name, "String") and cl.is_global_parse) {
                 // Convert number/bool/string to string with a comptime type branch.
                 g_global_pred_seq += 1;

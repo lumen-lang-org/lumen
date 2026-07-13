@@ -1715,6 +1715,16 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 e.* = call.args[0].*;
                 return at;
             }
+            // encodeURIComponent / decodeURIComponent: string -> string.
+            if ((std.mem.eql(u8, call.name, "encodeURIComponent") or std.mem.eql(u8, call.name, "decodeURIComponent")) and self.funcs.get(call.name) == null) {
+                if (call.args.len != 1) {
+                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                    return null;
+                }
+                self.ensureAssignable(program, .string, call.args[0], line, col) catch return null;
+                call.is_global_parse = true;
+                return .string;
+            }
             // Global Boolean(x) conversion: truthiness of number/bool/string.
             if (std.mem.eql(u8, call.name, "Boolean") and self.funcs.get(call.name) == null) {
                 if (call.args.len != 1) {
