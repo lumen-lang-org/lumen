@@ -337,6 +337,55 @@ pub fn blockBreaksOut(body: []ast.Stmt) bool {
     return false;
 }
 
+/// Whether `body` (an `if (x == null)` then-branch) assigns `name` a non-null
+/// value so that, after the branch, `name` is non-null. Sound-bounded: requires
+/// a direct (top-level) `name = <non-optional>` assignment and rejects any
+/// assignment to `name` nested inside a sub-block (which could set it back to
+/// null on some path we don't track).
+fn thenDefaultsNonNull(self: *Checker, program: *ast.Program, body: []ast.Stmt, name: []const u8) bool {
+    var has_nonnull_top = false;
+    for (body) |*s| {
+        if (s.* == .assign and std.mem.eql(u8, s.assign.name, name) and !s.assign.deref) {
+            if (!std.mem.eql(u8, s.assign.op, "=")) return false; // compound op keeps the old (nullable) type
+            const vt = self.exprType(program, s.assign.value, s.assign.line, s.assign.col) orelse return false;
+            if (vt == .optional or vt == .none) return false;
+            has_nonnull_top = true;
+        } else if (stmtAssignsNameNested(s, name)) {
+            return false; // a nested reassignment could be null on some path
+        }
+    }
+    return has_nonnull_top;
+}
+
+/// Whether any assignment to `name` appears inside a nested block of `stmt`
+/// (control-flow bodies), i.e. not as a direct statement.
+fn stmtAssignsNameNested(stmt: *const ast.Stmt, name: []const u8) bool {
+    return switch (stmt.*) {
+        .while_stmt => |w| blockAssignsName(w.body, name),
+        .do_while_stmt => |w| blockAssignsName(w.body, name),
+        .for_stmt => |f| blockAssignsName(f.body, name),
+        .for_of_stmt => |f| blockAssignsName(f.body, name),
+        .for_in_stmt => |f| blockAssignsName(f.body, name),
+        .if_stmt => |b| blockAssignsName(b.then_body, name) or (b.else_body != null and blockAssignsName(b.else_body.?, name)),
+        .switch_stmt => |sw| blk: {
+            for (sw.cases) |cse| if (blockAssignsName(cse.body, name)) break :blk true;
+            if (sw.default_body) |db| if (blockAssignsName(db, name)) break :blk true;
+            break :blk false;
+        },
+        .try_stmt => |t| blockAssignsName(t.try_body, name) or blockAssignsName(t.catch_body, name) or (t.finally_body != null and blockAssignsName(t.finally_body.?, name)),
+        .block_stmt => |b| blockAssignsName(b.body, name),
+        else => false,
+    };
+}
+
+fn blockAssignsName(body: []const ast.Stmt, name: []const u8) bool {
+    for (body) |*s| {
+        if (s.* == .assign and std.mem.eql(u8, s.assign.name, name)) return true;
+        if (stmtAssignsNameNested(s, name)) return true;
+    }
+    return false;
+}
+
 pub fn blockReturns(body: []ast.Stmt) bool {
     for (body) |stmt| {
         if (stmtReturns(stmt)) return true;
@@ -1051,6 +1100,14 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 // the whole disjunction holds, so every `== null` operand's
                 // target is non-null below (checkBlock restores at block exit).
                 _ = self.collectAndNullChecks(branch.cond, false);
+            } else if (narrow != null and !narrow.?.in_then and
+                thenDefaultsNonNull(self, program, branch.then_body, narrow.?.name))
+            {
+                // Default-assignment narrowing: `if (x == null) { x = <non-null>; }`
+                // with the then-branch falling through — x is non-null afterward
+                // (either it was non-null, or it was just assigned a non-null
+                // value). Held for the rest of the block; checkBlock restores it.
+                self.narrowed.append(self.arena, narrow.?.name) catch return error.OutOfMemory;
             }
         },
         .switch_stmt => |*switch_stmt| {
