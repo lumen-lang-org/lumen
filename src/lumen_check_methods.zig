@@ -366,14 +366,15 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
-        const want = self.makeFuncType(&.{ elem, elem }, .i32) orelse return null;
-        self.arrow_param_hint = &.{ elem, elem };
-        self.ensureAssignable(program, want, mc.args[0], line, col) catch {
-            self.arrow_param_hint = null;
+        // The comparator returns any number (only its sign matters), so accept
+        // an `i32`/`i64`/`f64` return — `(a, b) => a.x - b.x` over `number`
+        // fields yields `f64`, which JS treats identically.
+        const cb_type = self.checkCbArg(program, mc.args[0], &.{ elem, elem }, line, col) orelse return null;
+        const cp = if (cb_type == .func_type) cb_type.func_type.params else &[_]types.Type{};
+        if (cb_type != .func_type or cp.len != 2 or !types.same(cp[0], elem) or !types.same(cp[1], elem) or !types.isNumeric(cb_type.func_type.ret.*)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
-        };
-        self.arrow_param_hint = null;
+        }
         mc.array_result_type = obj_type;
         return obj_type;
     }
