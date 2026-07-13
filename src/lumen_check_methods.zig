@@ -161,6 +161,14 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
                 self.ensureAssignable(program, at, mc.args[1], line, col) catch return null;
                 break :blk_acc at;
             }
+            // A bare integer-literal seed (`reduce(..., 0)`) over an f64/i64
+            // array should fold at the element's width, matching JS where every
+            // numeric literal is `number`. Widen the seed to the element type so
+            // the accumulator and callback return line up (spec 394).
+            if (mc.args[1].* == .num and (elem == .f64 or elem == .i64)) {
+                self.ensureAssignable(program, elem, mc.args[1], line, col) catch return null;
+                break :blk_acc elem;
+            }
             break :blk_acc (self.exprType(program, mc.args[1], line, col) orelse return null);
         };
         // The callback returns the accumulator type; hint it so an object/array
