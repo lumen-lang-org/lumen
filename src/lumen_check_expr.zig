@@ -1976,6 +1976,23 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 c.checked_type = target;
                 return target;
             };
+            // A numeric widening cast (`i32 as f64`, `i32 as i64`) converts
+            // rather than asserts — the same promotion assignment/argument
+            // position already applies. Rewrite the cast to that conversion.
+            if (types.isInteger(source) and target == .f64) {
+                const inner = self.arena.create(ast.Expr) catch return null;
+                inner.* = c.inner.*;
+                const args = self.arena.alloc(*ast.Expr, 1) catch return null;
+                args[0] = inner;
+                e.* = .{ .call = .{ .name = "Number", .args = args, .is_global_parse = true } };
+                return .f64;
+            }
+            if (source == .i32 and target == .i64) {
+                // i32 -> i64 is a lossless widening the backend coerces directly;
+                // keep the operand and just retype.
+                c.checked_type = target;
+                return target;
+            }
             if (!self.castAllowed(source, target)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
