@@ -1060,15 +1060,17 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                             return null;
                         }
-                        const kt = self.exprType(program, entry.array.items[0], line, col) orelse return null;
-                        const vt = self.exprType(program, entry.array.items[1], line, col) orelse return null;
                         if (ne.type_args.len == 0 and ei == 0) {
                             // Infer K/V from the first entry.
-                            k.* = kt;
-                            v.* = vt;
-                        } else if (!types.same(k.*, kt) or !types.same(v.*, vt)) {
-                            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                            return null;
+                            k.* = self.exprType(program, entry.array.items[0], line, col) orelse return null;
+                            v.* = self.exprType(program, entry.array.items[1], line, col) orelse return null;
+                        } else {
+                            // Check against the declared/inferred K,V so integer
+                            // literals widen to an `f64`/`i64` slot (matching the
+                            // `new Set<number>([...])` and `number[]` behavior)
+                            // rather than a strict equality that rejects them.
+                            self.ensureAssignable(program, k.*, entry.array.items[0], line, col) catch return null;
+                            self.ensureAssignable(program, v.*, entry.array.items[1], line, col) catch return null;
                         }
                     }
                     if (ne.type_args.len == 0 and ne.args[0].array.items.len == 0) {
@@ -1106,15 +1108,15 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
                 // Optional initializer: an array of elements (`new Set([1,2,3])`).
                 if (ne.args.len == 1) {
-                    const at = self.exprType(program, ne.args[0], line, col) orelse return null;
-                    const ae = types.arrayElem(at) orelse {
+                    // Check the initializer against `T[]` so an integer-literal
+                    // array widens to an `f64`/`i64` element set the same way a
+                    // `let a: number[] = [1,2,3]` annotation does, instead of a
+                    // strict element-type equality that rejects the widening.
+                    const want = types.arrayOf(set_elem.*) orelse {
                         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
                     };
-                    if (!types.same(ae, set_elem.*)) {
-                        _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
-                        return null;
-                    }
+                    self.ensureAssignable(program, want, ne.args[0], line, col) catch return null;
                 } else if (ne.args.len != 0) {
                     _ = self.fail(line, col, "E_ARG_COUNT") catch {};
                     return null;
