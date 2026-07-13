@@ -255,6 +255,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // `Number("  42  ")` === 42); an empty/whitespace-only string is
                 // 0, and any other unparseable string is NaN.
                 try w.print(arena, "; break :__nc{d} switch (@typeInfo(@TypeOf(__v))) {{ .bool => @as(f64, if (__v) 1 else 0), .int, .comptime_int => @as(f64, @floatFromInt(__v)), .float, .comptime_float => @as(f64, __v), else => (__ns{d}: {{ const __t = std.mem.trim(u8, __v, \" \\t\\n\\r\"); break :__ns{d} if (__t.len == 0) @as(f64, 0) else (std.fmt.parseFloat(f64, __t) catch std.math.nan(f64)); }}) }}; }})", .{ s, s, s });
+            } else if (std.mem.eql(u8, cl.name, "BigInt") and cl.is_global_parse) {
+                // number/bool/string -> i64; a float truncates toward zero, an
+                // unparseable string traps (JS BigInt throws on bad input).
+                g_global_pred_seq += 1;
+                const s = g_global_pred_seq;
+                try w.print(arena, "(__bi{d}: {{ const __v = ", .{s});
+                try emitExpr(cl.args[0], w, arena);
+                try w.print(arena, "; break :__bi{d} switch (@typeInfo(@TypeOf(__v))) {{ .bool => @as(i64, if (__v) 1 else 0), .int, .comptime_int => @as(i64, @intCast(__v)), .float, .comptime_float => @as(i64, @intFromFloat(@trunc(__v))), else => (std.fmt.parseInt(i64, std.mem.trim(u8, __v, \" \\t\\n\\r\"), 10) catch @panic(\"BigInt: invalid string\")) }}; }})", .{s});
             } else if (std.mem.eql(u8, cl.name, "Boolean") and cl.is_global_parse) {
                 // Truthiness: nonzero number, nonempty string, or the bool itself.
                 g_global_pred_seq += 1;

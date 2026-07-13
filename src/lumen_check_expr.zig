@@ -1767,6 +1767,22 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 call.is_global_parse = true;
                 return .f64;
             }
+            // Global BigInt(x) conversion: number/bool/string -> i64 bigint. A
+            // float is truncated toward zero; an unparseable string traps (as JS
+            // BigInt throws a SyntaxError).
+            if (std.mem.eql(u8, call.name, "BigInt") and self.funcs.get(call.name) == null) {
+                if (call.args.len != 1) {
+                    _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+                    return null;
+                }
+                const at = self.exprType(program, call.args[0], line, col) orelse return null;
+                if (!types.isNumeric(at) and !types.same(.string, at) and at != .bool) {
+                    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                    return null;
+                }
+                call.is_global_parse = true;
+                return .i64;
+            }
             // structuredClone(x): a deep copy. Lumen records are immutable value
             // types and arrays are immutable, so a clone is observationally
             // identical to the source — lower to the argument itself (value
