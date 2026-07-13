@@ -802,9 +802,17 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
     } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "STATUS_CODES")) {
         try w.appendSlice(arena, "__httpStatusCodes()");
     } else if (std.mem.eql(u8, cl.namespace, "JSON") and std.mem.eql(u8, cl.name, "stringify")) {
-        try w.appendSlice(arena, "__jsonStringify(__alloc, ");
-        try em.emitExpr(cl.args[0], w, arena);
-        try w.append(arena, ')');
+        if (cl.args.len == 3) {
+            try w.appendSlice(arena, "__jsonStringifyPretty(__alloc, ");
+            try em.emitExpr(cl.args[0], w, arena);
+            try w.appendSlice(arena, ", @as(usize, @intCast(");
+            try em.emitExpr(cl.args[2], w, arena);
+            try w.appendSlice(arena, ")))");
+        } else {
+            try w.appendSlice(arena, "__jsonStringify(__alloc, ");
+            try em.emitExpr(cl.args[0], w, arena);
+            try w.append(arena, ')');
+        }
     } else if (std.mem.eql(u8, cl.namespace, "JSON") and std.mem.eql(u8, cl.name, "parse")) {
         const result_type = cl.checked_arg_type orelse .void;
         const zig_name = types.zigName(arena, result_type) catch "void";

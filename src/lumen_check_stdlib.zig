@@ -713,7 +713,10 @@ pub fn netCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall,
 // struct with zero custom (de)serialization code needed.
 pub fn jsonCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
     if (std.mem.eql(u8, call.name, "stringify")) {
-        if (call.args.len != 1) {
+        // `stringify(value)` or the pretty form `stringify(value, null, indent)`
+        // — the replacer arg must be `null` (replacers aren't supported) and the
+        // indent must be an integer count of spaces.
+        if (call.args.len != 1 and call.args.len != 3) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
         }
@@ -728,6 +731,17 @@ pub fn jsonCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         if (!jsonSerializable(value_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
+        }
+        if (call.args.len == 3) {
+            if (call.args[1].* != .null_lit) {
+                _ = self.fail(line, col, "JSON.stringify's replacer argument must be `null` — replacers are not supported; pass the indent as the third argument") catch {};
+                return null;
+            }
+            const it = self.exprType(program, call.args[2], line, col) orelse return null;
+            if (!types.isInteger(it)) {
+                _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+                return null;
+            }
         }
         call.checked_arg_type = value_type;
         program.uses_io = true;

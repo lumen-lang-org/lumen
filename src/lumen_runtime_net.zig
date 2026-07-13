@@ -488,6 +488,18 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\fn __jsonStringify(alloc: std.mem.Allocator, value: anytype) []const u8 {
             \\    return std.json.Stringify.valueAlloc(alloc, value, .{}) catch "";
             \\}
+            \\fn __jsonStringifyPretty(alloc: std.mem.Allocator, value: anytype, indent: usize) []const u8 {
+            \\    // JSON.stringify(v, null, n): std's indent width is a comptime enum,
+            \\    // so map the runtime count to the nearest supported option.
+            \\    return switch (indent) {
+            \\        0 => std.json.Stringify.valueAlloc(alloc, value, .{}),
+            \\        1 => std.json.Stringify.valueAlloc(alloc, value, .{ .whitespace = .indent_1 }),
+            \\        2 => std.json.Stringify.valueAlloc(alloc, value, .{ .whitespace = .indent_2 }),
+            \\        3 => std.json.Stringify.valueAlloc(alloc, value, .{ .whitespace = .indent_3 }),
+            \\        4 => std.json.Stringify.valueAlloc(alloc, value, .{ .whitespace = .indent_4 }),
+            \\        else => std.json.Stringify.valueAlloc(alloc, value, .{ .whitespace = .indent_8 }),
+            \\    } catch "";
+            \\}
             \\
         );
         if (options.runtime_locations) {
