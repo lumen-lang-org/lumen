@@ -867,6 +867,22 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
         },
         .tuple_lit => |t| t.tuple_type,
         .field => |*field| {
+            // `process.env.NAME`: Node reads an environment variable as a nested
+            // property; rewrite it to Lumen's `process.env("NAME")` lookup (which
+            // returns `string | null`). The bracket form is handled in `.index`.
+            if (field.obj.* == .field) {
+                const inner = field.obj.field;
+                if (inner.obj.* == .var_ref and std.mem.eql(u8, inner.obj.var_ref.name, "process") and
+                    std.mem.eql(u8, inner.name, "env") and self.bindingPtr("process") == null)
+                {
+                    const key = self.arena.create(ast.Expr) catch return null;
+                    key.* = .{ .str = field.name };
+                    const args = self.arena.alloc(*ast.Expr, 1) catch return null;
+                    args[0] = key;
+                    e.* = .{ .static_call = .{ .namespace = "process", .name = "env", .args = args } };
+                    return self.exprType(program, e, line, col);
+                }
+            }
             // Enum member access: `EnumName.Member` resolves to the enum type
             // and carries the member's backing value for emission.
             if (field.obj.* == .var_ref) {
@@ -1620,6 +1636,19 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return rm.method.checked_return_type orelse return null;
         },
         .index => |*index| {
+            // `process.env[key]`: the bracket form of an environment lookup,
+            // rewritten to `process.env(key)` (mirrors the `.field` dot form).
+            if (index.obj.* == .field and !index.optional_chain) {
+                const inner = index.obj.field;
+                if (inner.obj.* == .var_ref and std.mem.eql(u8, inner.obj.var_ref.name, "process") and
+                    std.mem.eql(u8, inner.name, "env") and self.bindingPtr("process") == null)
+                {
+                    const args = self.arena.alloc(*ast.Expr, 1) catch return null;
+                    args[0] = index.value;
+                    e.* = .{ .static_call = .{ .namespace = "process", .name = "env", .args = args } };
+                    return self.exprType(program, e, line, col);
+                }
+            }
             var obj_type = self.exprType(program, index.obj, line, col) orelse return null;
             // Optional index `a?.[i]` (spec 052): the object must be
             // optional; unwrap it and wrap the element type back into an
