@@ -903,6 +903,20 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         return .f64;
                     }
                 }
+                // Node exposes `process.argv`, `process.platform`, `process.pid`,
+                // `process.arch`, and `process.version` as zero-argument
+                // properties; Lumen's underlying API spells them as calls. Accept
+                // the property form by rewriting it to the equivalent call so the
+                // idiomatic TypeScript spelling works (the parens form still does).
+                if (std.mem.eql(u8, field.obj.var_ref.name, "process") and self.bindingPtr("process") == null) {
+                    const n = field.name;
+                    if (std.mem.eql(u8, n, "argv") or std.mem.eql(u8, n, "platform") or
+                        std.mem.eql(u8, n, "pid") or std.mem.eql(u8, n, "arch") or std.mem.eql(u8, n, "version"))
+                    {
+                        e.* = .{ .static_call = .{ .namespace = "process", .name = n, .args = &.{} } };
+                        return self.exprType(program, e, line, col);
+                    }
+                }
                 // `ClassName.staticField` — a static member read. Only when the
                 // name is a class and not shadowed by a local binding.
                 if (self.bindingPtr(field.obj.var_ref.name) == null) {
