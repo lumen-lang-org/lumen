@@ -118,6 +118,10 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         try decls.print(arena, ") *{s} {{\n", .{c.name});
     }
     try decls.print(arena, "    const self = __sa().create({s}) catch unreachable;\n", .{c.name});
+    // `create` returns undefined memory; an optional field with no initializer
+    // and no ctor assignment must read `null`, not garbage. Null them up front
+    // (a ctor that assigns the field overwrites this).
+    try emitOptionalFieldNulls(chain, decls, arena);
     {
         const saved_can_error = emit_mod.g_fn_can_error;
         emit_mod.g_fn_can_error = ctor_throws;
@@ -141,7 +145,9 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         // A ctor that writes fields needs `var self`; one that never touches
         // `this` (fieldless/empty ctor) leaves it unmutated, so use `const` to
         // avoid Zig's "local variable is never mutated" error.
-        try decls.print(arena, "    {s} self: {s} = undefined;\n", .{ if (bodyUsesThis(ctor_owner.ctor_body)) "var" else "const", c.name });
+        const initv_mut = bodyUsesThis(ctor_owner.ctor_body) or hasOptionalNoInit(chain);
+        try decls.print(arena, "    {s} self: {s} = undefined;\n", .{ if (initv_mut) "var" else "const", c.name });
+        if (initv_mut) try emitOptionalFieldNulls(chain, decls, arena);
         {
             const saved_can_error = emit_mod.g_fn_can_error;
             emit_mod.g_fn_can_error = false;
@@ -222,13 +228,54 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
             const saved_can_error = emit_mod.g_fn_can_error;
             emit_mod.g_fn_can_error = m_throws;
             defer emit_mod.g_fn_can_error = saved_can_error;
+            // A static async method resolves its promise on `return`, same as an
+            // instance async method (spec 372).
+            const s_ret = m.checked_return_type orelse return error.ParseError;
+            const s_prev_async = emit_mod.g_async_inner;
+            if (m.is_async and s_ret == .promise_type) {
+                emit_mod.g_async_inner = try types.zigName(arena, s_ret.promise_type.*);
+            } else {
+                emit_mod.g_async_inner = null;
+            }
+            defer emit_mod.g_async_inner = s_prev_async;
             try emitUnusedParamDiscards(m.params, m.body, decls, arena);
             try emit_stmt.emitBody(m.body, decls, decls, arena, throw_target, switch_break_target, options);
+            if (m.is_async and s_ret == .promise_type and s_ret.promise_type.* == .void and !analysis.bodyAlwaysReturns(m.body)) {
+                try decls.appendSlice(arena, "    return __promiseResolved(void, {});\n");
+            }
             try decls.appendSlice(arena, "    }\n");
         }
     }
 
     try decls.appendSlice(arena, "};\n");
+}
+
+/// Whether any instance field in the chain is optional with no initializer
+/// (so it needs an explicit `= null` at construction).
+fn hasOptionalNoInit(chain: []const *const ast.ClassDecl) bool {
+    for (chain) |cc| {
+        for (cc.fields) |field| {
+            if (field.is_static) continue;
+            if (field.init == null and field.checked_type != null and field.checked_type.? == .optional) return true;
+        }
+    }
+    return false;
+}
+
+/// Emit `self.<field> = null;` for every optional instance field with no
+/// initializer, so an unset optional field reads `null` rather than undefined.
+fn emitOptionalFieldNulls(chain: []const *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
+    for (chain) |cc| {
+        for (cc.fields) |field| {
+            if (field.is_static) continue;
+            if (field.init != null) continue;
+            const fty = field.checked_type orelse continue;
+            if (fty != .optional) continue;
+            try decls.appendSlice(arena, "    self.");
+            try emit_mod.emitFieldName(decls, arena, field.name);
+            try decls.appendSlice(arena, " = null;\n");
+        }
+    }
 }
 
 pub fn emitClassMethod(self_type: []const u8, m: ast.FunctionDecl, decls: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, throw_target: ?[]const u8, switch_break_target: ?[]const u8, options: CompileOptions) CompileError!void {
