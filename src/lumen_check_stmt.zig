@@ -23,6 +23,23 @@ const check_mod = @import("lumen_check.zig");
 const Checker = check_mod.Checker;
 const CompileError = diag_mod.CompileError;
 
+/// Deep-copies a pure receiver expression (`this`, a variable, or a field/index
+/// chain over them) so the `push`/`unshift` desugar can reference the same
+/// receiver in both the reassignment target and its `[...recv, x]` value without
+/// sharing a node (shared nodes get re-checked twice, tripping idempotency).
+/// Returns null for anything else (a call, an arbitrary expression).
+fn clonePureRecv(arena: std.mem.Allocator, e: *const ast.Expr) ?*ast.Expr {
+    const c = arena.create(ast.Expr) catch return null;
+    switch (e.*) {
+        .var_ref => |r| c.* = .{ .var_ref = .{ .name = r.name } },
+        .this_expr => c.* = .{ .this_expr = {} },
+        .field => |f| c.* = .{ .field = .{ .obj = clonePureRecv(arena, f.obj) orelse return null, .name = f.name, .optional_chain = f.optional_chain } },
+        .index => |idx| c.* = .{ .index = .{ .obj = clonePureRecv(arena, idx.obj) orelse return null, .value = clonePureRecv(arena, idx.value) orelse return null, .optional_chain = idx.optional_chain } },
+        else => return null,
+    }
+    return c;
+}
+
 pub fn declareExtern(self: *Checker, decl: *ast.ExternDecl) CompileError!void {
     if (self.funcs.get(decl.name) != null) return self.fail(decl.line, decl.col, "E_DUPLICATE_BINDING");
     const ret = try self.typeFromAnnotation(decl.return_annotation, decl.line, decl.col);
@@ -1289,43 +1306,57 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             }
         },
         .expr_stmt => |expr_stmt| {
-            // `a.push(x, ...)` / `a.unshift(x, ...)` on a local array desugar to
-            // `a = [...a, x, ...]` / `a = [x, ..., ...a]`, reusing the immutable-
-            // append path (which the optimizer turns into an amortized-O(1)
-            // growable list in a loop). Only a plain local array receiver used as
-            // a statement qualifies; a class-field or expression receiver keeps
-            // the immutable-array diagnostic, and the value-returning expression
-            // form (`const n = a.push(x)`) is not rewritten (it stays rejected).
+            // `a.push(x, ...)` / `a.unshift(x, ...)` on an array desugar to a
+            // reassignment — `a = [...a, x, ...]` / `a = [x, ..., ...a]` —
+            // reusing the immutable-append path (the optimizer turns a local
+            // one into an amortized-O(1) growable list in a loop). The receiver
+            // is either a local array variable (→ a plain assign) or a class-
+            // field array like `this.items` / `obj.items` (→ a member assign).
+            // An expression receiver (`f().items`) or the value-returning form
+            // (`const n = a.push(x)`) keeps the immutable-array diagnostic.
             if (expr_stmt.value.* == .method_call) {
                 const mc = expr_stmt.value.method_call;
                 const is_push = std.mem.eql(u8, mc.name, "push");
                 const is_unshift = std.mem.eql(u8, mc.name, "unshift");
-                if ((is_push or is_unshift) and mc.obj.* == .var_ref and !mc.optional_chain) {
-                    if (self.bindingPtr(mc.obj.var_ref.name)) |b| {
-                        if (types.isArray(b.ty)) {
+                if ((is_push or is_unshift) and !mc.optional_chain) {
+                    // The current array value spread into the new literal, plus a
+                    // flag for which reassignment statement to synthesize.
+                    var spread_src: ?*ast.Expr = null;
+                    if (mc.obj.* == .var_ref) {
+                        if (self.bindingPtr(mc.obj.var_ref.name)) |b| if (types.isArray(b.ty)) {
                             if (!b.mutable) {
                                 const msg = std.fmt.allocPrint(self.arena, "`{s}` reassigns '{s}' (arrays are immutable values in Lumen) — declare it with `let`, not `const`", .{ mc.name, mc.obj.var_ref.name }) catch "E_CONST_ASSIGNMENT";
                                 return self.fail(expr_stmt.line, expr_stmt.col, msg);
                             }
-                            const items = self.arena.alloc(*ast.Expr, mc.args.len + 1) catch return error.OutOfMemory;
-                            const spread_inner = self.arena.create(ast.Expr) catch return error.OutOfMemory;
-                            spread_inner.* = .{ .var_ref = .{ .name = mc.obj.var_ref.name } };
-                            const spread_node = self.arena.create(ast.Expr) catch return error.OutOfMemory;
-                            spread_node.* = .{ .spread = spread_inner };
-                            if (is_push) {
-                                // [...a, x, ...]
-                                items[0] = spread_node;
-                                for (mc.args, 0..) |a, i| items[i + 1] = a;
-                            } else {
-                                // [x, ..., ...a]
-                                for (mc.args, 0..) |a, i| items[i] = a;
-                                items[mc.args.len] = spread_node;
-                            }
-                            const arr = self.arena.create(ast.Expr) catch return error.OutOfMemory;
-                            arr.* = .{ .array = .{ .items = items } };
-                            stmt.* = .{ .assign = .{ .name = mc.obj.var_ref.name, .value = arr, .line = expr_stmt.line, .col = expr_stmt.col } };
-                            return self.checkStmt(program, stmt);
+                            spread_src = clonePureRecv(self.arena, mc.obj);
+                        };
+                    } else if (mc.obj.* == .field and clonePureRecv(self.arena, mc.obj.field.obj) != null) {
+                        // A class-field array: confirm the field's type is an
+                        // array before rewriting (else fall through to the normal
+                        // check, which reports the real error).
+                        if (self.exprType(program, mc.obj, expr_stmt.line, expr_stmt.col)) |ft| {
+                            if (types.isArray(ft)) spread_src = clonePureRecv(self.arena, mc.obj);
                         }
+                    }
+                    if (spread_src) |src| {
+                        const items = self.arena.alloc(*ast.Expr, mc.args.len + 1) catch return error.OutOfMemory;
+                        const spread_node = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                        spread_node.* = .{ .spread = src };
+                        if (is_push) {
+                            items[0] = spread_node;
+                            for (mc.args, 0..) |a, i| items[i + 1] = a;
+                        } else {
+                            for (mc.args, 0..) |a, i| items[i] = a;
+                            items[mc.args.len] = spread_node;
+                        }
+                        const arr = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                        arr.* = .{ .array = .{ .items = items } };
+                        if (mc.obj.* == .var_ref) {
+                            stmt.* = .{ .assign = .{ .name = mc.obj.var_ref.name, .value = arr, .line = expr_stmt.line, .col = expr_stmt.col } };
+                        } else {
+                            stmt.* = .{ .member_assign = .{ .field = mc.obj.field.name, .obj = clonePureRecv(self.arena, mc.obj.field.obj), .value = arr, .line = expr_stmt.line, .col = expr_stmt.col } };
+                        }
+                        return self.checkStmt(program, stmt);
                     }
                 }
             }
