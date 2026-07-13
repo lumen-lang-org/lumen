@@ -1178,6 +1178,14 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             try w.appendSlice(arena, ")) else null)");
         },
         .cast => |c| {
+            // A float -> integer cast truncates toward zero at runtime.
+            if (c.float_to_int) {
+                const ity = try types.zigName(arena, c.checked_type orelse .i32);
+                try w.print(arena, "@as({s}, @intFromFloat(@trunc(", .{ity});
+                try emitExpr(c.inner, w, arena);
+                try w.appendSlice(arena, ")))");
+                return;
+            }
             // `expr as T` is a checker-only assertion; the runtime value is the
             // same flat struct / scalar, so emit the operand unchanged.
             try emitExpr(c.inner, w, arena);

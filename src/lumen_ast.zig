@@ -607,7 +607,7 @@ pub const Expr = union(enum) {
     call: struct { name: []const u8, args: []*Expr, emit_name: ?[]const u8 = null, is_closure: bool = false, type_args: [][]const u8 = &.{}, ffi_string_args: []bool = &.{}, ffi_string_return: bool = false, ref_args: []bool = &.{}, is_into_call: bool = false, is_global_parse: bool = false }, // builtin / user / function-value call; type_args from explicit f<T>(...). ffi_* mark a call to an `extern function` so the FFI string marshalling glue is emitted. ref_args[i] true emits `&arg` for a by-reference (`Ref<T>`) parameter. is_into_call: a builder call appended into an accumulator -> emit `f__into(dest, args)`.
     optional_call: struct { callee: *Expr, args: []*Expr, optional_chain: bool = false, chain_result_type: ?types.Type = null }, // `a?.()` (spec 062) -- calling a possibly-null closure value directly, no name involved. callee's static type must be `optional` wrapping `func_type`; short-circuits to null like `a?.b`/`a?.[i]`.
     static_call: StaticCall,
-    cast: struct { inner: *Expr, annotation: []const u8, checked_type: ?types.Type = null, is_satisfies: bool = false }, // `expr as T` (safe-subset assertion; erased at emit). is_satisfies: `expr satisfies T` (spec 052) -- checks assignability to T but keeps expr's own narrower type
+    cast: struct { inner: *Expr, annotation: []const u8, checked_type: ?types.Type = null, is_satisfies: bool = false, float_to_int: bool = false }, // `expr as T` (safe-subset assertion; erased at emit). is_satisfies: `expr satisfies T` (spec 052) -- checks assignability to T but keeps expr's own narrower type. float_to_int: `<f64> as i32/i64` truncates at emit
 };
 
 pub const FieldBuiltin = enum {

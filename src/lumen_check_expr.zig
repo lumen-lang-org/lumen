@@ -1993,6 +1993,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 c.checked_type = target;
                 return target;
             }
+            // A float -> integer cast truncates toward zero (`(3.7) as i32` -> 3).
+            if (source == .f64 and (target == .i32 or target == .i64)) {
+                c.float_to_int = true;
+                c.checked_type = target;
+                return target;
+            }
             if (!self.castAllowed(source, target)) {
                 _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                 return null;
