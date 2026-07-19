@@ -28,6 +28,19 @@ The generated Zig is an implementation artifact. User-facing docs, diagnostics,
 examples, and standard library design should describe the TypeScript-syntax
 language, not Zig internals.
 
+## Navigating the Code (read this before searching)
+
+`docs/CODEMAP.md` is a generated index of `src/`: every file's role plus each
+public symbol's line number, and the full `specs/` slice list. Read it first
+and jump straight to `file:line` instead of grepping the tree — it is ~130
+lines standing in for ~28k lines of source. Regenerate with `sh
+tools/codemap.sh` after adding or moving public functions, and commit the
+refreshed map with the change.
+
+Pipeline order (one file group per stage):
+`lumen_lexer` -> `lumen_parser*` -> `lumen_check*` -> `lumen_opt` ->
+`lumen_emit*` -> `lumen_compiler` (prelude + zig build-exe driver).
+
 ## Current Compiler Seed
 
 - `src/lumen_compiler.zig` is the existing prototype compiler.
