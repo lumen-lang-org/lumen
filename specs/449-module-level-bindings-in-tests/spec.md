@@ -99,6 +99,17 @@ Out of scope:
   across two calls in a `lumen run` program. Fixture isolation is a separate
   feature (`beforeEach`-style hooks), not part of this fix.
 - Changing how `lumen run` orders top-level statements.
+- Replaying an initializer that reads a module-level binding which stays a
+  `main` local — a destructuring pattern (`const [a, b] = pair`), a
+  multi-declarator group (`let p = 1, q = 2`), a `using` declaration, or a
+  string/array accumulator. Those cannot be reconstructed inside
+  `__lumenModuleInit`, so a promoted binding whose initializer depends on one
+  is **rejected at compile time under `lumen test`** with a located error
+  naming the binding, rather than emitted as an uninitialized global that a
+  test would read as garbage. `lumen run`/`lumen compile` are unaffected — `main`
+  still runs the initializer — so the same file runs correctly and is only
+  refused when built for `zig test`. Promoting those binding forms themselves
+  is a possible later slice.
 
 ## Success Criteria
 
@@ -117,3 +128,55 @@ The error message in reproduction 1 leaks the internal mangled name
 should never print `__lumen_<id>_<name>`; it should name the source-level
 identifier. Worth handling as part of this slice since the same code path is
 being touched.
+
+## Implementation
+
+A `test` block lowers to a top-level `test "..." { ... }` declaration — a
+*sibling* of the generated `main`, not a statement inside it — and the test
+runner never calls `main`. So both halves of the bug come from top-level
+bindings living inside `main`:
+
+- **Scope.** A top-level binding is lifted to a module global only when some
+  function/method/constructor body reads it. `referencedByFunction` is now
+  `referencedOutsideMain` and also scans `test` block bodies, so a binding read
+  only from a test is lifted too. A promoted binding whose initializer reads
+  another module-level binding drags that one up with it (transitively), so the
+  initializer has everything it needs at module scope.
+- **Initialization.** For a program that contains `test` blocks, the promoted
+  bindings' assignments are also collected into a generated
+  `__lumenModuleInit()` guarded by a `__lumen_module_inited` flag, and every
+  emitted test block calls it first — after the `__io` wiring, so an initializer
+  may itself do I/O. The guard makes it run once per binary, not once per test,
+  and the assignments keep declaration order.
+
+`main`'s body is emitted exactly as before and still holds the same statements
+in the same order, so `lumen run` and `lumen compile` are unchanged. Programs
+with no `test` block emit no init function and no call.
+
+Diagnostics: `reportBackendFailure` now rewrites internal emit names
+(`__lumen_7_greeting` -> `greeting`, `__lumen_user_main` -> `main`) out of every
+backend message it forwards, so no user-facing error prints a generated
+identifier.
+
+## Limitations
+
+Only module-level *initializers* run before test blocks — not arbitrary
+top-level statements. A top-level `console.log`, a bare `counter = 2;`, or a
+top-level call still does not execute under `lumen test`, so:
+
+```ts
+let a = 1;
+a = 2;              // does not run under `lumen test`
+test("t", () => { expect(a == 1); });   // 1 under test, 2 under run
+```
+
+The value is deterministic and initialized (never garbage), but it is the
+declared value, not the post-statement one. Running the whole top-level body
+would also start servers, spawn workers, and fire top-level `defer`s inside the
+test binary; that is a separate decision from this fix.
+
+Module-level destructuring (`const [a, b] = pair;`) and multi-declarator groups
+(`let p = 1, q = 2;`) are still not lifted to module scope. That gap is not
+test-specific — both already fail the same way under `lumen run` when a function
+reads them — and is left for its own slice. The diagnostic for them now at least
+names the source identifier.

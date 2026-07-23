@@ -1,0 +1,59 @@
+{
+  "feature": "449-module-level-bindings-in-tests",
+  "cases": [
+    {
+      "id": "module-bindings.valid.direct",
+      "source": "../examples/valid/module-binding-direct.ts",
+      "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "module-bindings.valid.through-function",
+      "source": "../examples/valid/module-binding-through-function.ts",
+      "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "module-bindings.valid.record-array",
+      "source": "../examples/valid/module-record-array.ts",
+      "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "module-bindings.valid.init-once",
+      "source": "../examples/valid/module-init-once.ts",
+      "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "module-bindings.valid.run-parity-tests",
+      "source": "../examples/valid/module-binding-run-parity.ts",
+      "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "module-bindings.valid.run-parity-output",
+      "source": "../examples/valid/module-binding-run-parity.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "g=[hello] n=42"
+      }
+    },
+    {
+      "id": "module-bindings.invalid.derived-from-destructure",
+      "source": "../examples/invalid/derived-from-destructure.ts",
+      "phase": "test-diagnostics",
+      "expect": {
+        "diagnostic": "cannot be initialized before tests run"
+      }
+    },
+    {
+      "id": "module-bindings.invalid.derived-from-group",
+      "source": "../examples/invalid/derived-from-group.ts",
+      "phase": "test-diagnostics",
+      "expect": {
+        "diagnostic": "cannot be initialized before tests run"
+      }
+    }
+  ]
+}

@@ -1286,6 +1286,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .wasm = wasm,
         .warnings = &warnings,
         .line_map = expanded.line_map,
+        .test_mode = action == .run_test,
     }) catch {
         try printDiag(err, source, path, diag);
         try printWarnings(err, source, path, warnings.items, diag);
@@ -1451,6 +1452,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
 /// located diagnostic; fall back to the raw backend message otherwise. Either
 /// way this is a compiler bug on valid input, so say so.
 fn reportBackendFailure(err: *std.Io.Writer, ts_source: []const u8, ts_path: []const u8, zig_src: []const u8, gen_path: []const u8, stderr_text: []const u8) !void {
+    var demangle_buf: [4096]u8 = undefined;
     var it = std.mem.splitScalar(u8, stderr_text, '\n');
     while (it.next()) |line| {
         // Match "<gen_path>:LINE:COL: error: MSG".
@@ -1461,7 +1463,7 @@ fn reportBackendFailure(err: *std.Io.Writer, ts_source: []const u8, ts_path: []c
         var zline: u32 = 0;
         while (p < rest.len and rest[p] >= '0' and rest[p] <= '9') : (p += 1) zline = zline * 10 + (rest[p] - '0');
         const emark = std.mem.indexOf(u8, rest, " error: ") orelse continue;
-        const msg = rest[emark + " error: ".len ..];
+        const msg = demangleEmitNames(&demangle_buf, rest[emark + " error: ".len ..]);
         // Last position marker at or before the failing generated line.
         var ts_line: u32 = 0;
         var ts_col: u32 = 1;
@@ -1497,10 +1499,60 @@ fn reportBackendFailure(err: *std.Io.Writer, ts_source: []const u8, ts_path: []c
     var it2 = std.mem.splitScalar(u8, stderr_text, '\n');
     while (it2.next()) |line| {
         if (line.len == 0) continue;
-        try err.print("  backend: {s}\n", .{line});
+        try err.print("  backend: {s}\n", .{demangleEmitNames(&demangle_buf, line)});
         shown += 1;
         if (shown >= 4) break;
     }
+}
+
+/// Rewrite every internal emit name in a backend message back to its source
+/// identifier: `__lumen_7_greeting` -> `greeting`, `__lumen_user_main` ->
+/// `main`. The checker mangles every declaration (`Checker.freshEmitName`) so
+/// generated code can't collide with the runtime prelude; that spelling is an
+/// implementation detail and must never reach a user-facing diagnostic
+/// (spec 449). Returns `msg` unchanged if it doesn't fit in `buf`.
+fn demangleEmitNames(buf: []u8, msg: []const u8) []const u8 {
+    const prefix = "__lumen_";
+    var out: usize = 0;
+    var i: usize = 0;
+    while (i < msg.len) {
+        if (std.mem.startsWith(u8, msg[i..], prefix)) {
+            var j = i + prefix.len;
+            // `__lumen_<digits>_` (declaration mangling) or `__lumen_user_`
+            // (prelude-collision rename, spec 246).
+            if (std.mem.startsWith(u8, msg[j..], "user_")) {
+                j += "user_".len;
+            } else {
+                const digits = j;
+                while (j < msg.len and msg[j] >= '0' and msg[j] <= '9') j += 1;
+                if (j == digits or j >= msg.len or msg[j] != '_') {
+                    // Not a mangled binding — a runtime global like
+                    // `__lumen_line`. Leave it alone.
+                    if (out >= buf.len) return msg;
+                    buf[out] = msg[i];
+                    out += 1;
+                    i += 1;
+                    continue;
+                }
+                j += 1;
+            }
+            const start = j;
+            while (j < msg.len and (std.ascii.isAlphanumeric(msg[j]) or msg[j] == '_')) j += 1;
+            if (j > start) {
+                const name = msg[start..j];
+                if (out + name.len > buf.len) return msg;
+                @memcpy(buf[out..][0..name.len], name);
+                out += name.len;
+                i = j;
+                continue;
+            }
+        }
+        if (out >= buf.len) return msg;
+        buf[out] = msg[i];
+        out += 1;
+        i += 1;
+    }
+    return buf[0..out];
 }
 
 /// Map a line of the generated Zig back to the .ts line via the
@@ -1811,4 +1863,20 @@ pub fn main(init: std.process.Init) !void {
 
     try err.flush();
     if (code != 0) std.process.exit(code);
+}
+
+test "backend diagnostics never leak internal emit names (spec 449)" {
+    var buf: [256]u8 = undefined;
+    const eq = std.testing.expectEqualStrings;
+    try eq("use of undeclared identifier 'greeting'", demangleEmitNames(&buf, "use of undeclared identifier '__lumen_0_greeting'"));
+    try eq("expected 'int', found 'string' in 'n' and 'g'", demangleEmitNames(&buf, "expected 'int', found 'string' in '__lumen_12_n' and '__lumen_3_g'"));
+    // Prelude-collision renames (spec 246) demangle too.
+    try eq("'main' redeclared", demangleEmitNames(&buf, "'__lumen_user_main' redeclared"));
+    // Generated runtime globals are not declaration mangling — left alone.
+    try eq("unused '__lumen_line'", demangleEmitNames(&buf, "unused '__lumen_line'"));
+    try eq("bare __lumen_", demangleEmitNames(&buf, "bare __lumen_"));
+    try eq("no mangled names here", demangleEmitNames(&buf, "no mangled names here"));
+    // Too long to rewrite: returned verbatim rather than truncated.
+    var small: [4]u8 = undefined;
+    try eq("use of '__lumen_0_x'", demangleEmitNames(&small, "use of '__lumen_0_x'"));
 }

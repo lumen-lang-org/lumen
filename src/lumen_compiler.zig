@@ -360,7 +360,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         types.g_tuple_registry = null;
     }
 
-    try emitProgram(&program, &decls, &body, arena, options);
+    try emitProgram(&program, &decls, &body, arena, options, diag);
 
     // The async event loop reads `__io`/`__alloc`, so async programs use I/O
     // plumbing and the `main(__init)` shape even if they never touch other I/O.
