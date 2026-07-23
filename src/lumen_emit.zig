@@ -1316,6 +1316,13 @@ pub const CompileOptions = struct {
     // Merged-line origins from import inlining; when non-empty the generated
     // runtime remaps panic positions and stack frames to the original files.
     line_map: []const @import("lumen_diag.zig").LineOrigin = &.{},
+    // Set when compiling for `zig test` (`lumen test`) rather than a normal
+    // executable. `main` never runs under `zig test`, so a module-level binding
+    // whose initializer can't be replayed in `__lumenModuleInit` would read
+    // uninitialized memory — a case emitProgram rejects only in this mode, since
+    // under `lumen run`/`lumen compile` `main` runs the initializer correctly
+    // (spec 449).
+    test_mode: bool = false,
     // Threaded down from the CLI's `--wasm` flag (spec 049): wasm32-wasi has
     // no real OS threads, and the CLI's own libxev-wiring gate hard-fails any
     // wasm build whose generated source textually contains `@import("xev")`
@@ -1439,9 +1446,15 @@ fn promotableType(t: types.Type) bool {
     };
 }
 
-/// Whether any function/method/constructor body references `name` (so a
-/// top-level binding of that name must live at module scope, not in `main`).
-fn referencedByFunction(program: *const Program, name: []const u8) bool {
+/// Whether any function/method/constructor or `test` block body references
+/// `name` (so a top-level binding of that name must live at module scope, not
+/// in `main`).
+///
+/// A `test` block is emitted as a top-level Zig `test "..." { ... }` decl —
+/// a *sibling* of `main`, not a statement inside it — so a binding it reads
+/// has to be a module global for exactly the same reason a function's does
+/// (spec 449).
+fn referencedOutsideMain(program: *const Program, name: []const u8) bool {
     for (program.stmts) |*stmt| {
         switch (stmt.*) {
             .function_decl => |*f| if (bodyUsesName(f.body, name)) return true,
@@ -1449,35 +1462,161 @@ fn referencedByFunction(program: *const Program, name: []const u8) bool {
                 for (c.methods) |m| if (bodyUsesName(m.body, name)) return true;
                 if (bodyUsesName(c.ctor_body, name)) return true;
             },
+            .test_decl => |*t| if (bodyUsesName(t.body, name)) return true,
             else => {},
         }
     }
     return false;
 }
 
-pub fn emitProgram(program: *const Program, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions) CompileError!void {
+/// The generated module-initializer function and its run-once guard (spec 449).
+/// Only emitted for programs that contain `test` blocks.
+pub const MODULE_INIT_FN = "__lumenModuleInit";
+const MODULE_INIT_FLAG = "__lumen_module_inited";
+
+fn hasTestDecl(program: *const Program) bool {
+    for (program.stmts) |*stmt| if (stmt.* == .test_decl) return true;
+    return false;
+}
+
+/// Whether a top-level `let`/`const` is eligible to become a module global.
+fn canPromote(d: *const ast.VarDecl) bool {
+    const t = d.checked_type orelse return false;
+    return promotableType(t) and !d.is_accumulator;
+}
+
+/// Whether a promoted binding's initializer reads only module-scope names, so
+/// the same assignment can also run from `__lumenModuleInit` — which, unlike
+/// `main`, cannot see `main`'s locals. A top-level binding that stayed a `main`
+/// local (a destructuring pattern, a multi-declarator group, an accumulator)
+/// disqualifies the initializer; it still runs in `main` for `lumen run`, it
+/// just can't be replayed at module scope.
+fn initRunsAtModuleScope(program: *const Program, d: *const ast.VarDecl, promoted: *const std.StringHashMapUnmanaged(void)) bool {
+    for (program.stmts) |*stmt| {
+        switch (stmt.*) {
+            .var_decl => |*o| {
+                if (std.mem.eql(u8, o.name, d.name)) continue;
+                if (promoted.get(o.name) != null) continue;
+                if (lumen_opt.exprUsesName(d.init, o.name)) return false;
+            },
+            .var_decl_group => |g| {
+                for (g) |*o| if (lumen_opt.exprUsesName(d.init, o.name)) return false;
+            },
+            .destructure_decl => |*dd| {
+                for (dd.bindings) |b| if (lumen_opt.exprUsesName(d.init, b.name)) return false;
+            },
+            .using_decl => |*u| {
+                if (lumen_opt.exprUsesName(d.init, u.name)) return false;
+            },
+            else => {},
+        }
+    }
+    return true;
+}
+
+pub fn emitProgram(program: *const Program, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions, diag: *diag_mod.Diag) CompileError!void {
     g_program = program;
     g_options = options;
+
+    // `zig test` never calls `main`, so a program with `test` blocks needs its
+    // module-level initializers replayed from a function the test blocks can
+    // call (spec 449). `main`'s body is left byte-for-byte unchanged, so
+    // `lumen run` ordering and semantics are untouched.
+    const has_tests = hasTestDecl(program);
+
+    // A top-level binding referenced from within a function or a `test` block
+    // can't be a `main` local (Zig functions and `test` decls don't see them);
+    // emit it as a module global declared `undefined` and assigned at its
+    // top-level position in `main`, preserving evaluation order and side effects.
+    var promoted: std.StringHashMapUnmanaged(void) = .empty;
     for (program.stmts) |*stmt| {
-        // A top-level scalar binding referenced from within a function can't be
-        // a `main` local (Zig functions don't see them); emit it as a module
-        // global declared `undefined` and assigned at its top-level position in
-        // `main`, preserving evaluation order and side effects.
-        if (stmt.* == .var_decl) {
-            const d = &stmt.var_decl;
-            if (d.checked_type) |t| {
-                if (promotableType(t) and !d.is_accumulator and referencedByFunction(program, d.name)) {
-                    const nm = d.emit_name orelse d.name;
-                    try decls.print(arena, "var {s}: {s} = undefined;\n", .{ nm, try types.zigName(arena, t) });
-                    if (!d.no_init) {
-                        try body.print(arena, "    {s} = ", .{nm});
-                        try emitExpr(d.init, body, arena);
-                        try body.appendSlice(arena, ";\n");
+        if (stmt.* != .var_decl) continue;
+        const d = &stmt.var_decl;
+        if (!canPromote(d)) continue;
+        if (referencedOutsideMain(program, d.name)) try promoted.put(arena, d.name, {});
+    }
+    if (has_tests) {
+        // A promoted binding's initializer may read another module-level
+        // binding (`const base = 10; const derived = base * 2;`). That one has
+        // to reach module scope too, or `__lumenModuleInit` can't see it.
+        var changed = true;
+        while (changed) {
+            changed = false;
+            for (program.stmts) |*stmt| {
+                if (stmt.* != .var_decl) continue;
+                const d = &stmt.var_decl;
+                if (d.no_init or promoted.get(d.name) == null) continue;
+                for (program.stmts) |*other| {
+                    if (other.* != .var_decl) continue;
+                    const o = &other.var_decl;
+                    if (promoted.get(o.name) != null or !canPromote(o)) continue;
+                    if (lumen_opt.exprUsesName(d.init, o.name)) {
+                        try promoted.put(arena, o.name, {});
+                        changed = true;
                     }
-                    continue;
                 }
             }
         }
+    }
+
+    var init_body: std.ArrayListUnmanaged(u8) = .empty;
+    for (program.stmts) |*stmt| {
+        if (stmt.* == .var_decl) {
+            const d = &stmt.var_decl;
+            if (promoted.get(d.name) != null) {
+                const t = d.checked_type.?;
+                const nm = d.emit_name orelse d.name;
+                try decls.print(arena, "var {s}: {s} = undefined;\n", .{ nm, try types.zigName(arena, t) });
+                if (!d.no_init) {
+                    // Emit the assignment once, then reuse the text for both
+                    // sinks — emitting the initializer twice would allocate
+                    // fresh temp labels and duplicate helper decls.
+                    var line: std.ArrayListUnmanaged(u8) = .empty;
+                    try line.print(arena, "    {s} = ", .{nm});
+                    try emitExpr(d.init, &line, arena);
+                    try line.appendSlice(arena, ";\n");
+                    try body.appendSlice(arena, line.items);
+                    if (has_tests) {
+                        if (initRunsAtModuleScope(program, d, &promoted)) {
+                            try init_body.appendSlice(arena, line.items);
+                        } else if (options.test_mode) {
+                            // The binding is promoted (read from a test or a
+                            // function) but its initializer reads another
+                            // module-level binding that stays a `main` local — a
+                            // destructuring pattern, a multi-declarator group, a
+                            // `using` decl, or an accumulator — so it cannot be
+                            // replayed in `__lumenModuleInit`, which `main`'s
+                            // locals are invisible to. Emitting the global as
+                            // `undefined` and stopping here would let a test read
+                            // uninitialized memory and pass against garbage — the
+                            // exact silent failure spec 449 exists to kill. `main`
+                            // still runs the initializer, so `lumen run`/`lumen
+                            // compile` are unaffected; only `zig test` (test_mode)
+                            // rejects it, with a located error (spec 449).
+                            diag.* = .{
+                                .line = d.line,
+                                .col = d.col,
+                                .msg = try std.fmt.allocPrint(arena, "module-level '{s}' is used from a test, but its initializer reads another module-level binding that cannot be initialized before tests run (a destructuring pattern, a multi-declarator group, a `using` declaration, or a string/array accumulator) — give '{s}' a self-contained initializer, or compute it inside the test", .{ d.name, d.name }),
+                            };
+                            return error.ParseError;
+                        }
+                    }
+                }
+                continue;
+            }
+        }
         try emitStmt(stmt, decls, body, arena, options);
+    }
+
+    if (has_tests) {
+        try decls.print(arena,
+            \\var {s}: bool = false;
+            \\fn {s}() void {{
+            \\    if ({s}) return;
+            \\    {s} = true;
+            \\
+        , .{ MODULE_INIT_FLAG, MODULE_INIT_FN, MODULE_INIT_FLAG, MODULE_INIT_FLAG });
+        try decls.appendSlice(arena, init_body.items);
+        try decls.appendSlice(arena, "}\n");
     }
 }

@@ -500,6 +500,12 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             if (emit_mod.g_program) |prog| if (prog.uses_io) {
                 try decls.appendSlice(arena, "    __io = std.testing.io;\n");
             };
+            // ...and no `main` to run the module-level initializers either, so
+            // each test block calls the generated init function first. The
+            // function guards itself, so it runs once per binary, not once per
+            // test (spec 449). It must come *after* the `__io` wiring above:
+            // an initializer may itself do I/O.
+            try decls.print(arena, "    {s}();\n", .{emit_mod.MODULE_INIT_FN});
             try emitBody(t.body, decls, decls, arena, throw_target, switch_break_target, options);
             try decls.appendSlice(arena, "}\n");
         },

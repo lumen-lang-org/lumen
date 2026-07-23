@@ -150,6 +150,29 @@ fn checkTestRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: [
     return true;
 }
 
+// A program that must be rejected specifically when compiled for `lumen test`
+// (some diagnostics fire only in test mode — e.g. a module-level binding whose
+// initializer can't be replayed before tests run, spec 449). Mirrors
+// `checkDiagnostics` but drives `lumen test` instead of `lumen compile`.
+fn checkTestDiagnostics(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
+    const run = try runProcess(arena, io, &.{ lumen_bin, "test", source_path });
+    const exe_name = try exeNameForSource(arena, source_path);
+    defer removeGenerated(io, source_path, exe_name);
+    if (termSucceeded(run.term)) {
+        std.debug.print("FAIL {s}: expected a test-mode diagnostic but the tests ran\n", .{case.id});
+        return false;
+    }
+    const expected = case.expect.diagnostic orelse {
+        std.debug.print("FAIL {s}: test-diagnostics case missing expected diagnostic\n", .{case.id});
+        return false;
+    };
+    if (std.mem.indexOf(u8, run.stderr, expected) == null) {
+        std.debug.print("FAIL {s}: diagnostic mismatch, expected {s}\nactual:\n{s}\n", .{ case.id, expected, run.stderr });
+        return false;
+    }
+    return true;
+}
+
 fn runCase(arena: std.mem.Allocator, io: std.Io, manifest_path: []const u8, case: Case, lumen_bin: []const u8) !?bool {
     const source_path = try resolveSource(arena, manifest_path, case.source);
     if (std.mem.eql(u8, case.phase, "compile-run")) {
@@ -160,6 +183,9 @@ fn runCase(arena: std.mem.Allocator, io: std.Io, manifest_path: []const u8, case
     }
     if (std.mem.eql(u8, case.phase, "diagnostics")) {
         return try checkDiagnostics(arena, io, case, source_path, lumen_bin);
+    }
+    if (std.mem.eql(u8, case.phase, "test-diagnostics")) {
+        return try checkTestDiagnostics(arena, io, case, source_path, lumen_bin);
     }
     if (std.mem.eql(u8, case.phase, "static")) {
         return try checkStatic(arena, io, case, source_path, lumen_bin);
