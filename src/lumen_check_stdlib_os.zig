@@ -1369,6 +1369,26 @@ pub fn childProcessCallType(self: *Checker, program: *ast.Program, call: *ast.St
         call.checked_type = .{ .named = "__LumenSpawnResult" };
         return .{ .named = "__LumenSpawnResult" };
     }
+    // child_process.spawn (spec 450): the persistent variant. Same argument
+    // validation as spawnSync, but returns a long-lived ChildProcess handle
+    // (mirrors net.connect returning a Socket) instead of a one-shot result
+    // record.
+    if (std.mem.eql(u8, call.name, "spawn")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const cmd_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        const args_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        if (!types.same(.string, cmd_type) or !types.same(.string_array, args_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_child_process_spawn = true;
+        call.checked_type = .process_type;
+        return .process_type;
+    }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
 }

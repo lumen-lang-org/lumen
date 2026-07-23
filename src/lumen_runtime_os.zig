@@ -294,6 +294,110 @@ pub fn emitStdioRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u
             \\
         );
     }
+    if (program.needs_child_process_spawn) {
+        // child_process.spawn (spec 450): a PERSISTENT piped subprocess, the
+        // long-lived counterpart to spawnSync. Modeled on LumenSocket (spec
+        // 054): a heap-allocated handle holding an optional std.process.Child
+        // plus a buffered stdin writer and stdout reader kept ON the handle so
+        // readLine() pulls one \n-delimited line at a time across many
+        // exchanges instead of draining stdout to completion. A failed spawn
+        // degrades to a no-op handle (child == null) rather than crashing, the
+        // same convention LumenSocket's `stream: ?...` uses.
+        //
+        // stderr is INHERITED, not piped: readLine only drains stdout, so an
+        // undrained stderr pipe would deadlock the child once it backs up ~64KB.
+        // Inheriting sends the child's diagnostics to our stderr -- exactly
+        // where an MCP stdio server's logs belong.
+        //
+        // readLine keeps the trailing '\n' (like fs.createReadStream's readLine,
+        // spec 053) so a genuine blank line does not collapse into the "" that
+        // marks true EOF. It uses takeDelimiterInclusive, which advances the
+        // reader PAST the delimiter -- the exclusive variant leaves '\n'
+        // buffered and would make every subsequent readLine see a zero-length
+        // result (EOF), breaking multi-line conversations.
+        //
+        // v1 limits (documented, accepted): a single stdout line longer than the
+        // 64KB reader buffer yields "" (StreamTooLong); close() blocks in wait()
+        // until the child exits (no kill/timeout path); the handle is
+        // single-consumer, like LumenSocket.
+        try out.appendSlice(arena,
+            \\pub const LumenChildProcess = struct {
+            \\    child: ?std.process.Child,
+            \\    io: std.Io,
+            \\    alive: bool = true,
+            \\    stdin_writer: std.Io.File.Writer = undefined,
+            \\    stdout_reader: std.Io.File.Reader = undefined,
+            \\    fn __init(io: std.Io, child: ?std.process.Child) *LumenChildProcess {
+            \\        const p = __sa().create(LumenChildProcess) catch unreachable;
+            \\        p.* = .{ .child = child, .io = io };
+            \\        if (p.child) |*c| {
+            \\            if (c.stdin) |f| {
+            \\                const wbuf = __sa().alloc(u8, 65536) catch unreachable;
+            \\                p.stdin_writer = f.writerStreaming(io, wbuf);
+            \\            }
+            \\            if (c.stdout) |f| {
+            \\                const rbuf = __sa().alloc(u8, 65536) catch unreachable;
+            \\                p.stdout_reader = f.reader(io, rbuf);
+            \\            }
+            \\        }
+            \\        return p;
+            \\    }
+            \\    fn write(self: *LumenChildProcess, data: []const u8) void {
+            \\        if (!self.alive) return;
+            \\        if (self.child == null or self.child.?.stdin == null) return;
+            \\        self.stdin_writer.interface.writeAll(data) catch return;
+            \\        // Flush every call: a long-lived stdio peer must see the
+            \\        // bytes now, same rationale as LumenSocket.write.
+            \\        self.stdin_writer.interface.flush() catch {};
+            \\    }
+            \\    fn writeLine(self: *LumenChildProcess, data: []const u8) void {
+            \\        if (!self.alive) return;
+            \\        if (self.child == null or self.child.?.stdin == null) return;
+            \\        self.stdin_writer.interface.writeAll(data) catch return;
+            \\        self.stdin_writer.interface.writeAll("\n") catch return;
+            \\        self.stdin_writer.interface.flush() catch {};
+            \\    }
+            \\    fn readLine(self: *LumenChildProcess) []const u8 {
+            \\        if (!self.alive) return "";
+            \\        if (self.child == null or self.child.?.stdout == null) return "";
+            \\        const raw = self.stdout_reader.interface.takeDelimiterInclusive('\n') catch |e| blk: {
+            \\            if (e != error.EndOfStream) break :blk "";
+            \\            const left = self.stdout_reader.interface.buffered();
+            \\            if (left.len == 0) break :blk "";
+            \\            self.stdout_reader.interface.toss(left.len);
+            \\            break :blk left;
+            \\        };
+            \\        if (raw.len == 0) return "";
+            \\        return __sa().dupe(u8, raw) catch "";
+            \\    }
+            \\    fn close(self: *LumenChildProcess) void {
+            \\        if (!self.alive) return;
+            \\        self.alive = false;
+            \\        if (self.child) |*c| {
+            \\            if (c.stdin) |f| {
+            \\                self.stdin_writer.interface.flush() catch {};
+            \\                f.close(self.io);
+            \\                c.stdin = null;
+            \\            }
+            \\            _ = c.wait(self.io) catch {};
+            \\        }
+            \\    }
+            \\};
+            \\fn __spawn(io: std.Io, alloc: std.mem.Allocator, command: []const u8, args: []const []const u8) *LumenChildProcess {
+            \\    const argv = alloc.alloc([]const u8, 1 + args.len) catch return LumenChildProcess.__init(io, null);
+            \\    argv[0] = command;
+            \\    for (args, 0..) |a, i| argv[i + 1] = a;
+            \\    const child = std.process.spawn(io, .{
+            \\        .argv = argv,
+            \\        .stdin = .pipe,
+            \\        .stdout = .pipe,
+            \\        .stderr = .inherit,
+            \\    }) catch return LumenChildProcess.__init(io, null);
+            \\    return LumenChildProcess.__init(io, child);
+            \\}
+            \\
+        );
+    }
     if (program.needs_assert) {
         // assert.* wraps the language's own panic mechanism, not the throw/
         // catch machinery (a static call has no access to an enclosing

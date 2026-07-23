@@ -741,6 +741,12 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.appendSlice(arena, ", ");
         try em.emitExpr(cl.args[1], w, arena);
         try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "child_process") and std.mem.eql(u8, cl.name, "spawn")) {
+        try w.appendSlice(arena, "__spawn(__io, __alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.appendSlice(arena, ", ");
+        try em.emitExpr(cl.args[1], w, arena);
+        try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "assert") and std.mem.eql(u8, cl.name, "ok")) {
         try w.appendSlice(arena, "__assertOk(");
         try em.emitExpr(cl.args[0], w, arena);

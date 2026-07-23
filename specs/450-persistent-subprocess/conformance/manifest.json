@@ -1,0 +1,43 @@
+{
+  "feature": "450-persistent-subprocess",
+  "cases": [
+    {
+      "id": "spawn.valid.roundtrips",
+      "source": "../examples/valid/roundtrip.ts",
+      "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "spawn.valid.compile-run-output",
+      "source": "../examples/valid/roundtrip-run.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "[ping\n][pong\n]"
+      }
+    },
+    {
+      "id": "spawn.invalid.bad-command",
+      "source": "../examples/invalid/spawn-bad-command.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "type mismatch"
+      }
+    },
+    {
+      "id": "spawn.invalid.readline-arg-count",
+      "source": "../examples/invalid/readline-arg-count.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "wrong number of arguments"
+      }
+    },
+    {
+      "id": "spawn.invalid.unknown-method",
+      "source": "../examples/invalid/unknown-method.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "type mismatch"
+      }
+    }
+  ]
+}

@@ -143,6 +143,7 @@ pub const Checker = struct {
     pub const readableStreamMethod = check_methods.readableStreamMethod;
     pub const writableStreamMethod = check_methods.writableStreamMethod;
     pub const socketMethod = check_methods.socketMethod;
+    pub const childProcessMethod = check_methods.childProcessMethod;
     pub const bufferMethod = check_methods.bufferMethod;
     pub const bufferCallType = check_stdlib.bufferCallType;
     pub const hashMethod = check_methods.hashMethod;

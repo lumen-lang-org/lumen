@@ -819,6 +819,46 @@ pub fn socketMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
     return null;
 }
 
+/// Validate a method call on a `ChildProcess` receiver (spec 450). Mirrors
+/// `socketMethod` exactly: sets `mc.container_type` (the load-bearing step that
+/// lets the generic emit path lower `<recv>.<name>(<args>)`) then validates by
+/// name. `write`/`writeLine` take one string and return void; `readLine` takes
+/// no args and returns a string; `close` takes no args and returns void.
+pub fn childProcessMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    if (eq(u8, name, "write") or eq(u8, name, "writeLine")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const chunk_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.string, chunk_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .void;
+    }
+    if (eq(u8, name, "readLine")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .string;
+    }
+    if (eq(u8, name, "close")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .void;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
 /// Validate a method call on a `Buffer` receiver (spec 056). Mirrors
 /// `readableStreamMethod`/`writableStreamMethod`.
 pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
