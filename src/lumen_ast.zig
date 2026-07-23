@@ -539,6 +539,7 @@ pub const Program = struct {
     needs_url_api: bool = false,
     needs_zlib_api: bool = false,
     needs_child_process_api: bool = false,
+    needs_child_process_spawn: bool = false, // child_process.spawn -> persistent LumenChildProcess (spec 450)
     needs_assert: bool = false,
     needs_time_api: bool = false,
     needs_http_module: bool = false,
