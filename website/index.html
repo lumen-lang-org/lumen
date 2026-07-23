@@ -95,183 +95,35 @@ console.log(`distance² = ${distanceSq(origin, p)}`);  // distance² = 25</code>
 <section class="wrap" id="features">
   <h2>What's in the language</h2>
   <p class="sub">A predictable static subset of TypeScript, no prototypes, no <code>eval</code>, no dynamic shapes.</p>
-  <div class="grid">
-    <div class="card"><h3>Static types</h3><p>Local inference and <strong>return-type inference</strong> for functions, arrows, and methods, <code>int</code>/<code>i64</code>/<code>number</code>/<code>bool</code>/<code>string</code>, float &amp; hex/binary literals. Numeric promotion (<code>int</code>&#8202;+&#8202;<code>number</code>) and lossless <code>int</code>&#8202;&rarr;&#8202;<code>i64</code> widening, just like TypeScript's single <code>number</code>.</p></div>
-    <div class="card"><h3>Records, interfaces &amp; unions</h3><p>Closed object shapes, nested records, arrays of records, <code>enum</code>s, and fixed&#8209;shape tuples like <code>[int, string]</code>. <strong>Structural width subtyping</strong>: a wider record flows into a narrower one, so <code>interface</code> parameters accept any matching shape. Plus <code>type</code> aliases, discriminated and string&#8209;literal unions, <code>as</code> assertions, <code>as const</code>, <code>satisfies</code>, and <code>readonly</code> arrays.</p></div>
-    <div class="card"><h3>Control flow &amp; operators</h3><p><code>if</code>/<code>else if</code>, <code>while</code>, <code>do</code>, C&#8209;style <code>for</code>, <code>for…of</code> (arrays, strings, <code>Set</code>, <code>Map</code>), <code>for…in</code>, <code>switch</code> (exhaustive over literal unions <em>and</em> enums), ternary, and labeled <code>break</code>/<code>continue</code>. The full arithmetic, bitwise, and shift set, with every compound&#8209;assignment form (<code>+=</code>, <code>&amp;&amp;=</code>, <code>??=</code>, <code>&lt;&lt;=</code>, <code>**=</code>, and more).</p></div>
-    <div class="card"><h3>Null safety &amp; narrowing</h3><p><code>T | null</code>, optional <code>?</code> fields, <code>??</code>, optional chaining <code>?.</code>/<code>?.[i]</code>/<code>?.()</code>/<code>?.length</code>, and the non-null assertion <code>x!</code>. Flow narrowing across <code>if</code>/<code>else</code>, guard clauses (<code>if (x == null) return</code>), <code>while</code>, <code>&amp;&amp;</code>/<code>||</code>, and deep field paths (<code>a.b.c != null</code>) &mdash; plus discriminated-union complement narrowing.</p></div>
-    <div class="card"><h3>Functions &amp; parameters</h3><p>Function types, arrow functions, and capturing closures. Default values, rest parameters, and spread, checked statically, no <code>arguments</code> object. Object shorthand <code>{ x }</code> and computed keys, <strong>destructuring defaults</strong> in array (<code>[a = 1]</code>) and object (<code>{ x = 1 }</code>) patterns, and <strong>destructuring assignment</strong> (<code>[a, b] = [b, a]</code>).</p></div>
-    <div class="card"><h3>Classes &amp; inheritance</h3><p><code>extends</code>, <code>super</code>, <code>public</code>/<code>private</code>/<code>protected</code>, <code>#private</code> fields, <code>static</code>, <code>readonly</code>, and <code>get</code>/<code>set</code>. Fields infer their type from an initializer (<code>count = 0</code>); methods take default, optional, and rest parameters.</p></div>
-    <div class="card"><h3>Generics</h3><p>Generic functions, classes, and interfaces with <code>Array&lt;T&gt;</code>, monomorphized at compile time, no boxing. Type-parameter constraints (<code>&lt;T extends ...&gt;</code>) and defaults (<code>&lt;T = ...&gt;</code>).</p></div>
-    <div class="card"><h3>Strings &amp; regex</h3><p>Single&#8209; and double&#8209;quoted literals, template literals <code>`hi ${name}`</code> with string &amp; numeric interpolation, and the methods you expect (<code>split</code>, <code>slice</code>, <code>trim</code>, <code>includes</code>, <code>indexOf</code>, <code>replace</code>, <code>repeat</code>, <code>padStart</code>, <code>toUpperCase</code>, and more). <code>/pattern/</code> literals with <code>.test()</code>: anchored patterns compile to specialized native matchers at build time, <strong>~3&times; faster than V8</strong> on checks like semver and identifiers, and everything else falls back to a built-in engine, so every pattern works.</p></div>
-    <div class="card"><h3>Collections &amp; helpers</h3><p><code>Map&lt;K, V&gt;</code> and <code>Set&lt;T&gt;</code>, both iterable with <code>for…of</code>, and the array methods you expect (<code>map</code>, <code>filter</code>, <code>reduce</code>, <code>forEach</code>, <code>find</code>, <code>some</code>, <code>every</code>, <code>includes</code>, <code>indexOf</code>, <code>join</code>). Plus <code>Date.now()</code>, <code>Object.keys</code>/<code>Object.freeze</code>, <code>Array.isArray</code>/<code>Array.from</code>/<code>Array.of</code>, <code>JSON.stringify</code>/<code>parse&lt;T&gt;</code>, <code>parseInt</code>/<code>parseFloat</code>, and the full <code>Math</code>/<code>Number</code> surface.</p></div>
-    <div class="card"><h3>Errors, defer &amp; tests</h3><p><code>try</code>/<code>catch</code>/<code>finally</code> and <code>throw</code>, propagating across functions, methods, and constructors; readable <code>.message</code>, optional catch binding, and full stack traces on uncaught errors. Scope&#8209;exit cleanup with <code>defer</code> (last&#8209;in&#8209;first&#8209;out), and built&#8209;in tests: <code>test "…" { expect(…); }</code> run with <code>lumen test</code>.</p></div>
-    <div class="card"><h3>Async, threads &amp; events</h3><p><code>async</code> functions return <code>Promise&lt;T&gt;</code> and <code>await</code> resolves them on a fast native event loop, with <code>setTimeout</code>/<code>setInterval</code> and their <code>clear*</code> counterparts. <code>Worker.run(fn)</code> spawns a real, detached OS thread &mdash; genuine CPU parallelism, with no per&#8209;thread interpreter overhead to pay. <code>EventEmitter&lt;T&gt;</code> is statically typed, one payload type per instance, and <strong>~3.5&times; faster than Node's</strong> on a tight emit loop.</p></div>
-    <div class="card"><h3>Buffer, crypto &amp; I/O</h3><p>A real byte&#8209;array type, distinct from <code>string</code> at compile time: <code>Buffer.from</code>/<code>.alloc</code>, <code>utf8</code>/<code>hex</code>/<code>base64</code> encodings, <code>.slice</code>/<code>.at</code>/<code>.equals</code>. <code>crypto.hmacSync</code> and AES&#8209;256&#8209;GCM <code>encryptSync</code>/<code>decryptSync</code> both read and return it. Alongside <code>net</code> TCP sockets, an <code>http</code> client &amp; concurrent server, <code>process.stdin</code>/<code>stdout</code>/<code>stderr</code> as streams, <code>readline.question</code>, and <code>zlib</code> gzip/deflate.</p></div>
-    <div class="card"><h3>Modules &amp; native output</h3><p>Default, named, and <code>import * as ns</code> imports, and <code>export … from</code> re-exports, from a relative file or an <code>https://</code> URL &mdash; a package is just a URL. <code>declare function</code> + <code>// @link</code> calls native C libraries, with scalars and strings marshalling across the boundary. It all compiles to a small, dependency&#8209;free native binary.</p></div>
-  </div>
-</section>
-
-<section class="wrap" id="closures">
-  <h2>Closures that compile</h2>
-  <p class="sub">Capture locals by value, lowered to a heap environment, no GC.</p>
-<pre><code class="lumen">function makeAdder(n: int): (x: int) => int {
-  return (x: int) => x + n;
-}
-
-let add10 = makeAdder(10);
-console.log(add10(5));   // 15
-
-let factor = 3;
-let nums: int[] = [1, 2, 3];
-for (const v of nums) {
-  console.log((v: int) => v * factor);  // closes over `factor`
-}</code></pre>
-</section>
-
-<section class="wrap" id="classes">
-  <h2>Classes</h2>
-  <p class="sub">Fields, a constructor, <code>this</code>, and methods, instances are heap structs.</p>
-<pre><code class="lumen">class Counter {
-  count: int;
-  constructor(start: int) {
-    this.count = start;
-  }
-  increment(): void {
-    this.count += 1;
-  }
-  get(): int {
-    return this.count;
-  }
-}
-
-let c = new Counter(5);
-c.increment();
-console.log(c.get());   // 6</code></pre>
-</section>
-
-<section class="wrap" id="methods">
-  <h2>Methods on strings and arrays</h2>
-  <p class="sub">The familiar collection and string methods, statically typed and compiled.</p>
-<pre><code class="lumen">let nums: int[] = [1, 2, 3, 4, 5];
-let doubled = nums.map((n: int) => n * 2);
-let evens = nums.filter((n: int) => n % 2 == 0);
-let total = nums.reduce((acc: int, n: int) => acc + n, 0);
-
-console.log(doubled.join(", "));   // 2, 4, 6, 8, 10
-console.log(evens.join(", "));     // 2, 4
-console.log(total);                // 15
-
-let s = "  Hello, World  ";
-console.log(s.trim().toUpperCase());   // HELLO, WORLD
-console.log(s.trim().split(", ")[1]);  // World</code></pre>
-</section>
-
-<section class="wrap" id="generics">
-  <h2>Generics, monomorphized</h2>
-  <p class="sub">Write once over a type parameter; each instantiation compiles to specialized code, no boxing.</p>
-<pre><code class="lumen">function identity&lt;T&gt;(x: T): T {
-  return x;
-}
-
-class Box&lt;T&gt; {
-  value: T;
-  constructor(v: T) {
-    this.value = v;
-  }
-  get(): T {
-    return this.value;
-  }
-}
-
-console.log(identity&lt;int&gt;(42));      // 42
-console.log(identity&lt;string&gt;("hi"));  // hi
-let b = new Box&lt;int&gt;(7);
-console.log(b.get());                 // 7</code></pre>
-</section>
-
-<section class="wrap" id="collections">
-  <h2>Maps, Sets, and tuples</h2>
-  <p class="sub">Typed keyed collections and fixed-shape tuples, with the methods you expect.</p>
-<pre><code class="lumen">let counts: Map&lt;string, int&gt; = new Map&lt;string, int&gt;();
-counts.set("apples", 3);
-counts.set("pears", 5);
-console.log(counts.get("apples"));   // 3
-console.log(counts.has("pears"));    // true
-
-let tags: Set&lt;string&gt; = new Set&lt;string&gt;();
-tags.add("red");
-tags.add("red");
-tags.add("blue");
-console.log(tags.size);   // 2
-
-let pair: [string, int] = ["age", 30];
-console.log(pair[0]);   // age
-console.log(pair[1]);   // 30</code></pre>
-</section>
-
-<section class="wrap" id="narrowing">
-  <h2>Type narrowing that just works</h2>
-  <p class="sub">Discriminated unions, guard clauses, and deep null checks all narrow the way you expect &mdash; statically, with no casts.</p>
-<pre><code class="lumen">type Ok = { kind: "ok", value: int };
-type Err = { kind: "err", message: string };
-type Result = Ok | Err;
-
-function describe(r: Result): string {
-  if (r.kind === "err") {
-    return "failed: " + r.message;   // r is Err here
-  }
-  return "value " + String(r.value); // r is Ok here
-}
-
-function firstWord(s: string | null): string {
-  if (s == null) return "(none)";    // guard: s is string below
-  return s.split(" ")[0];
-}
-
-console.log(describe({ kind: "ok", value: 42 }));   // value 42
-console.log(firstWord("hello world"));              // hello</code></pre>
-</section>
-
-<section class="wrap" id="async">
-  <h2>async / await</h2>
-  <p class="sub">Async functions return a <code>Promise&lt;T&gt;</code>; <code>await</code> resolves it on a fast native event loop.</p>
-<pre><code class="lumen">async function fetchValue(n: int): Promise&lt;int&gt; {
-  return n * 2;
-}
-
-async function total(): Promise&lt;int&gt; {
-  let a: int = await fetchValue(10);
-  let b: int = await fetchValue(11);
-  return a + b;
-}
-
-console.log(await total());   // 42</code></pre>
-</section>
-
-<section class="wrap" id="errors">
-  <h2>Errors with try / catch / finally</h2>
-  <p class="sub">Exceptions propagate across calls &mdash; through functions, methods, and constructors &mdash; and <code>finally</code> runs on every path. All compiled to native code, no unwinder runtime.</p>
-<pre><code class="lumen">function parsePort(s: string): int {
-  const n: int = parseInt(s) ?? 0;
-  if (n &lt; 1 || n &gt; 65535) {
-    throw new Error("bad port: " + s);
-  }
-  return n;
-}
-
-function connect(s: string): void {
-  console.log("connecting to " + String(parsePort(s)));  // may throw
-}
-
-try {
-  connect("8080");     // connecting to 8080
-  connect("99999");
-} catch (e) {
-  console.log("error: " + e.message);   // error: bad port: 99999
-} finally {
-  console.log("done");
-}</code></pre>
+  <dl class="coverage">
+    <dt>Static types</dt>
+    <dd>Local inference and <strong>return-type inference</strong> for functions, arrows, and methods, <code>int</code>/<code>i64</code>/<code>number</code>/<code>bool</code>/<code>string</code>, float &amp; hex/binary literals. Numeric promotion (<code>int</code>&#8202;+&#8202;<code>number</code>) and lossless <code>int</code>&#8202;&rarr;&#8202;<code>i64</code> widening, just like TypeScript's single <code>number</code>.</dd>
+    <dt>Records, interfaces &amp; unions</dt>
+    <dd>Closed object shapes, nested records, arrays of records, <code>enum</code>s, and fixed&#8209;shape tuples like <code>[int, string]</code>. <strong>Structural width subtyping</strong>: a wider record flows into a narrower one, so <code>interface</code> parameters accept any matching shape. Plus <code>type</code> aliases, discriminated and string&#8209;literal unions, <code>as</code> assertions, <code>as const</code>, <code>satisfies</code>, and <code>readonly</code> arrays.</dd>
+    <dt>Control flow &amp; operators</dt>
+    <dd><code>if</code>/<code>else if</code>, <code>while</code>, <code>do</code>, C&#8209;style <code>for</code>, <code>for…of</code> (arrays, strings, <code>Set</code>, <code>Map</code>), <code>for…in</code>, <code>switch</code> (exhaustive over literal unions <em>and</em> enums), ternary, and labeled <code>break</code>/<code>continue</code>. The full arithmetic, bitwise, and shift set, with every compound&#8209;assignment form (<code>+=</code>, <code>&amp;&amp;=</code>, <code>??=</code>, <code>&lt;&lt;=</code>, <code>**=</code>, and more).</dd>
+    <dt>Null safety &amp; narrowing</dt>
+    <dd><code>T | null</code>, optional <code>?</code> fields, <code>??</code>, optional chaining <code>?.</code>/<code>?.[i]</code>/<code>?.()</code>/<code>?.length</code>, and the non-null assertion <code>x!</code>. Flow narrowing across <code>if</code>/<code>else</code>, guard clauses (<code>if (x == null) return</code>), <code>while</code>, <code>&amp;&amp;</code>/<code>||</code>, and deep field paths (<code>a.b.c != null</code>) &mdash; plus discriminated-union complement narrowing.</dd>
+    <dt>Functions &amp; parameters</dt>
+    <dd>Function types, arrow functions, and capturing closures. Default values, rest parameters, and spread, checked statically, no <code>arguments</code> object. Object shorthand <code>{ x }</code> and computed keys, <strong>destructuring defaults</strong> in array (<code>[a = 1]</code>) and object (<code>{ x = 1 }</code>) patterns, and <strong>destructuring assignment</strong> (<code>[a, b] = [b, a]</code>).</dd>
+    <dt>Classes &amp; inheritance</dt>
+    <dd><code>extends</code>, <code>super</code>, <code>public</code>/<code>private</code>/<code>protected</code>, <code>#private</code> fields, <code>static</code>, <code>readonly</code>, and <code>get</code>/<code>set</code>. Fields infer their type from an initializer (<code>count = 0</code>); methods take default, optional, and rest parameters.</dd>
+    <dt>Generics</dt>
+    <dd>Generic functions, classes, and interfaces with <code>Array&lt;T&gt;</code>, monomorphized at compile time, no boxing. Type-parameter constraints (<code>&lt;T extends ...&gt;</code>) and defaults (<code>&lt;T = ...&gt;</code>).</dd>
+    <dt>Strings &amp; regex</dt>
+    <dd>Single&#8209; and double&#8209;quoted literals, template literals <code>`hi ${name}`</code> with string &amp; numeric interpolation, and the methods you expect (<code>split</code>, <code>slice</code>, <code>trim</code>, <code>includes</code>, <code>indexOf</code>, <code>replace</code>, <code>repeat</code>, <code>padStart</code>, <code>toUpperCase</code>, and more). <code>/pattern/</code> literals with <code>.test()</code>: anchored patterns compile to specialized native matchers at build time, <strong>~3&times; faster than V8</strong> on checks like semver and identifiers, and everything else falls back to a built-in engine, so every pattern works.</dd>
+    <dt>Collections &amp; helpers</dt>
+    <dd><code>Map&lt;K, V&gt;</code> and <code>Set&lt;T&gt;</code>, both iterable with <code>for…of</code>, and the array methods you expect (<code>map</code>, <code>filter</code>, <code>reduce</code>, <code>forEach</code>, <code>find</code>, <code>some</code>, <code>every</code>, <code>includes</code>, <code>indexOf</code>, <code>join</code>). Plus <code>Date.now()</code>, <code>Object.keys</code>/<code>Object.freeze</code>, <code>Array.isArray</code>/<code>Array.from</code>/<code>Array.of</code>, <code>JSON.stringify</code>/<code>parse&lt;T&gt;</code>, <code>parseInt</code>/<code>parseFloat</code>, and the full <code>Math</code>/<code>Number</code> surface.</dd>
+    <dt>Errors, defer &amp; tests</dt>
+    <dd><code>try</code>/<code>catch</code>/<code>finally</code> and <code>throw</code>, propagating across functions, methods, and constructors; readable <code>.message</code>, optional catch binding, and full stack traces on uncaught errors. Scope&#8209;exit cleanup with <code>defer</code> (last&#8209;in&#8209;first&#8209;out), and built&#8209;in tests: <code>test "…" { expect(…); }</code> run with <code>lumen test</code>.</dd>
+    <dt>Async, threads &amp; events</dt>
+    <dd><code>async</code> functions return <code>Promise&lt;T&gt;</code> and <code>await</code> resolves them on a fast native event loop, with <code>setTimeout</code>/<code>setInterval</code> and their <code>clear*</code> counterparts. <code>Worker.run(fn)</code> spawns a real, detached OS thread &mdash; genuine CPU parallelism, with no per&#8209;thread interpreter overhead to pay. <code>EventEmitter&lt;T&gt;</code> is statically typed, one payload type per instance, and <strong>~3.5&times; faster than Node's</strong> on a tight emit loop.</dd>
+    <dt>Buffer, crypto &amp; I/O</dt>
+    <dd>A real byte&#8209;array type, distinct from <code>string</code> at compile time: <code>Buffer.from</code>/<code>.alloc</code>, <code>utf8</code>/<code>hex</code>/<code>base64</code> encodings, <code>.slice</code>/<code>.at</code>/<code>.equals</code>. <code>crypto.hmacSync</code> and AES&#8209;256&#8209;GCM <code>encryptSync</code>/<code>decryptSync</code> both read and return it. Alongside <code>net</code> TCP sockets, an <code>http</code> client &amp; concurrent server, <code>process.stdin</code>/<code>stdout</code>/<code>stderr</code> as streams, <code>readline.question</code>, and <code>zlib</code> gzip/deflate.</dd>
+    <dt>Modules &amp; native output</dt>
+    <dd>Default, named, and <code>import * as ns</code> imports, and <code>export … from</code> re-exports, from a relative file or an <code>https://</code> URL &mdash; a package is just a URL. <code>declare function</code> + <code>// @link</code> calls native C libraries, with scalars and strings marshalling across the boundary. It all compiles to a small, dependency&#8209;free native binary.</dd>
+  </dl>
+  <p class="sub see-all"><a href="/examples">See these as complete programs &rarr;</a></p>
 </section>
 
 <section class="wrap" id="dx">
@@ -298,44 +150,6 @@ ok adds
 FAIL rounds — expected 4, found 3
     at app.ts:21
 1 passed, 1 failed</code></pre>
-</section>
-
-<section class="wrap" id="ffi">
-  <h2>Call native libraries</h2>
-  <p class="sub">Write a <code>declare function</code> and link a C library, no bindings generator, no runtime. (<code>extern function</code> works too.)</p>
-<pre><code class="lumen">// @link m
-declare function pow(base: number, exp: number): number;
-declare function sqrt(x: number): number;
-
-let hypotSq = pow(3.0, 2.0) + pow(4.0, 2.0);
-console.log(sqrt(hypotSq));   // 5
-console.log(pow(2.0, 10.0));  // 1024</code></pre>
-  <h3>C++ through an <code>extern "C"</code> shim</h3>
-  <p class="sub">Lumen links the C ABI, so expose the C++ you need behind <code>extern "C"</code>, then link the object.</p>
-<pre><code class="lumen">// geometry.cpp
-extern "C" int rectangle_area(int w, int h) { return w * h; }</code></pre>
-<pre><code class="lumen">// demo.ts
-// @link ./geometry.o
-declare function rectangle_area(w: int, h: int): int;
-console.log(rectangle_area(6, 7));   // 42</code></pre>
-  <h3>Strings across the boundary</h3>
-  <p class="sub">Strings marshal too: pass a Lumen string to a C function and copy the returned C string back.</p>
-<pre><code class="lumen">// @link ./shim.o
-declare function shout(s: string): string;   // C: const char* shout(const char*)
-
-console.log(shout("hi there"));   // HI THERE</code></pre>
-  <p class="note">FFI marshals scalars (<code>int</code>, <code>i64</code>, <code>number</code>, <code>bool</code>) and strings.
-  This links local/system libraries, it is not a package manager.</p>
-</section>
-
-<section class="wrap" id="imports">
-  <h2>Import from a URL</h2>
-  <p class="sub">A package is just a URL. The <code>.ts</code> is fetched over HTTPS and inlined at compile time, no package manager, no install step.</p>
-<pre><code class="lumen">import greet from "https://lumen-lang.org/package/std-contrib/hello/hello.ts";
-
-console.log(greet("world"));   // Hello, world!</code></pre>
-  <p class="sub">A remote module can import its own siblings with relative paths, fetched recursively. The same URL is fetched once per build, and import cycles are reported.</p>
-  <p class="note">Only <code>https://</code> is allowed. Remote code runs at build time, so import from sources you trust.</p>
 </section>
 
 <section class="wrap" id="quickstart">

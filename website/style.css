@@ -199,12 +199,16 @@ p code, li code, td code { background: var(--panel); border: 1px solid var(--bor
 .tok-com { color: #6b7785; font-style: italic; }
 .tok-fn { color: #b9c2ff; }
 
-/* Feature grid */
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 16px; }
-.card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 19px; transition: border-color .15s; }
-.card:hover { border-color: var(--accent); }
-.card h3 { margin: 0 0 7px; font-size: 16px; }
-.card p { margin: 0; color: var(--muted); font-size: 14px; }
+/* Coverage list: topic in the left column, what's supported on the right. */
+.coverage { display: grid; grid-template-columns: 200px 1fr; margin: 0; border-top: 1px solid var(--border); }
+.coverage dt { font-weight: 600; font-size: 15px; padding: 16px 24px 16px 0; border-bottom: 1px solid var(--border); }
+.coverage dd { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.see-all { margin-top: 22px; }
+@media (max-width: 700px) {
+  .coverage { grid-template-columns: 1fr; }
+  .coverage dt { padding: 16px 0 2px; border-bottom: 0; }
+  .coverage dd { padding-top: 0; }
+}
 
 /* Tables */
 table { width: 100%; max-width: 760px; border-collapse: collapse; margin: 0 0 24px; font-size: 14px; table-layout: fixed; }
