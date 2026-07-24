@@ -53,6 +53,8 @@ pub const Type = union(enum) {
     writable_stream_type, // WritableStream (fs.createWriteStream)  ->  *LumenWritableStream (heap pointer)
     socket_type, // Socket (net.connect/net.createServer's handler arg)  ->  *LumenSocket (heap pointer)
     process_type, // ChildProcess (child_process.spawn)  ->  *LumenChildProcess (heap pointer)
+    http_stream_type, // HttpStream (http.stream)  ->  *LumenHttpStream (heap pointer)
+    response_writer_type, // ResponseWriter (http.createServer's streaming handler arg)  ->  *LumenResponseWriter (pointer)
     buffer_type, // Buffer (Buffer.from/Buffer.alloc)  ->  *LumenBuffer (heap pointer)
     hash_type, // Hash (crypto.createHash)  ->  *LumenHash (heap pointer)
     hmac_type, // Hmac (crypto.createHmac)  ->  *LumenHmac (heap pointer)
@@ -139,6 +141,8 @@ fn mangle(arena: std.mem.Allocator, t: Type) error{OutOfMemory}![]const u8 {
         .writable_stream_type => "writablestream",
         .socket_type => "socket",
         .process_type => "childprocess",
+        .http_stream_type => "httpstream",
+        .response_writer_type => "responsewriter",
         .buffer_type => "buffer",
         .hash_type => "hash",
         .hmac_type => "hmac",
@@ -308,6 +312,8 @@ pub fn same(a: Type, b: Type) bool {
         .writable_stream_type => b == .writable_stream_type,
         .socket_type => b == .socket_type,
         .process_type => b == .process_type,
+        .http_stream_type => b == .http_stream_type,
+        .response_writer_type => b == .response_writer_type,
         .buffer_type => b == .buffer_type,
         .hash_type => b == .hash_type,
         .hmac_type => b == .hmac_type,
@@ -387,6 +393,14 @@ pub fn isSocket(t: Type) bool {
 
 pub fn isProcess(t: Type) bool {
     return t == .process_type;
+}
+
+pub fn isHttpStream(t: Type) bool {
+    return t == .http_stream_type;
+}
+
+pub fn isResponseWriter(t: Type) bool {
+    return t == .response_writer_type;
 }
 
 pub fn isBuffer(t: Type) bool {
@@ -498,6 +512,8 @@ pub fn toAnnotation(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?[]con
         .writable_stream_type => "WritableStream",
         .socket_type => "Socket",
         .process_type => "ChildProcess",
+        .http_stream_type => "HttpStream",
+        .response_writer_type => "ResponseWriter",
         .buffer_type => "Buffer",
         .hash_type => "Hash",
         .hmac_type => "Hmac",
@@ -539,6 +555,11 @@ pub fn fromAnnotation(name: []const u8) Type {
     // `ChildProcess` (spec 450): the return type of child_process.spawn. Given a
     // spelling here (mirroring Socket) so `let cp: ChildProcess = ...` checks.
     if (eq(u8, name, "ChildProcess")) return .process_type;
+    // `HttpStream` (spec 452): the return type of http.stream, and
+    // `ResponseWriter`: the second parameter of a streaming http.createServer
+    // handler — both need a real spelling so they check as annotations.
+    if (eq(u8, name, "HttpStream")) return .http_stream_type;
+    if (eq(u8, name, "ResponseWriter")) return .response_writer_type;
     if (eq(u8, name, "RegExp")) return .regexp;
     if (eq(u8, name, "Error")) return .error_obj;
     if (eq(u8, name, "int") or eq(u8, name, "i32")) return .i32;
@@ -634,6 +655,8 @@ pub fn tsName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .writable_stream_type => "WritableStream",
         .socket_type => "Socket",
         .process_type => "ChildProcess",
+        .http_stream_type => "HttpStream",
+        .response_writer_type => "ResponseWriter",
         .buffer_type => "Buffer",
         .hash_type => "Hash",
         .hmac_type => "Hmac",
@@ -685,6 +708,8 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .writable_stream_type => "*LumenWritableStream",
         .socket_type => "*LumenSocket",
         .process_type => "*LumenChildProcess",
+        .http_stream_type => "*LumenHttpStream",
+        .response_writer_type => "*LumenResponseWriter",
         .buffer_type => "*LumenBuffer",
         .hash_type => "*LumenHash",
         .hmac_type => "*LumenHmac",

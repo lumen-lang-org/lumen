@@ -834,8 +834,20 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.appendSlice(arena, "__httpRequest(__io, __alloc, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ", \"GET\", \"\", LumenMap([]const u8, []const u8).__init())");
+    } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "stream")) {
+        try w.appendSlice(arena, "__httpStream(__io, __alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.appendSlice(arena, ", ");
+        try em.emitExpr(cl.args[1], w, arena);
+        try w.appendSlice(arena, ", ");
+        try em.emitExpr(cl.args[2], w, arena);
+        try w.appendSlice(arena, ", ");
+        try em.emitExpr(cl.args[3], w, arena);
+        try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "http") and std.mem.eql(u8, cl.name, "createServer")) {
-        try w.appendSlice(arena, "__httpCreateServer(__io, __alloc, ");
+        // The checker recorded which handler form this call passed (spec
+        // 452); the streaming form gets its own connection loop.
+        try w.appendSlice(arena, if (cl.http_streaming) "__httpCreateServerStream(__io, __alloc, " else "__httpCreateServer(__io, __alloc, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ", ");
         try em.emitExpr(cl.args[1], w, arena);

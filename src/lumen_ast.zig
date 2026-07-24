@@ -445,6 +445,7 @@ pub const StaticCall = struct {
     object_values: bool = false, // Object.values(record): emit field values, using object_keys as the field list
     object_entries: bool = false, // Object.entries(record): emit [key, value] tuples, using object_keys as the field list
     from_length: ?*Expr = null, // Array.from({length: N}, cb): the N expression for an array-like source
+    http_streaming: bool = false, // http.createServer with a two-parameter (streaming) handler (spec 452)
 };
 
 pub const Stmt = union(enum) {
@@ -544,6 +545,8 @@ pub const Program = struct {
     needs_time_api: bool = false,
     needs_http_module: bool = false,
     needs_http_server: bool = false,
+    needs_http_stream: bool = false, // http.stream -> persistent LumenHttpStream read handle (spec 452)
+    needs_http_server_stream: bool = false, // any two-parameter (streaming) http.createServer handler (spec 452)
     needs_http_constants: bool = false,
     needs_net: bool = false,
     needs_net_client: bool = false,

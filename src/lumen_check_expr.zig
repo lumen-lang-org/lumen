@@ -1547,6 +1547,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (types.isProcess(obj_type)) {
                 return self.childProcessMethod(program, mc, obj_type, line, col);
             }
+            if (types.isHttpStream(obj_type)) {
+                return self.httpStreamMethod(program, mc, obj_type, line, col);
+            }
+            if (types.isResponseWriter(obj_type)) {
+                return self.responseWriterMethod(program, mc, obj_type, line, col);
+            }
             if (types.isBuffer(obj_type)) {
                 return self.bufferMethod(program, mc, obj_type, line, col);
             }
