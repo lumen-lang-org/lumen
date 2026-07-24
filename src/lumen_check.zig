@@ -1228,7 +1228,25 @@ pub const Checker = struct {
             // fat pointer, not a structural record (spec 428).
             if (decl.is_iface) return .{ .iface_type = annotation };
         }
-        return types.fromAnnotation(annotation);
+        const resolved = types.fromAnnotation(annotation);
+        // Naming `HttpStream` or `ResponseWriter` in an annotation is enough to
+        // require its runtime type, even in a file that never calls
+        // `http.stream`/`http.createServer` itself -- a helper taking one as a
+        // parameter is the ordinary way to factor a handler out. Without this
+        // the annotation checks but the generated code names a type that was
+        // never emitted (spec 452).
+        if (self.cur_program) |prog| {
+            if (types.isHttpStream(resolved)) {
+                prog.needs_http_stream = true;
+                prog.uses_io = true;
+                prog.needs_map = true;
+            } else if (types.isResponseWriter(resolved)) {
+                prog.needs_http_server_stream = true;
+                prog.uses_io = true;
+                prog.needs_map = true;
+            }
+        }
+        return resolved;
     }
 
     /// Resolve a function/method parameter annotation, intercepting the built-in

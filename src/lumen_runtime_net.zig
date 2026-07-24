@@ -91,6 +91,15 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\    hdr_names: []const []const u8 = &.{},
             \\    hdr_values: []const []const u8 = &.{},
             \\    done_: bool = true,
+            \\    // The stream's own buffers. A service opens one stream per
+            \\    // request, so these must come from a freeable allocator and be
+            \\    // released with the connection -- taking them from the program
+            \\    // arena (never reset) would leak ~73KB per call, which is
+            \\    // unbounded growth on exactly the long-running proxy this
+            \\    // feature exists for.
+            \\    tbuf_: []u8 = &.{},
+            \\    rbuf_: []u8 = &.{},
+            \\    xhdr_: []std.http.Header = &.{},
             \\    fn __fail() *LumenHttpStream {
             \\        const p = __sa().create(LumenHttpStream) catch unreachable;
             \\        p.* = .{};
@@ -135,31 +144,55 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\        self.done_ = true;
             \\        self.__release();
             \\    }
+            \\    // Idempotent: close() then exhaustion (or a double close) must
+            \\    // not double-free. Every field is cleared as it is released.
             \\    fn __release(self: *LumenHttpStream) void {
             \\        self.body = null;
             \\        // Request.deinit marks a mid-body connection as closing;
             \\        // Client.deinit then tears down every connection it still
-            \\        // owns, including TLS state — both the early-close and the
-            \\        // exhausted path release everything, no per-stream leak.
+            \\        // owns, including TLS state. The buffers are freed after
+            \\        // deinit, which still reads through them.
             \\        if (self.req) |rq| {
             \\            rq.deinit();
+            \\            std.heap.page_allocator.destroy(rq);
             \\            self.req = null;
             \\        }
             \\        if (self.client) |c| {
             \\            c.deinit();
+            \\            std.heap.page_allocator.destroy(c);
             \\            self.client = null;
+            \\        }
+            \\        if (self.tbuf_.len > 0) {
+            \\            std.heap.page_allocator.free(self.tbuf_);
+            \\            self.tbuf_ = &.{};
+            \\        }
+            \\        if (self.rbuf_.len > 0) {
+            \\            std.heap.page_allocator.free(self.rbuf_);
+            \\            self.rbuf_ = &.{};
+            \\        }
+            \\        if (self.xhdr_.len > 0) {
+            \\            std.heap.page_allocator.free(self.xhdr_);
+            \\            self.xhdr_ = &.{};
             \\        }
             \\    }
             \\};
             \\fn __httpStreamOpen(io: std.Io, alloc: std.mem.Allocator, url: []const u8, method: []const u8, body: []const u8, headers: *LumenMap([]const u8, []const u8)) anyerror!*LumenHttpStream {
+            \\    // Everything the stream owns comes from a freeable allocator,
+            \\    // not the program arena: the handle is released by close() or
+            \\    // by reaching the end of the body, and a service opens one per
+            \\    // request.
+            \\    const pa = std.heap.page_allocator;
             \\    const uri = try std.Uri.parse(url);
-            \\    const client = __sa().create(std.http.Client) catch unreachable;
+            \\    const client = try pa.create(std.http.Client);
+            \\    errdefer pa.destroy(client);
             \\    client.* = .{ .allocator = alloc, .io = io };
             \\    errdefer client.deinit();
-            \\    const extra_headers = __sa().alloc(std.http.Header, headers.keys_.items.len) catch unreachable;
+            \\    const extra_headers = try pa.alloc(std.http.Header, headers.keys_.items.len);
+            \\    errdefer pa.free(extra_headers);
             \\    for (headers.keys_.items, headers.values_.items, 0..) |k, v, i| extra_headers[i] = .{ .name = k, .value = v };
             \\    const http_method = std.meta.stringToEnum(std.http.Method, method) orelse .GET;
-            \\    const req = __sa().create(std.http.Client.Request) catch unreachable;
+            \\    const req = try pa.create(std.http.Client.Request);
+            \\    errdefer pa.destroy(req);
             \\    req.* = try client.request(http_method, uri, .{
             \\        .extra_headers = extra_headers,
             \\        .headers = .{ .accept_encoding = .{ .override = "identity" } },
@@ -175,10 +208,25 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\    } else {
             \\        try req.sendBodiless();
             \\    }
-            \\    const redirect_buffer = __sa().alloc(u8, 8 * 1024) catch unreachable;
+            \\    const redirect_buffer = try pa.alloc(u8, 8 * 1024);
+            \\    errdefer pa.free(redirect_buffer);
             \\    var response = try req.receiveHead(redirect_buffer);
+            \\    const tbuf = try pa.alloc(u8, 65536);
+            \\    errdefer pa.free(tbuf);
+            \\    // The handle itself stays on the arena: user code holds it and
+            \\    // may still ask for status() or header() after close(), so it
+            \\    // outlives the connection by design. It is ~80 bytes plus the
+            \\    // copied header text, not the 73KB of buffers above.
             \\    const p = __sa().create(LumenHttpStream) catch unreachable;
-            \\    p.* = .{ .client = client, .req = req, .status_ = @intFromEnum(response.head.status), .done_ = false };
+            \\    p.* = .{
+            \\        .client = client,
+            \\        .req = req,
+            \\        .status_ = @intFromEnum(response.head.status),
+            \\        .done_ = false,
+            \\        .tbuf_ = tbuf,
+            \\        .rbuf_ = redirect_buffer,
+            \\        .xhdr_ = extra_headers,
+            \\    };
             \\    // Copy the header names/values out NOW: initializing the body
             \\    // reader below invalidates the head's backing memory.
             \\    var names: std.ArrayListUnmanaged([]const u8) = .empty;
@@ -190,13 +238,65 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\    }
             \\    p.hdr_names = names.items;
             \\    p.hdr_values = values.items;
-            \\    const tbuf = __sa().alloc(u8, 65536) catch unreachable;
             \\    p.body = response.reader(tbuf);
             \\    return p;
             \\}
             \\fn __httpStream(io: std.Io, alloc: std.mem.Allocator, url: []const u8, method: []const u8, body: []const u8, headers: *LumenMap([]const u8, []const u8)) *LumenHttpStream {
             \\    return __httpStreamOpen(io, alloc, url, method, body, headers) catch LumenHttpStream.__fail();
             \\}
+            \\
+        );
+    }
+    if (program.needs_http_server_stream) {
+        // ResponseWriter (spec 452): the write handle a two-parameter
+        // streaming handler receives. Every write() frames one chunk and
+        // flushes it to the socket immediately — immediate delivery is
+        // the entire point of the streaming form; buffering until end()
+        // would rebuild exactly the bug this exists to fix. writeHead()
+        // is once-only (later calls are no-ops); a write() or end()
+        // before any writeHead() implies writeHead(200, {}).
+        try out.appendSlice(arena,
+            \\pub const LumenResponseWriter = struct {
+            \\    w: *std.Io.Writer,
+            \\    keep_alive: bool,
+            \\    head_sent: bool = false,
+            \\    ended: bool = false,
+            \\    fn __head(self: *LumenResponseWriter, status: i32, headers: ?*LumenMap([]const u8, []const u8)) void {
+            \\        if (self.head_sent) return;
+            \\        self.head_sent = true;
+            \\        const conn_header: []const u8 = if (self.keep_alive) "keep-alive" else "close";
+            \\        self.w.print("HTTP/1.1 {d} OK\r\nTransfer-Encoding: chunked\r\nConnection: {s}\r\n", .{ status, conn_header }) catch return;
+            \\        if (headers) |hm| {
+            \\            for (hm.keys_.items, hm.values_.items) |hk, hv| {
+            \\                self.w.print("{s}: {s}\r\n", .{ hk, hv }) catch return;
+            \\            }
+            \\        }
+            \\        self.w.writeAll("\r\n") catch return;
+            \\        self.w.flush() catch {};
+            \\    }
+            \\    fn writeHead(self: *LumenResponseWriter, status: i32, headers: *LumenMap([]const u8, []const u8)) void {
+            \\        if (self.ended) return;
+            \\        self.__head(status, headers);
+            \\    }
+            \\    fn write(self: *LumenResponseWriter, chunk: []const u8) void {
+            \\        if (self.ended) return;
+            \\        if (!self.head_sent) self.__head(200, null);
+            \\        // A zero-length frame would be the stream terminator on
+            \\        // the wire — an empty write is a no-op instead.
+            \\        if (chunk.len == 0) return;
+            \\        self.w.print("{x}\r\n", .{chunk.len}) catch return;
+            \\        self.w.writeAll(chunk) catch return;
+            \\        self.w.writeAll("\r\n") catch return;
+            \\        self.w.flush() catch {};
+            \\    }
+            \\    fn end(self: *LumenResponseWriter) void {
+            \\        if (self.ended) return;
+            \\        if (!self.head_sent) self.__head(200, null);
+            \\        self.ended = true;
+            \\        self.w.writeAll("0\r\n\r\n") catch return;
+            \\        self.w.flush() catch {};
+            \\    }
+            \\};
             \\
         );
     }
@@ -220,59 +320,6 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\pub const __LumenHttpRequest = struct { method: []const u8, path: []const u8, body: []const u8 };
             \\
         );
-        if (program.needs_http_server_stream) {
-            // ResponseWriter (spec 452): the write handle a two-parameter
-            // streaming handler receives. Every write() frames one chunk and
-            // flushes it to the socket immediately — immediate delivery is
-            // the entire point of the streaming form; buffering until end()
-            // would rebuild exactly the bug this exists to fix. writeHead()
-            // is once-only (later calls are no-ops); a write() or end()
-            // before any writeHead() implies writeHead(200, {}).
-            try out.appendSlice(arena,
-                \\pub const LumenResponseWriter = struct {
-                \\    w: *std.Io.Writer,
-                \\    keep_alive: bool,
-                \\    head_sent: bool = false,
-                \\    ended: bool = false,
-                \\    fn __head(self: *LumenResponseWriter, status: i32, headers: ?*LumenMap([]const u8, []const u8)) void {
-                \\        if (self.head_sent) return;
-                \\        self.head_sent = true;
-                \\        const conn_header: []const u8 = if (self.keep_alive) "keep-alive" else "close";
-                \\        self.w.print("HTTP/1.1 {d} OK\r\nTransfer-Encoding: chunked\r\nConnection: {s}\r\n", .{ status, conn_header }) catch return;
-                \\        if (headers) |hm| {
-                \\            for (hm.keys_.items, hm.values_.items) |hk, hv| {
-                \\                self.w.print("{s}: {s}\r\n", .{ hk, hv }) catch return;
-                \\            }
-                \\        }
-                \\        self.w.writeAll("\r\n") catch return;
-                \\        self.w.flush() catch {};
-                \\    }
-                \\    fn writeHead(self: *LumenResponseWriter, status: i32, headers: *LumenMap([]const u8, []const u8)) void {
-                \\        if (self.ended) return;
-                \\        self.__head(status, headers);
-                \\    }
-                \\    fn write(self: *LumenResponseWriter, chunk: []const u8) void {
-                \\        if (self.ended) return;
-                \\        if (!self.head_sent) self.__head(200, null);
-                \\        // A zero-length frame would be the stream terminator on
-                \\        // the wire — an empty write is a no-op instead.
-                \\        if (chunk.len == 0) return;
-                \\        self.w.print("{x}\r\n", .{chunk.len}) catch return;
-                \\        self.w.writeAll(chunk) catch return;
-                \\        self.w.writeAll("\r\n") catch return;
-                \\        self.w.flush() catch {};
-                \\    }
-                \\    fn end(self: *LumenResponseWriter) void {
-                \\        if (self.ended) return;
-                \\        if (!self.head_sent) self.__head(200, null);
-                \\        self.ended = true;
-                \\        self.w.writeAll("0\r\n\r\n") catch return;
-                \\        self.w.flush() catch {};
-                \\    }
-                \\};
-                \\
-            );
-        }
         if (needs_http_threadpool) {
             // Concurrent serving (spec 049): the accept loop used to handle
             // one connection fully (through keep-alive, to disconnect)
