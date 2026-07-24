@@ -1,0 +1,59 @@
+{
+  "feature": "451-exported-types-and-module-scoped-imports",
+  "cases": [
+    {
+      "id": "modules.valid.export-type",
+      "source": "../examples/valid/export-type-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "0,0" }
+    },
+    {
+      "id": "modules.valid.aliased-import-keeps-sibling",
+      "source": "../examples/valid/aliased-import-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "hi a HI B" }
+    },
+    {
+      "id": "modules.valid.type-shared-by-two-importers",
+      "source": "../examples/valid/shared-type-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "0,1" }
+    },
+    {
+      "id": "modules.valid.same-name-different-aliases",
+      "source": "../examples/valid/same-name-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "AB" }
+    },
+    {
+      "id": "modules.valid.field-matching-alias-not-rewritten",
+      "source": "../examples/valid/field-alias-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "hi a|field|1" }
+    },
+    {
+      "id": "modules.valid.type-imported-unused",
+      "source": "../examples/valid/unused-type-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "7" }
+    },
+    {
+      "id": "modules.valid.alias-frees-name-for-wrapper",
+      "source": "../examples/valid/wrapper-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "103,4,10" }
+    },
+    {
+      "id": "modules.valid.same-module-two-paths",
+      "source": "../examples/valid/same-module-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "0,0" }
+    },
+    {
+      "id": "modules.invalid.duplicate-type-name",
+      "source": "../examples/invalid/duplicate-type.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "E_DUPLICATE_TYPE" }
+    }
+  ]
+}

@@ -220,6 +220,37 @@ Canonicalise the dedup key already used for "the module is already inlined"
   the same package still collide, and should fail with a clear message rather
   than a confusing duplicate declaration.
 
+## Implementation Notes
+
+Decisions the design left open, settled while implementing:
+
+- **When a definition moves.** D2 renames references in the importer, so a
+  definition only ever moves when it has to. It moves when an importer asks for
+  a name *under a different identifier* (`x as y`) and the flat program has
+  already claimed `x` — the importer's own declarations are claimed first, so
+  the "alias a symbol to free its name for a local wrapper" pattern keeps
+  working. The moved declaration becomes `x__mN` and that rename is applied to
+  its own module's text only. An unaliased import that duplicates a local name
+  is left alone and still reports `E_DUPLICATE_BINDING`.
+- **Default imports had the same defect** and are fixed the same way: the
+  default function is emitted under its own name and the importer's binding is
+  renamed to it. Only an anonymous `export default function (…)` is still named
+  by its importer, since it has no name of its own.
+- **`appendTransformed` had to grow two rules.** Identifiers inside a template
+  literal's `${…}` are now rewritten (they are expressions, not string body),
+  and identifiers in member or key position (`o.name`, `{ name: v }`,
+  `name: string`) are not. Both are line-at-a-time heuristics; shorthand
+  destructuring (`const { name } = o`) is textually indistinguishable from a
+  reference and remains a known gap.
+- **Module identity.** A local file and an `https://` URL are different sources
+  and can never share a key. What D4 unifies is two spellings of the *same*
+  source: two relative paths resolving to one file, or two URLs differing only
+  in scheme/host case, a default `:443`, `.`/`..`/empty segments, or a trailing
+  slash.
+- **Still out of scope.** `export interface`, `export enum` and `export class`
+  remain rejected with `E_UNSUPPORTED_IMPORT`; each is one entry in the same
+  table, but `enum`/`class` bind runtime values and deserve their own decision.
+
 ## Notes
 
 The payoff is concrete: this is the precondition for splitting a package. The
