@@ -6,7 +6,7 @@
       "source": "../examples/valid/stream-error-handle.ts",
       "phase": "compile-run",
       "expect": {
-        "stdout": "-1\ntrue\n0\n0\nok\n"
+        "stdout": "-1\ntrue\n0\n0\nok"
       }
     },
     {
