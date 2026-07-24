@@ -82,10 +82,12 @@
 ## Gates
 
 - [x] `zig build` and `zig build test` pass.
-- [ ] One clean `zig build conformance` run: no new failures against the
-      baseline. Note: this branch merged spec 451 before the run, so the
-      baseline to beat is main's post-451 178 passed / 50 failed, not the
-      169 / 50 figure this file was written against.
+- [x] One clean `zig build conformance` run: no new failures against the
+      baseline. This branch merged spec 451 first, so the baseline is main's
+      post-451 178 passed / 50 failed, not the 169 / 50 this file was written
+      against. Result: 186 passed / 50 failed, the +8 being new 452 cases
+      (9 total, one of which main cannot run). The 50 failing case names were
+      diffed against main's and are identical.
 - [x] Every existing http example and the playground compile service behave
       unchanged under the one-parameter form.
 - [x] New examples land as conformance cases with a manifest wired into
