@@ -37,6 +37,7 @@ fn humanizeDiag(code: []const u8) []const u8 {
     if (eq(u8, code, "E_CONST_ASSIGNMENT")) return "cannot assign to a 'const' binding [E_CONST_ASSIGNMENT]";
     if (eq(u8, code, "E_READONLY_ASSIGNMENT")) return "cannot assign to a 'readonly' field [E_READONLY_ASSIGNMENT]";
     if (eq(u8, code, "E_DUPLICATE_BINDING")) return "duplicate declaration of this name [E_DUPLICATE_BINDING]";
+    if (eq(u8, code, "E_DUPLICATE_TYPE")) return "a type of this name is declared by another module [E_DUPLICATE_TYPE]";
     if (eq(u8, code, "E_BREAK_OUTSIDE_LOOP")) return "'break' outside a loop or switch [E_BREAK_OUTSIDE_LOOP]";
     if (eq(u8, code, "E_CONTINUE_OUTSIDE_LOOP")) return "'continue' outside a loop [E_CONTINUE_OUTSIDE_LOOP]";
     if (eq(u8, code, "E_MISSING_MEMBER")) return "missing required member [E_MISSING_MEMBER]";
@@ -275,20 +276,25 @@ fn parseImportSpec(arena: std.mem.Allocator, line: []const u8) !?ImportSpec {
     return .{ .kind = .{ .default = clause }, .spec = spec_resolved };
 }
 
-fn appendExportDefaultFunction(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), trimmed: []const u8, default_name: ?[]const u8) !bool {
+/// Emits an `export default function …` header as a plain `function` under the
+/// name the module's default export ended up with in the flat program
+/// (`emit_name`): its own name, or the importer's binding when the function is
+/// anonymous.
+fn appendExportDefaultFunction(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), trimmed: []const u8, emit_name_opt: ?[]const u8) !bool {
     const prefix = "export default function ";
     if (!std.mem.startsWith(u8, trimmed, prefix)) return false;
     const rest = trimmed[prefix.len..];
     const paren = std.mem.indexOfScalar(u8, rest, '(') orelse return error.InvalidImport;
     const original_name = std.mem.trim(u8, rest[0..paren], " \t");
-    if (original_name.len == 0 and default_name == null) return error.InvalidImport;
-    const emit_name = default_name orelse original_name;
+    if (original_name.len == 0 and emit_name_opt == null) return error.InvalidImport;
+    const emit_name = emit_name_opt orelse original_name;
     try out.print(arena, "function {s}{s}\n", .{ emit_name, rest[paren..] });
     return true;
 }
 
 /// Reads the symbol name introduced by a `export function NAME` / `export const
-/// NAME` declaration, returning the name and the keyword (`function`/`const`).
+/// NAME` / `export let NAME` / `export type NAME` declaration, returning the
+/// name and the declaration with the `export ` keyword removed.
 const NamedExport = struct {
     name: []const u8,
     /// The declaration with the leading `export ` removed.
@@ -296,17 +302,22 @@ const NamedExport = struct {
 };
 
 fn parseNamedExportDecl(trimmed: []const u8) ?NamedExport {
-    const decls = [_]struct { prefix: []const u8 }{
-        .{ .prefix = "export function " },
-        .{ .prefix = "export const " },
-        .{ .prefix = "export let " },
+    const decls = [_][]const u8{
+        "export function ",
+        "export const ",
+        "export let ",
+        // An `export type` alias binds no runtime value; it flows into the flat
+        // program as a plain `type` declaration and is erased by the emitter.
+        "export type ",
     };
-    for (decls) |d| {
-        if (!std.mem.startsWith(u8, trimmed, d.prefix)) continue;
+    for (decls) |prefix| {
+        if (!std.mem.startsWith(u8, trimmed, prefix)) continue;
         const decl = trimmed["export ".len..];
-        const rest = trimmed[d.prefix.len..];
-        // Name runs up to the first `(`, `:`, `=`, or whitespace.
-        const end = std.mem.indexOfAny(u8, rest, "(:= \t") orelse rest.len;
+        const rest = trimmed[prefix.len..];
+        // Name runs up to the first `(`, `:`, `=`, `<`, or whitespace. `<` stops
+        // a generic parameter list (`export type Box<T> = …`) from becoming part
+        // of the exported name.
+        const end = std.mem.indexOfAny(u8, rest, "(:=< \t") orelse rest.len;
         const name = std.mem.trim(u8, rest[0..end], " \t");
         if (name.len == 0) return null;
         return .{ .name = name, .decl = decl };
@@ -357,8 +368,8 @@ fn parseReExport(arena: std.mem.Allocator, trimmed: []const u8) !?ReExport {
 }
 
 /// Collects every symbol a module exports: default-function name (if any),
-/// `export function/const/let NAME` declarations, and `export { a, b }` lists.
-/// Used to validate that named imports refer to real exports.
+/// `export function/const/let/type NAME` declarations, and `export { a, b }`
+/// lists. Used to validate that named imports refer to real exports.
 fn collectExports(arena: std.mem.Allocator, io: std.Io, module_path: []const u8, is_url: bool, source: []const u8, set: *std.StringHashMapUnmanaged(void), depth: u8) !void {
     if (depth > 16) return;
     const dir = if (is_url) blk: {
@@ -490,36 +501,106 @@ fn isIdentStartCh(c: u8) bool {
     return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_' or c == '$';
 }
 
-/// Appends `line` to `out`, identifier-aware (skips string literals and line
-/// comments): rewrites `ns.member` -> `member` for each namespace alias, and
-/// renames any bare identifier matching a `renames` entry to its alias (used to
-/// rename an aliased named import in the inlined module).
+/// True when the identifier at `line[i..j]` sits in a position that names a
+/// *member* rather than a reference to a binding, and so must never be renamed
+/// (spec 451). Two positions qualify:
+///
+///   * a member access — `obj.name`, `obj?.name` — but not the operand of a
+///     spread (`...name`), which is an ordinary reference;
+///   * a record field or object key — `name:` where nothing but whitespace, `{`
+///     or `,` precedes it on the line, which covers `{ name: v }`, a type body
+///     `name: string,` and a parameter list entry on its own line.
+///
+/// Both are heuristics over a line at a time, not a parse. The known gap is
+/// shorthand destructuring (`const { name } = obj`), which is textually
+/// indistinguishable from a reference.
+fn isMemberPosition(line: []const u8, i: usize, j: usize) bool {
+    var k = i;
+    while (k > 0 and (line[k - 1] == ' ' or line[k - 1] == '\t')) k -= 1;
+    if (k > 0 and line[k - 1] == '.' and !(k >= 2 and line[k - 2] == '.')) return true;
+    var m = j;
+    while (m < line.len and (line[m] == ' ' or line[m] == '\t')) m += 1;
+    if (m >= line.len or line[m] != ':') return false;
+    var p = i;
+    while (p > 0) : (p -= 1) {
+        const pc = line[p - 1];
+        if (pc == ' ' or pc == '\t') continue;
+        return pc == '{' or pc == ',';
+    }
+    return true;
+}
+
+/// Appends `line` to `out`, identifier-aware: rewrites `ns.member` -> `member`
+/// for each namespace alias, and renames any bare identifier matching a
+/// `renames` entry to its alias.
+///
+/// String literals and line comments are copied through untouched, but a
+/// template literal's `${…}` interpolations are *not* — they hold ordinary
+/// expressions, so identifiers inside them are renamed like any other (spec
+/// 451; without this an aliased import used inside a template would dangle).
+/// Member and key positions are left alone, see `isMemberPosition`.
 fn appendTransformed(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), line: []const u8, namespaces: []const []const u8, renames: []const NamedBinding) !void {
     if (namespaces.len == 0 and renames.len == 0) return out.appendSlice(arena, line);
+    // Nesting stack: a `quote` frame is inside a string literal; a `quote == 0`
+    // frame is inside a `${…}` interpolation, where `depth` counts the braces
+    // opened since, so the matching `}` is recognised. Templates may nest.
+    const Frame = struct { quote: u8, depth: u32 };
+    var stack: [16]Frame = undefined;
+    var sp: usize = 0;
     var i: usize = 0;
-    var in_str: u8 = 0;
+    // Set for exactly one identifier: the member that followed a dropped `ns.`,
+    // which is a reference despite being preceded by a `.`.
+    var ns_member = false;
     while (i < line.len) {
         const c = line[i];
-        if (in_str != 0) {
+        const in_string = sp > 0 and stack[sp - 1].quote != 0;
+        if (in_string) {
+            const quote = stack[sp - 1].quote;
             try out.append(arena, c);
             if (c == '\\' and i + 1 < line.len) {
                 try out.append(arena, line[i + 1]);
                 i += 2;
                 continue;
             }
-            if (c == in_str) in_str = 0;
+            if (quote == '`' and c == '$' and i + 1 < line.len and line[i + 1] == '{') {
+                try out.append(arena, '{');
+                i += 2;
+                if (sp < stack.len) {
+                    stack[sp] = .{ .quote = 0, .depth = 0 };
+                    sp += 1;
+                }
+                continue;
+            }
+            if (c == quote) sp -= 1;
             i += 1;
             continue;
         }
         if (c == '"' or c == '\'' or c == '`') {
-            in_str = c;
+            if (sp < stack.len) {
+                stack[sp] = .{ .quote = c, .depth = 0 };
+                sp += 1;
+            }
             try out.append(arena, c);
             i += 1;
+            ns_member = false;
             continue;
         }
         if (c == '/' and i + 1 < line.len and line[i + 1] == '/') return out.appendSlice(arena, line[i..]);
+        if (sp > 0 and (c == '{' or c == '}')) {
+            if (c == '{') {
+                stack[sp - 1].depth += 1;
+            } else if (stack[sp - 1].depth == 0) {
+                sp -= 1; // end of the `${…}` interpolation
+                try out.append(arena, c);
+                i += 1;
+                ns_member = false;
+                continue;
+            } else stack[sp - 1].depth -= 1;
+        }
         const boundary = i == 0 or !isIdentCh(line[i - 1]);
         if (boundary and isIdentStartCh(c)) {
+            const after_ns = ns_member;
+            ns_member = false;
             var j = i;
             while (j < line.len and isIdentCh(line[j])) j += 1;
             const ident = line[i..j];
@@ -531,18 +612,22 @@ fn appendTransformed(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
                 };
                 if (is_ns) {
                     i = j + 1; // drop `ns.`
+                    ns_member = true;
                     continue;
                 }
             }
             var renamed: ?[]const u8 = null;
-            for (renames) |r| if (std.mem.eql(u8, r.name, ident)) {
-                renamed = r.alias;
-                break;
-            };
+            if (after_ns or !isMemberPosition(line, i, j)) {
+                for (renames) |r| if (std.mem.eql(u8, r.name, ident)) {
+                    renamed = r.alias;
+                    break;
+                };
+            }
             try out.appendSlice(arena, renamed orelse ident);
             i = j;
             continue;
         }
+        ns_member = false;
         try out.append(arena, c);
         i += 1;
     }
@@ -556,6 +641,14 @@ var g_import_detail: ?[]const u8 = null;
 
 fn setImportDetail(arena: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
     g_import_detail = std.fmt.allocPrint(arena, fmt, args) catch null;
+}
+
+/// Source location for an import-expansion failure that has one — a duplicate
+/// type name points at the second declaration, not at the entry file's line 1.
+var g_import_loc: ?struct { file: []const u8, line: u32 } = null;
+
+fn setImportLoc(file: []const u8, line: u32) void {
+    g_import_loc = .{ .file = file, .line = line };
 }
 
 /// Display form of a module path: no `././` stacking.
@@ -578,33 +671,191 @@ fn exportNames(arena: std.mem.Allocator, exports: *std.StringHashMapUnmanaged(vo
     return std.fmt.allocPrint(arena, "exports: {s}", .{names.items}) catch "";
 }
 
-fn appendExpandedSource(
+/// What an inlined module contributes to the flat program: for each name the
+/// module exports, the identifier that name actually ended up with. The two are
+/// equal in the ordinary case; they differ when a declaration had to be renamed
+/// because the flat program already had that name (spec 451), or when a
+/// re-export aliases.
+///
+/// Stored by pointer in `Expander.emitted` because the re-export entries are
+/// filled in while the module's own lines are still being walked.
+const ModuleInfo = struct {
+    path: []const u8,
+    exports: std.StringHashMapUnmanaged([]const u8) = .empty,
+};
+
+/// Which namespace a top-level declaration binds. The checker keeps type names
+/// and value names apart, so the expander does too — a `type Result` and a
+/// `const Result` do not collide.
+const DeclKind = enum { value, type_name };
+
+const TopDecl = struct {
+    name: []const u8,
+    kind: DeclKind,
+    /// 1-based line in the module's own source, for the duplicate-type report.
+    line: u32,
+    exported: bool,
+    /// `export default function NAME` — importable under the name `default`.
+    is_default: bool = false,
+};
+
+fn containsName(names: []const []const u8, name: []const u8) bool {
+    for (names) |n| if (std.mem.eql(u8, n, name)) return true;
+    return false;
+}
+
+/// Collects the names a module declares at top level, exported or not. Textual
+/// like the rest of the pre-processor: a declaration is a line at brace depth 0
+/// that starts in column 0 with a declaration keyword. That is exactly how
+/// Lumen sources are written, and anything indented or nested is a body line.
+fn scanTopLevelDecls(arena: std.mem.Allocator, source: []const u8, out: *std.ArrayListUnmanaged(TopDecl)) !void {
+    const kws = [_]struct { kw: []const u8, kind: DeclKind }{
+        .{ .kw = "function ", .kind = .value },
+        .{ .kw = "const ", .kind = .value },
+        .{ .kw = "let ", .kind = .value },
+        .{ .kw = "var ", .kind = .value },
+        .{ .kw = "class ", .kind = .value },
+        .{ .kw = "enum ", .kind = .value },
+        .{ .kw = "type ", .kind = .type_name },
+        .{ .kw = "interface ", .kind = .type_name },
+    };
+    var depth: i32 = 0;
+    var src_line: u32 = 0;
+    var lines = std.mem.splitScalar(u8, source, '\n');
+    while (lines.next()) |line| {
+        src_line += 1;
+        const delta = braceDelta(line);
+        defer depth += delta;
+        if (depth != 0) continue;
+        if (line.len == 0 or line[0] == ' ' or line[0] == '\t') continue;
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        var rest = trimmed;
+        const exported = std.mem.startsWith(u8, rest, "export ");
+        if (exported) rest = rest["export ".len..];
+        var is_default = false;
+        if (std.mem.startsWith(u8, rest, "default ")) {
+            if (!exported) continue;
+            is_default = true;
+            rest = rest["default ".len..];
+        }
+        if (std.mem.startsWith(u8, rest, "declare ")) rest = rest["declare ".len..];
+        if (std.mem.startsWith(u8, rest, "async ")) rest = rest["async ".len..];
+        for (kws) |k| {
+            if (!std.mem.startsWith(u8, rest, k.kw)) continue;
+            const tail = rest[k.kw.len..];
+            const end = std.mem.indexOfAny(u8, tail, "(:=<{ \t;") orelse tail.len;
+            const name = std.mem.trim(u8, tail[0..end], " \t");
+            if (name.len == 0 or !isIdentStartCh(name[0])) break;
+            try out.append(arena, .{
+                .name = name,
+                .kind = k.kind,
+                .line = src_line,
+                .exported = exported and !is_default,
+                .is_default = is_default,
+            });
+            break;
+        }
+    }
+}
+
+/// Dedup/cycle key for a module. Two spellings of the same module must produce
+/// the same key, or it is inlined twice and collides with itself (spec 451 D4).
+/// A local path resolves to an absolute path; a URL keeps its path
+/// case-sensitive but has its scheme and host lowercased, a default `:443`
+/// dropped, empty/`.`/`..` segments resolved and any trailing `/` removed.
+fn canonicalModuleKey(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
+    const scheme = "https://";
+    if (!std.mem.startsWith(u8, path, scheme) and !std.mem.startsWith(u8, path, "HTTPS://"))
+        return std.fs.path.resolve(arena, &.{path});
+    const after = path[scheme.len..];
+    const host_end = std.mem.indexOfScalar(u8, after, '/') orelse after.len;
+    var host = try arena.dupe(u8, after[0..host_end]);
+    for (host) |*c| c.* = std.ascii.toLower(c.*);
+    if (std.mem.endsWith(u8, host, ":443")) host = host[0 .. host.len - 4];
+
+    var segs: std.ArrayListUnmanaged([]const u8) = .empty;
+    var it = std.mem.splitScalar(u8, after[host_end..], '/');
+    while (it.next()) |seg| {
+        if (seg.len == 0 or std.mem.eql(u8, seg, ".")) continue;
+        if (std.mem.eql(u8, seg, "..")) {
+            if (segs.items.len > 0) _ = segs.pop();
+            continue;
+        }
+        try segs.append(arena, seg);
+    }
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
+    try buf.appendSlice(arena, scheme);
+    try buf.appendSlice(arena, host);
+    for (segs.items) |seg| {
+        try buf.append(arena, '/');
+        try buf.appendSlice(arena, seg);
+    }
+    return buf.items;
+}
+
+/// Shared state for one expansion of an entry module's import closure.
+const Expander = struct {
     arena: std.mem.Allocator,
     io: std.Io,
-    path: []const u8,
     out: *std.ArrayListUnmanaged(u8),
     line_map: *std.ArrayListUnmanaged(LineOrigin),
-    visiting: *std.StringHashMapUnmanaged(void),
-    emitted: *std.StringHashMapUnmanaged(void),
+    /// Modules on the current recursion path — an import cycle.
+    visiting: std.StringHashMapUnmanaged(void) = .empty,
+    /// Modules already inlined, by canonical key.
+    emitted: std.StringHashMapUnmanaged(*ModuleInfo) = .empty,
+    /// Value identifier in the flat program -> key of the module that declared it.
+    taken: std.StringHashMapUnmanaged([]const u8) = .empty,
+    /// Type name in the flat program -> path of the module that declared it.
+    type_owners: std.StringHashMapUnmanaged([]const u8) = .empty,
+    mangle_seq: u32 = 0,
+
+    fn claimed(self: *Expander, name: []const u8) bool {
+        return self.taken.get(name) != null or self.type_owners.get(name) != null;
+    }
+
+    /// A `NAME__mN` identifier nothing in the flat program has claimed yet.
+    fn freshName(self: *Expander, name: []const u8) ![]const u8 {
+        while (true) {
+            self.mangle_seq += 1;
+            const cand = try std.fmt.allocPrint(self.arena, "{s}__m{d}", .{ name, self.mangle_seq });
+            if (!self.claimed(cand)) return cand;
+        }
+    }
+};
+
+/// Inlines `path` (and, recursively, everything it imports) into `exp.out`.
+///
+/// `import_kind` is how the *parent* pulled this module in, used to validate
+/// named bindings and to name a default export. `avoid` lists names this module
+/// must not keep: the parent (or an earlier module) already owns them and the
+/// parent refers to this module's under a different identifier, so the
+/// declaration here is renamed instead — that is the only case in which a
+/// definition moves. Every other rename lands on the *importer's* own text.
+fn appendExpandedSource(
+    exp: *Expander,
+    path: []const u8,
     import_kind: ?ImportSpec.Kind,
+    avoid: []const []const u8,
     depth: u8,
-) !void {
+) !*ModuleInfo {
+    const arena = exp.arena;
+    const io = exp.io;
+    const out = exp.out;
     if (depth > 16) return error.InvalidImport;
     const is_url = std.mem.startsWith(u8, path, "https://");
-    // Cycle/dedup key: the URL itself for remote modules, the resolved path otherwise.
-    const key = if (is_url) path else try std.fs.path.resolve(arena, &.{path});
-    if (visiting.get(key) != null) {
+    const key = try canonicalModuleKey(arena, path);
+    if (exp.visiting.get(key) != null) {
         setImportDetail(arena, "import cycle through '{s}'", .{displayPath(path)});
         return error.ImportCycle;
     }
-    if (emitted.get(key) != null) {
+    if (exp.emitted.get(key)) |info| {
         // The module is already inlined, but a fresh importer may still request
         // named bindings: validate them against what the module exports.
         try validateNamedImport(arena, io, is_url, path, key, import_kind);
-        return;
+        return info;
     }
-    try visiting.put(arena, key, {});
-    defer _ = visiting.remove(key);
+    try exp.visiting.put(arena, key, {});
+    defer _ = exp.visiting.remove(key);
 
     const source = if (is_url)
         fetchUrl(arena, io, path) catch {
@@ -632,27 +883,90 @@ fn appendExpandedSource(
         .default => {},
         .namespace => {}, // binds all exports; nothing to validate
     };
-    // Renames from aliased named imports (`a as b`) -> rename `a` to `b` in this
-    // inlined module so importer references to `b` resolve and clashing names from
-    // different modules can coexist.
-    var renames: std.ArrayListUnmanaged(NamedBinding) = .empty;
-    if (import_kind) |kind| switch (kind) {
-        .named => |binds| for (binds) |b| {
-            if (!std.mem.eql(u8, b.name, b.alias)) try renames.append(arena, b);
-        },
-        else => {},
-    };
-    const default_name: ?[]const u8 = if (import_kind) |kind| switch (kind) {
+
+    const info = try arena.create(ModuleInfo);
+    info.* = .{ .path = path };
+
+    const default_binding: ?[]const u8 = if (import_kind) |kind| switch (kind) {
         .default => |b| b,
-        .named => null,
-        .namespace => null,
+        .named, .namespace => null,
     } else null;
+
+    // Physical names: what each of this module's own top-level declarations is
+    // actually called in the flat program. Identity unless the name is already
+    // claimed and an importer asked for it under a different identifier.
+    var decls: std.ArrayListUnmanaged(TopDecl) = .empty;
+    try scanTopLevelDecls(arena, source, &decls);
+    var physical: std.StringHashMapUnmanaged([]const u8) = .empty;
+    // Renames applied to THIS module's own text: first the ones forced by a
+    // clash above, then one per aliased binding of its own import lines.
+    var renames: std.ArrayListUnmanaged(NamedBinding) = .empty;
+    var default_physical: ?[]const u8 = null;
+    for (decls.items) |d| {
+        if (physical.get(d.name) != null) continue;
+        const demanded = containsName(avoid, d.name) or
+            (d.is_default and default_binding != null and !std.mem.eql(u8, default_binding.?, d.name));
+        var name = d.name;
+        if (demanded and exp.claimed(d.name)) {
+            name = try exp.freshName(d.name);
+            try renames.append(arena, .{ .name = d.name, .alias = name });
+        } else if (d.kind == .type_name) {
+            // Two modules declaring the same type name is a real conflict, and
+            // the flat program cannot hold both. Name them (spec 451 D3).
+            if (exp.type_owners.get(d.name)) |owner| if (!std.mem.eql(u8, owner, path)) {
+                setImportDetail(arena, "type '{s}' is declared by both {s} and {s}", .{ d.name, displayPath(owner), displayPath(path) });
+                setImportLoc(path, d.line);
+                return error.DuplicateTypeName;
+            };
+        }
+        try physical.put(arena, d.name, name);
+        switch (d.kind) {
+            .value => if (exp.taken.get(name) == null) try exp.taken.put(arena, name, key),
+            .type_name => if (exp.type_owners.get(name) == null) try exp.type_owners.put(arena, name, path),
+        }
+        if (d.exported) try info.exports.put(arena, d.name, name);
+        if (d.is_default) default_physical = name;
+    }
+    // An anonymous `export default function (…)` has no name of its own, so the
+    // importer's binding names it — the one case where an importer still gets to
+    // choose the emitted name.
+    if (default_physical == null) default_physical = default_binding;
+    if (default_physical) |dp| try info.exports.put(arena, "default", dp);
+
     // Base directory for resolving relative child imports: for a URL it is the
     // URL up to its last `/`; for a local file it is the file's directory.
     const dir = if (is_url) blk: {
         const slash = std.mem.lastIndexOfScalar(u8, path, '/') orelse return error.InvalidImport;
         break :blk path[0..slash];
     } else (std.fs.path.dirname(key) orelse ".");
+
+    // Records `alias -> target` for an identifier this module uses to reach a
+    // child's declaration. Skipped when the module declares `alias` itself (a
+    // genuine duplicate binding, which the checker reports) and rejected when it
+    // would collide with one of this module's own declarations.
+    const addImportRename = struct {
+        fn f(
+            a: std.mem.Allocator,
+            list: *std.ArrayListUnmanaged(NamedBinding),
+            phys: *std.StringHashMapUnmanaged([]const u8),
+            module: []const u8,
+            alias: []const u8,
+            target: []const u8,
+        ) !void {
+            if (std.mem.eql(u8, alias, target)) return;
+            if (phys.get(alias) != null) return;
+            if (phys.get(target) != null) {
+                setImportDetail(a, "'{s}' from {s} clashes with a declaration in this file and the module was already inlined, so it cannot be renamed", .{ target, displayPath(module) });
+                return error.InvalidImport;
+            }
+            for (list.items) |r| if (std.mem.eql(u8, r.name, alias)) {
+                if (std.mem.eql(u8, r.alias, target)) return;
+                setImportDetail(a, "'{s}' is imported from two different modules", .{alias});
+                return error.InvalidImport;
+            };
+            try list.append(a, .{ .name = alias, .alias = target });
+        }
+    }.f;
 
     var local_imports: std.StringHashMapUnmanaged(void) = .empty;
     var file_namespaces: std.ArrayListUnmanaged([]const u8) = .empty; // `import * as ns` aliases in this file
@@ -669,7 +983,7 @@ fn appendExpandedSource(
         // A spliced import records its own origins during recursion.
         defer if (!child_recorded) {
             var nl = std.mem.count(u8, out.items[out_len_before..], "\n");
-            while (nl > 0) : (nl -= 1) line_map.append(arena, .{ .file = path, .line = src_line }) catch {};
+            while (nl > 0) : (nl -= 1) exp.line_map.append(arena, .{ .file = path, .line = src_line }) catch {};
         };
         if (test_skip > 0) {
             test_skip += braceDelta(line);
@@ -691,8 +1005,34 @@ fn appendExpandedSource(
                 try joinUrl(arena, dir, import_spec.spec)
             else
                 try std.fs.path.join(arena, &.{ dir, import_spec.spec });
+            // An aliased binding whose original name is already spoken for is
+            // the one case where the child's declaration must move instead.
+            var avoid_child: std.ArrayListUnmanaged([]const u8) = .empty;
+            if (import_spec.kind == .named) for (import_spec.kind.named) |b| {
+                if (std.mem.eql(u8, b.name, b.alias)) continue;
+                if (exp.claimed(b.name)) try avoid_child.append(arena, b.name);
+            };
             child_recorded = true;
-            try appendExpandedSource(arena, io, imported_path, out, line_map, visiting, emitted, import_spec.kind, depth + 1);
+            const child = try appendExpandedSource(exp, imported_path, import_spec.kind, avoid_child.items, depth + 1);
+            switch (import_spec.kind) {
+                .named => |binds| for (binds) |b| {
+                    const target = child.exports.get(b.name) orelse b.name;
+                    try addImportRename(arena, &renames, &physical, imported_path, b.alias, target);
+                },
+                .default => |b| {
+                    const target = child.exports.get("default") orelse b;
+                    try addImportRename(arena, &renames, &physical, imported_path, b, target);
+                },
+                .namespace => {
+                    // `ns.member` drops to `member`; if the child had to move a
+                    // declaration, the member reference follows it.
+                    var it = child.exports.iterator();
+                    while (it.next()) |e| {
+                        if (std.mem.eql(u8, e.key_ptr.*, "default")) continue;
+                        try addImportRename(arena, &renames, &physical, imported_path, e.key_ptr.*, e.value_ptr.*);
+                    }
+                },
+            }
             continue;
         }
         const trimmed = std.mem.trim(u8, line, " \t\r");
@@ -700,12 +1040,12 @@ fn appendExpandedSource(
             test_skip = braceDelta(line);
             continue;
         }
-        if (try appendExportDefaultFunction(arena, out, trimmed, default_name)) continue;
+        if (try appendExportDefaultFunction(arena, out, trimmed, default_physical)) continue;
         // `export { a } from "..."` / `export * from "..."` (spec 052):
-        // inline the source module (its symbols flow into the flat program),
-        // renaming `a as b` re-exports so importers see the alias. Must be
-        // checked before parseExportList below, since a re-export also starts
-        // with `export {`. The re-export line itself emits nothing.
+        // inline the source module (its symbols flow into the flat program) and
+        // republish them under this module's export table. Must be checked
+        // before parseExportList below, since a re-export also starts with
+        // `export {`. The re-export line itself emits nothing.
         if (try parseReExport(arena, trimmed)) |re| {
             const child_is_url = std.mem.startsWith(u8, re.spec, "https://");
             const re_path = if (child_is_url)
@@ -716,14 +1056,29 @@ fn appendExpandedSource(
                 try std.fs.path.join(arena, &.{ dir, re.spec });
             const re_kind: ?ImportSpec.Kind = if (re.binds) |b| .{ .named = b } else null;
             child_recorded = true;
-            try appendExpandedSource(arena, io, re_path, out, line_map, visiting, emitted, re_kind, depth + 1);
+            const child = try appendExpandedSource(exp, re_path, re_kind, &.{}, depth + 1);
+            if (re.binds) |binds| {
+                for (binds) |b| try info.exports.put(arena, b.alias, child.exports.get(b.name) orelse b.name);
+            } else {
+                var it = child.exports.iterator();
+                while (it.next()) |e| {
+                    if (std.mem.eql(u8, e.key_ptr.*, "default")) continue;
+                    try info.exports.put(arena, e.key_ptr.*, e.value_ptr.*);
+                }
+            }
             continue;
         }
         // `export { a, b }` re-export lists carry no declaration of their own:
-        // the underlying functions/consts are emitted from their own lines.
-        if (try parseExportList(arena, trimmed)) |_| continue;
-        // `export function/const/let NAME` declarations: drop the `export `
-        // keyword and emit the plain declaration into the shared program.
+        // the underlying functions/consts are emitted from their own lines, so
+        // the list only records which local name each exported name resolves to.
+        if (try parseExportList(arena, trimmed)) |binds| {
+            for (binds) |b| try info.exports.put(arena, b.alias, physical.get(b.name) orelse b.name);
+            continue;
+        }
+        // `export function/const/let/type NAME` declarations: drop the `export `
+        // keyword and emit the plain declaration into the shared program. An
+        // `export type` alias becomes a plain `type` declaration, which binds no
+        // runtime value — it is erased by the emitter (spec 451).
         if (parseNamedExportDecl(trimmed)) |ne| {
             // Preserve original indentation by emitting onto its own line.
             try appendTransformed(arena, out, ne.decl, file_namespaces.items, renames.items);
@@ -734,7 +1089,8 @@ fn appendExpandedSource(
         try appendTransformed(arena, out, line, file_namespaces.items, renames.items);
         try out.append(arena, '\n');
     }
-    try emitted.put(arena, key, {});
+    try exp.emitted.put(arena, key, info);
+    return info;
 }
 
 const ExpandedSource = struct { text: []const u8, line_map: []const LineOrigin };
@@ -742,9 +1098,8 @@ const ExpandedSource = struct { text: []const u8, line_map: []const LineOrigin }
 fn readSourceWithImports(arena: std.mem.Allocator, io: std.Io, path: []const u8) !ExpandedSource {
     var out: std.ArrayListUnmanaged(u8) = .empty;
     var line_map: std.ArrayListUnmanaged(LineOrigin) = .empty;
-    var visiting: std.StringHashMapUnmanaged(void) = .empty;
-    var emitted: std.StringHashMapUnmanaged(void) = .empty;
-    try appendExpandedSource(arena, io, path, &out, &line_map, &visiting, &emitted, null, 0);
+    var exp: Expander = .{ .arena = arena, .io = io, .out = &out, .line_map = &line_map };
+    _ = try appendExpandedSource(&exp, path, null, &.{}, 0);
     return .{ .text = out.items, .line_map = line_map.items };
 }
 
@@ -1271,6 +1626,14 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             error.ImportCycle => try err.print("{s}:1:1: error: {s} [E_IMPORT_CYCLE]\n", .{ path, detail orelse "import cycle detected" }),
             error.DuplicateImport => try err.print("{s}:1:1: error: {s} [E_DUPLICATE_IMPORT]\n", .{ path, detail orelse "module imported twice" }),
             error.MissingExport => try err.print("{s}:1:1: error: {s} [E_MISSING_EXPORT]\n", .{ path, detail orelse "imported name is not exported" }),
+            error.DuplicateTypeName => {
+                const loc = g_import_loc;
+                try err.print("{s}:{d}:1: error: {s} [E_DUPLICATE_TYPE]\n", .{
+                    if (loc) |l| displayPath(l.file) else path,
+                    if (loc) |l| l.line else 1,
+                    detail orelse "a type of this name is declared by another module",
+                });
+            },
             else => try err.print("error: cannot read file {s}\n", .{path}),
         }
         return 2;
@@ -1879,4 +2242,111 @@ test "backend diagnostics never leak internal emit names (spec 449)" {
     // Too long to rewrite: returned verbatim rather than truncated.
     var small: [4]u8 = undefined;
     try eq("use of '__lumen_0_x'", demangleEmitNames(&small, "use of '__lumen_0_x'"));
+}
+
+test "import rewriting leaves member and key positions alone (spec 451)" {
+    const arena = std.testing.allocator;
+    const renames = [_]NamedBinding{.{ .name = "hello", .alias = "greet" }};
+    const cases = [_]struct { in: []const u8, want: []const u8 }{
+        // A plain reference is rewritten.
+        .{ .in = "let s = hello(name);", .want = "let s = greet(name);" },
+        // Member access, optional access and record/object keys are not.
+        .{ .in = "let s = box.hello;", .want = "let s = box.hello;" },
+        .{ .in = "let s = box?.hello;", .want = "let s = box?.hello;" },
+        .{ .in = "return { hello: 1, n: 2 };", .want = "return { hello: 1, n: 2 };" },
+        .{ .in = "type Box = { hello: string };", .want = "type Box = { hello: string };" },
+        .{ .in = "  hello: string,", .want = "  hello: string," },
+        // A spread operand is a reference, not a member.
+        .{ .in = "f(...hello);", .want = "f(...greet);" },
+        // `${…}` holds an expression, so it is rewritten; the rest of the
+        // template literal is not.
+        .{ .in = "console.log(`hello ${hello(a)}`);", .want = "console.log(`hello ${greet(a)}`);" },
+        .{ .in = "let s = `a ${ { hello: hello(x) } } b hello`;", .want = "let s = `a ${ { hello: greet(x) } } b hello`;" },
+        // Strings and line comments are untouched.
+        .{ .in = "let s = \"hello\"; // hello", .want = "let s = \"hello\"; // hello" },
+    };
+    for (cases) |c| {
+        var out: std.ArrayListUnmanaged(u8) = .empty;
+        defer out.deinit(arena);
+        try appendTransformed(arena, &out, c.in, &.{}, &renames);
+        try std.testing.expectEqualStrings(c.want, out.items);
+    }
+}
+
+test "namespace members still follow a renamed declaration (spec 451)" {
+    const arena = std.testing.allocator;
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(arena);
+    const renames = [_]NamedBinding{.{ .name = "area", .alias = "area__m1" }};
+    try appendTransformed(arena, &out, "console.log(geom.area(s));", &.{"geom"}, &renames);
+    try std.testing.expectEqualStrings("console.log(area__m1(s));", out.items);
+}
+
+test "module keys canonicalise URL spellings (spec 451)" {
+    var buf: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer buf.deinit();
+    const arena = buf.allocator();
+    const eq = std.testing.expectEqualStrings;
+    const want = "https://lumen-lang.org/pkg/a.ts";
+    for ([_][]const u8{
+        "https://lumen-lang.org/pkg/a.ts",
+        "https://LUMEN-LANG.ORG/pkg/a.ts",
+        "https://lumen-lang.org:443/pkg/a.ts",
+        "https://lumen-lang.org//pkg/./a.ts",
+        "https://lumen-lang.org/pkg/sub/../a.ts",
+    }) |spec| try eq(want, try canonicalModuleKey(arena, spec));
+    // A trailing slash is dropped, and the path stays case-sensitive.
+    try eq("https://lumen-lang.org/Pkg", try canonicalModuleKey(arena, "https://lumen-lang.org/Pkg/"));
+}
+
+test "top-level declarations are found, nested ones are not (spec 451)" {
+    const arena = std.testing.allocator;
+    var decls: std.ArrayListUnmanaged(TopDecl) = .empty;
+    defer decls.deinit(arena);
+    try scanTopLevelDecls(arena,
+        \\import { a } from "./x.ts";
+        \\export type Point = { x: int, y: int };
+        \\type Inner = string;
+        \\export function origin(): Point {
+        \\  const nested = 1;
+        \\  return { x: 0, y: 0 };
+        \\}
+        \\export default function base(): int { return 1; }
+        \\export const ANSWER: int = 42;
+    , &decls);
+    const want = [_]struct { name: []const u8, kind: DeclKind, exported: bool }{
+        .{ .name = "Point", .kind = .type_name, .exported = true },
+        .{ .name = "Inner", .kind = .type_name, .exported = false },
+        .{ .name = "origin", .kind = .value, .exported = true },
+        .{ .name = "base", .kind = .value, .exported = false },
+        .{ .name = "ANSWER", .kind = .value, .exported = true },
+    };
+    try std.testing.expectEqual(want.len, decls.items.len);
+    for (want, decls.items) |w, got| {
+        try std.testing.expectEqualStrings(w.name, got.name);
+        try std.testing.expectEqual(w.kind, got.kind);
+        try std.testing.expectEqual(w.exported, got.exported);
+    }
+    try std.testing.expect(decls.items[3].is_default);
+}
+
+test "exported declaration names stop at a generic parameter list (spec 451)" {
+    const eq = std.testing.expectEqualStrings;
+    const cases = [_]struct { line: []const u8, name: []const u8, decl: []const u8 }{
+        .{ .line = "export type Point = { x: int };", .name = "Point", .decl = "type Point = { x: int };" },
+        .{ .line = "export type Box<T> = { v: T };", .name = "Box", .decl = "type Box<T> = { v: T };" },
+        .{ .line = "export type Rec = {", .name = "Rec", .decl = "type Rec = {" },
+        .{ .line = "export function identity<T>(x: T): T {", .name = "identity", .decl = "function identity<T>(x: T): T {" },
+        .{ .line = "export const ANSWER: int = 42;", .name = "ANSWER", .decl = "const ANSWER: int = 42;" },
+        .{ .line = "export let count = 0;", .name = "count", .decl = "let count = 0;" },
+    };
+    for (cases) |c| {
+        const got = parseNamedExportDecl(c.line) orelse return error.TestExpectedEqual;
+        try eq(c.name, got.name);
+        try eq(c.decl, got.decl);
+    }
+    // Not declaration-bearing export forms.
+    try std.testing.expect(parseNamedExportDecl("export { a, b };") == null);
+    try std.testing.expect(parseNamedExportDecl("export interface I {") == null);
+    try std.testing.expect(parseNamedExportDecl("type Point = { x: int };") == null);
 }
