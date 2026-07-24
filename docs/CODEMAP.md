@@ -8,13 +8,13 @@ Format: one section per file: role (from its //! header), then
 Lumen compiler CLI: TypeScript syntax -> generated Zig -> native binary.
 main:2048
 
-## src/lumen_ast.zig (655 lines)
+## src/lumen_ast.zig (658 lines)
 The Abstract Syntax Tree -- the data structure shared by the parser, the
-FieldInit:21, Visibility:23, TypeField:25, EnumValue:37, EnumMember:39, EnumDecl:45, TypeDecl:53, FunctionParam:85, ExternDecl:114, ClassDecl:123, MemberAssign:144, Accessor:157, FunctionDecl:159, VarDecl:187, UsingDecl:213, DestructBinding:229, DestructureDecl:239, Assign:250, ConsoleLog:268, WhileStmt:278, DoWhileStmt:286, ForStmt:294, ForOfStmt:308, ForInStmt:331, IfStmt:343, SwitchCase:351, SwitchStmt:358, ExprStmt:371, ReturnStmt:377, ThrowStmt:384, TryStmt:390, ControlStmt:403, DeferStmt:411, TestDecl:417, SuperCtor:426, StaticCall:433, Stmt:450, BlockStmt:483, Program:489, Expr:583, FieldBuiltin:622, Capture:632, ArrowExpr:636, TemplatePart:651
+FieldInit:21, Visibility:23, TypeField:25, EnumValue:37, EnumMember:39, EnumDecl:45, TypeDecl:53, FunctionParam:85, ExternDecl:114, ClassDecl:123, MemberAssign:144, Accessor:157, FunctionDecl:159, VarDecl:187, UsingDecl:213, DestructBinding:229, DestructureDecl:239, Assign:250, ConsoleLog:268, WhileStmt:278, DoWhileStmt:286, ForStmt:294, ForOfStmt:308, ForInStmt:331, IfStmt:343, SwitchCase:351, SwitchStmt:358, ExprStmt:371, ReturnStmt:377, ThrowStmt:384, TryStmt:390, ControlStmt:403, DeferStmt:411, TestDecl:417, SuperCtor:426, StaticCall:433, Stmt:451, BlockStmt:484, Program:490, Expr:586, FieldBuiltin:625, Capture:635, ArrowExpr:639, TemplatePart:654
 
-## src/lumen_check.zig (1824 lines)
+## src/lumen_check.zig (1845 lines)
 The type checker -- stage 3, between parsing and codegen.
-classImplements:73, Checker:135, refInner:1776, isAddressable:1788, isCSafe:1796, findField:1803, checkProgram:1810
+classImplements:73, Checker:135, refInner:1797, isAddressable:1809, isCSafe:1817, findField:1824, checkProgram:1831
 
 ## src/lumen_check_assign.zig (381 lines)
 Assignability and cast checking: "can a value of type X be used where Y is
@@ -24,21 +24,21 @@ ensureAssignable:19, castAllowed:370
 Class member resolution: field/method/accessor lookup across the
 classField:27, resolveField:34, resolveStaticField:46, resolveMethod:60, resolveStaticMethod:72, resolveAccessor:84, isSubclassOf:97, checkVisibility:109, visibilityOk:125
 
-## src/lumen_check_expr.zig (2393 lines)
+## src/lumen_check_expr.zig (2399 lines)
 Expression type-checking -- `exprType` is the heart of the checker: given
-checkCbArg:30, wrapStringify:40, wrapFloat:87, exprType:95, fieldType:2372
+checkCbArg:30, wrapStringify:40, wrapFloat:87, exprType:95, fieldType:2378
 
 ## src/lumen_check_generics.zig (740 lines)
 Generic function/class/type-alias specialization (monomorphization).
 isGenericTemplateStmt:31, appendStmt:41, isIdentChar:50, substAnnotation:57, annotationMentions:85, annTag:99, mangledName:115, splitTypeArgs:128, resolveExplicitTypeArgs:151, inferTypeArgs:165, unifyAnnotation:263, specializeFunction:441, specializeClass:490, specializeType:570, substCur:594, cloneBody:599, cloneExpr:605, cloneVarDecl:692, cloneAssign:697, cloneStmt:701
 
-## src/lumen_check_methods.zig (1208 lines)
+## src/lumen_check_methods.zig (1320 lines)
 Type-checking for stdlib *instance* methods: methods called on a value of
-cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, bufferMethod:864, numberInstanceMethod:921, stringMethod:1001, hashMethod:1153, hmacMethod:1182
+cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:869, responseWriterMethod:923, bufferMethod:976, numberInstanceMethod:1033, stringMethod:1113, hashMethod:1265, hmacMethod:1294
 
-## src/lumen_check_stdlib.zig (1355 lines)
+## src/lumen_check_stdlib.zig (1415 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
-staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:203, zlibCallType:385, urlCallType:413, assertCallType:478, dateCallType:519, timeCallType:534, httpCallType:549, netCallType:667, jsonCallType:714, registerLumenHttpResponse:802, registerLumenHttpRequest:824, promiseCallType:834, mathCallType:906, stringCallType:1158, arrayCallType:1222
+staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:203, zlibCallType:385, urlCallType:413, assertCallType:478, dateCallType:519, timeCallType:534, httpCallType:549, netCallType:727, jsonCallType:774, registerLumenHttpResponse:862, registerLumenHttpRequest:884, promiseCallType:894, mathCallType:966, stringCallType:1218, arrayCallType:1282
 
 ## src/lumen_check_stdlib_os.zig (1412 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
@@ -71,7 +71,7 @@ emitElemEq:26, emitArrayMethod:131, emitStringMethod:515, emitTemplateText:817
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:286, emitSuperCopies:352, collectSuperInStmt:356, collectSuperInExpr:376, ifaceMethodThrows:430, emitIfaceDecl:443, emitClassVtables:461
 
-## src/lumen_emit_static.zig (1095 lines)
+## src/lumen_emit_static.zig (1107 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
 emitStaticCall:12
 
@@ -87,9 +87,9 @@ analyze:422
 The lexer (tokenizer) -- stage 1 of the compiler.
 Regex:19, Tok:21, Lexer:35
 
-## src/lumen_opt.zig (693 lines)
+## src/lumen_opt.zig (702 lines)
 Optimization passes over the AST -- the "allocate less" passes.
-collectStrConcat:35, collectDestPassable:111, markBuilderParts:147, markAccumulators:510, exprUsesName:581, bodyUsesName:648
+collectStrConcat:35, collectDestPassable:111, markBuilderParts:147, markAccumulators:519, exprUsesName:590, bodyUsesName:657
 
 ## src/lumen_parser.zig (1138 lines)
 The parser -- stage 2 of the compiler.
@@ -107,7 +107,7 @@ parseTypeMember:27, consumeTypeArgClose:109, parseFunctionType:140, parseTupleTy
 Runtime prelude codegen for the filesystem surface: async fs (libxev),
 emitFsRuntime:14
 
-## src/lumen_runtime_net.zig (529 lines)
+## src/lumen_runtime_net.zig (932 lines)
 Runtime prelude codegen for the network surface: the `http` client
 emitNetRuntime:14
 
@@ -115,9 +115,9 @@ emitNetRuntime:14
 Runtime prelude codegen for stdio/process/OS surfaces: process
 emitStdioRuntime:14, emitOsCryptoRuntime:472
 
-## src/lumen_types.zig (694 lines)
+## src/lumen_types.zig (734 lines)
 The type system.
-Type:18, MapType:63, EnumType:65, FuncSig:67, SigEntry:72, g_sig_registry:73, g_sig_arena:74, TupleEntry:79, g_tuple_registry:80, tupleStructName:83, funcStructName:171, inferExprType:200, same:232, isOptional:331, unwrapOptional:336, isNumeric:343, isInteger:350, isStringLike:357, isMap:364, isSet:368, isEventEmitter:372, isReadableStream:376, isWritableStream:380, isSocket:384, isProcess:388, isBuffer:392, isHash:396, isHmac:400, isArray:404, arrayElem:411, arrayOf:425, arrayOfAlloc:439, toAnnotation:458, fromAnnotation:524, refZigName:558, isRefAllowed:565, isRefScalar:574, tsName:584, zigName:654
+Type:18, MapType:65, EnumType:67, FuncSig:69, SigEntry:74, g_sig_registry:75, g_sig_arena:76, TupleEntry:81, g_tuple_registry:82, tupleStructName:85, funcStructName:175, inferExprType:204, same:236, isOptional:337, unwrapOptional:342, isNumeric:349, isInteger:356, isStringLike:363, isMap:370, isSet:374, isEventEmitter:378, isReadableStream:382, isWritableStream:386, isSocket:390, isProcess:394, isHttpStream:398, isResponseWriter:402, isBuffer:406, isHash:410, isHmac:414, isArray:418, arrayElem:425, arrayOf:439, arrayOfAlloc:453, toAnnotation:472, fromAnnotation:540, refZigName:579, isRefAllowed:595, isRefScalar:609, tsName:620, zigName:692
 
 ## src/regex_rt.zig (631 lines)
 __lumen_regex:15
@@ -259,4 +259,5 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 440-optional-call-diagnostic 441-array-push-desugar 442-array-unshift-desugar 
 443-class-field-push-unshift 444-nested-array-reassign 445-enum-array-literal 446-set-from-set 
 447-template-mixed-ternary 448-map-from-map 449-module-level-bindings-in-tests 
-450-persistent-subprocess 451-exported-types-and-module-scoped-imports 
+450-persistent-subprocess 451-exported-types-and-module-scoped-imports 452-streaming-http 
+453-ref-for-value-types 

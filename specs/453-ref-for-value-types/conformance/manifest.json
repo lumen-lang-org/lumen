@@ -1,0 +1,53 @@
+{
+  "feature": "453-ref-for-value-types",
+  "cases": [
+    {
+      "id": "ref.valid.array-accumulate",
+      "source": "../examples/valid/ref-array-accumulate.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "2" }
+    },
+    {
+      "id": "ref.valid.string-out-parameter",
+      "source": "../examples/valid/ref-string-out.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "read: /etc/hostname" }
+    },
+    {
+      "id": "ref.valid.array-push-reaches-caller",
+      "source": "../examples/valid/ref-array-push.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "2" }
+    },
+    {
+      "id": "ref.valid.array-read-through-ref",
+      "source": "../examples/valid/ref-array-read.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "8" }
+    },
+    {
+      "id": "ref.valid.array-of-records",
+      "source": "../examples/valid/ref-array-of-records.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "1,9" }
+    },
+    {
+      "id": "ref.valid.ref-passed-on-to-ref",
+      "source": "../examples/valid/ref-array-chain.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "2" }
+    },
+    {
+      "id": "ref.valid.plain-array-param-still-copies",
+      "source": "../examples/valid/plain-array-param-copies.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "1" }
+    },
+    {
+      "id": "ref.invalid.map-target",
+      "source": "../examples/invalid/ref-map.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "E_REF_TARGET" }
+    }
+  ]
+}

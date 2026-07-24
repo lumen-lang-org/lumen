@@ -256,6 +256,15 @@ fn accBadRef(e: *const Expr, name: []const u8) bool {
         .field => |f| accBadRef(f.obj, name),
         .index => |idx| accBadRef(idx.obj, name) or accBadRef(idx.value, name),
         .call => |cl| blk: {
+            // Passed to a `Ref<T>` parameter: the callee writes through a
+            // pointer to this binding, so it must keep the ordinary slice
+            // representation rather than becoming a growable buffer. Without
+            // this the accumulator transform and `Ref` disagree on the type and
+            // the backend rejects the call (spec 453).
+            for (cl.args, 0..) |it, i| {
+                if (i < cl.ref_args.len and cl.ref_args[i] and
+                    it.* == .var_ref and std.mem.eql(u8, it.var_ref.name, name)) break :blk true;
+            }
             for (cl.args) |it| if (accBadRef(it, name)) break :blk true;
             break :blk false;
         },
