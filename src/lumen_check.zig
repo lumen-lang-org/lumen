@@ -1253,9 +1253,10 @@ pub const Checker = struct {
     /// by-reference marker `Ref<T>` before the generics machinery treats `Ref` as
     /// a user generic. A `Ref<T>` parameter type-checks as `T` (its `checked_type`
     /// is the inner type) but is passed by single pointer; the inner type must be
-    /// a value type (record/interface, scalar, union, enum, or tuple). Classes,
-    /// arrays, strings, maps, sets, and promises are already reference-like and
-    /// are rejected. A rest `Ref<T>[]` is not supported.
+    /// a value type — a record, interface, scalar, string, array, union, enum or
+    /// tuple. Maps, sets, promises and classes are rejected because they are
+    /// already heap pointers, so a callee's changes reach the caller without
+    /// `Ref`. A rest `Ref<T>[]` is not supported.
     fn resolveParam(self: *Checker, param: *ast.FunctionParam, line: u32, col: u32) CompileError!void {
         if (refInner(param.annotation)) |inner_ann| {
             if (param.is_rest) return self.fail(line, col, "E_REF_TARGET");

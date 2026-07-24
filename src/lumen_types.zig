@@ -581,20 +581,35 @@ pub fn refZigName(arena: std.mem.Allocator, inner: Type) ![]const u8 {
 }
 
 /// Whether a type is a legal `Ref<T>` element: a value type the compiler can pass
-/// by single pointer. Classes (already references), arrays, and strings (already
-/// slices), maps/sets/promises (already heap pointers) are rejected for V1.
+/// by single pointer.
+///
+/// Arrays and strings qualify. Both are values here — an array is immutable and
+/// `push` on a parameter rebinds the callee's own copy, exactly as assigning to
+/// a scalar parameter does — so `Ref` is the only way for a callee to report a
+/// new one back, and refusing it left the accumulator shape with no spelling
+/// (spec 453).
+///
+/// Maps, sets, promises and classes are still rejected: those are heap
+/// pointers, so a callee's changes already reach the caller and `Ref` would add
+/// only whole-value rebinding.
 pub fn isRefAllowed(t: Type) bool {
+    if (isArray(t)) return true;
     return switch (t) {
-        .i32, .i64, .f64, .bool, .named, .union_type, .enum_type, .tuple_type => true,
+        .i32, .i64, .f64, .bool, .string, .named, .union_type, .enum_type, .tuple_type => true,
         else => false,
     };
 }
 
-/// Whether a `Ref<T>` inner type is a scalar that needs explicit `.*` deref on
-/// reads and assignments in the body.
+/// Whether a `Ref<T>` inner type needs an explicit `.*` deref on reads and
+/// assignments in the body.
+///
+/// A record does not: field access auto-derefs through a pointer. An array or a
+/// string does, for the same reason a scalar does — the body assigns the whole
+/// value, and its methods take the value rather than a pointer to it.
 pub fn isRefScalar(t: Type) bool {
+    if (isArray(t)) return true;
     return switch (t) {
-        .i32, .i64, .f64, .bool, .enum_type => true,
+        .i32, .i64, .f64, .bool, .string, .enum_type => true,
         else => false,
     };
 }
