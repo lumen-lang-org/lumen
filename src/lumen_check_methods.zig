@@ -859,6 +859,118 @@ pub fn childProcessMethod(self: *Checker, program: *ast.Program, mc: anytype, ob
     return null;
 }
 
+/// Validate a method call on an `HttpStream` receiver (spec 452, the return
+/// type of `http.stream`). Mirrors `childProcessMethod` exactly: sets
+/// `mc.container_type` (the load-bearing step that lets the generic emit path
+/// lower `<recv>.<name>(<args>)`) then validates by name. `status()` returns
+/// the response status; `header(name)` looks a response header up
+/// case-insensitively; `readLine()` blocks for the next decoded body line;
+/// `done()` reports exhaustion; `close()` drops the connection early.
+pub fn httpStreamMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    if (eq(u8, name, "status")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .i32;
+    }
+    if (eq(u8, name, "header")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const name_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.string, name_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .string;
+    }
+    if (eq(u8, name, "readLine")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .string;
+    }
+    if (eq(u8, name, "done")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .bool;
+    }
+    if (eq(u8, name, "close")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .void;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
+/// Validate a method call on a `ResponseWriter` receiver (spec 452, the
+/// second parameter of a streaming `http.createServer` handler). Same shape
+/// as `httpStreamMethod`. `writeHead(status, headers)` sends the response
+/// head; `write(chunk)` sends one chunk, flushed immediately; `end()`
+/// terminates the response.
+pub fn responseWriterMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    if (eq(u8, name, "writeHead")) {
+        if (mc.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const status_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.i32, status_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const key_ty = self.arena.create(types.Type) catch return null;
+        key_ty.* = .string;
+        const val_ty = self.arena.create(types.Type) catch return null;
+        val_ty.* = .string;
+        const map_ty = self.arena.create(types.MapType) catch return null;
+        map_ty.* = .{ .key = key_ty, .value = val_ty };
+        const headers_type = self.exprType(program, mc.args[1], line, col) orelse return null;
+        if (!types.same(.{ .map_type = map_ty }, headers_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .void;
+    }
+    if (eq(u8, name, "write")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const chunk_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.string, chunk_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .void;
+    }
+    if (eq(u8, name, "end")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .void;
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
 /// Validate a method call on a `Buffer` receiver (spec 056). Mirrors
 /// `readableStreamMethod`/`writableStreamMethod`.
 pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {

@@ -594,6 +594,38 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = .{ .named = "__LumenHttpResponse" };
         return .{ .named = "__LumenHttpResponse" };
     }
+    if (std.mem.eql(u8, call.name, "stream")) {
+        // http.stream (spec 452): same four arguments as http.request, but
+        // returns a live HttpStream read handle instead of a buffered
+        // response record.
+        if (call.args.len != 4) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const url_type = self.exprType(program, call.args[0], line, col) orelse return null;
+        const method_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        const body_type = self.exprType(program, call.args[2], line, col) orelse return null;
+        if (!types.same(.string, url_type) or !types.same(.string, method_type) or !types.same(.string, body_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const key_ty = self.arena.create(types.Type) catch return null;
+        key_ty.* = .string;
+        const val_ty = self.arena.create(types.Type) catch return null;
+        val_ty.* = .string;
+        const map_ty = self.arena.create(types.MapType) catch return null;
+        map_ty.* = .{ .key = key_ty, .value = val_ty };
+        const headers_type = self.exprType(program, call.args[3], line, col) orelse return null;
+        if (!types.same(.{ .map_type = map_ty }, headers_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_http_stream = true;
+        program.needs_map = true;
+        call.checked_type = .http_stream_type;
+        return .http_stream_type;
+    }
     if (std.mem.eql(u8, call.name, "createServer")) {
         if (call.args.len != 2) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
@@ -606,10 +638,38 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         }
         registerLumenHttpRequest(self) orelse return null;
         registerLumenHttpResponse(self) orelse return null;
-        const want = self.makeFuncType(&.{.{ .named = "__LumenHttpRequest" }}, .{ .named = "__LumenHttpResponse" }) orelse return null;
-        self.ensureAssignable(program, want, call.args[1], line, col) catch {
+        // Two accepted handler forms (spec 452): the handler's own arity
+        // selects the mode — one parameter returning a response record
+        // (buffered, the original form) or two parameters returning void
+        // (streaming, writing through a ResponseWriter). The chosen mode is
+        // recorded on the call so emission picks the matching connection
+        // loop. A handler matching neither form gets a diagnostic naming
+        // both accepted signatures rather than a bare type mismatch.
+        var arity: usize = 1;
+        if (call.args[1].* == .arrow) {
+            arity = call.args[1].arrow.params.len;
+        } else {
+            const handler_type = self.exprType(program, call.args[1], line, col) orelse return null;
+            if (handler_type == .func_type) arity = handler_type.func_type.params.len;
+        }
+        const req_t: types.Type = .{ .named = "__LumenHttpRequest" };
+        const want = if (arity == 2)
+            self.makeFuncType(&.{ req_t, .response_writer_type }, .void) orelse return null
+        else
+            self.makeFuncType(&.{req_t}, .{ .named = "__LumenHttpResponse" }) orelse return null;
+        const actual: ?types.Type = if (call.args[1].* == .arrow)
+            self.checkCbArg(program, call.args[1], want.func_type.params, line, col)
+        else
+            self.exprType(program, call.args[1], line, col);
+        const actual_type = actual orelse return null;
+        if (!types.same(want, actual_type)) {
+            _ = self.fail(line, col, "http.createServer handler must be `(req: HttpRequest) => HttpResponse` (buffered) or `(req: HttpRequest, res: ResponseWriter) => void` (streaming)") catch {};
             return null;
-        };
+        }
+        if (arity == 2) {
+            call.http_streaming = true;
+            program.needs_http_server_stream = true;
+        }
         program.uses_io = true;
         program.needs_http_module = true;
         program.needs_http_server = true;

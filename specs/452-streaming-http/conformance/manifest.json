@@ -1,0 +1,71 @@
+{
+  "feature": "452-streaming-http",
+  "cases": [
+    {
+      "id": "stream.valid.error-handle",
+      "source": "../examples/valid/stream-error-handle.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "-1\ntrue\n0\n0\nok\n"
+      }
+    },
+    {
+      "id": "stream.valid.client-methods",
+      "source": "../examples/valid/stream-client-methods.ts",
+      "phase": "static",
+      "expect": {}
+    },
+    {
+      "id": "stream.valid.server-streaming",
+      "source": "../examples/valid/stream-server.ts",
+      "phase": "static",
+      "expect": {}
+    },
+    {
+      "id": "stream.valid.both-forms",
+      "source": "../examples/valid/both-forms.ts",
+      "phase": "static",
+      "expect": {}
+    },
+    {
+      "id": "stream.invalid.handler-two-params-returns-response",
+      "source": "../examples/invalid/handler-two-params-returns-response.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "handler must be"
+      }
+    },
+    {
+      "id": "stream.invalid.handler-one-param-void",
+      "source": "../examples/invalid/handler-one-param-void.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "handler must be"
+      }
+    },
+    {
+      "id": "stream.invalid.arg-count",
+      "source": "../examples/invalid/stream-arg-count.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "wrong number of arguments"
+      }
+    },
+    {
+      "id": "stream.invalid.unknown-method",
+      "source": "../examples/invalid/stream-unknown-method.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "type mismatch"
+      }
+    },
+    {
+      "id": "stream.invalid.write-bad-arg",
+      "source": "../examples/invalid/writer-write-bad-arg.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "type mismatch"
+      }
+    }
+  ]
+}

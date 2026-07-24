@@ -59,6 +59,147 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\
         );
     }
+    if (program.needs_http_stream) {
+        // http.stream (spec 452): a live read handle over a response in
+        // progress. Uses the lower-level open-request/send/receive-head flow
+        // beneath fetch — the flow the buffered client's own comment (above)
+        // maps out — because the whole point is to hand back a handle before
+        // the body exists. The response body reader decodes chunked
+        // transfer-encoding transparently (confirmed against std's
+        // http.Reader.bodyReader: the `.chunked` arm installs a
+        // chunk-decoding stream), so readLine() yields protocol lines, never
+        // chunk frames. The handle owns the client (and with it the
+        // connection + TLS state) for the stream's lifetime; close() and
+        // natural exhaustion both release it. Any open/connect/TLS failure
+        // degrades to a handle with status -1 and done() true — the same
+        // "fallback, don't crash" convention as the buffered client's
+        // status -1.
+        //
+        // Compressed content-encodings are declined (Accept-Encoding:
+        // identity): a token stream must arrive as wire bytes, and SSE
+        // providers all honor identity.
+        //
+        // v1 limits (documented, accepted, same as ChildProcess.readLine):
+        // a single line longer than the 64KB transfer buffer ends the
+        // stream; the handle is single-consumer.
+        try out.appendSlice(arena,
+            \\pub const LumenHttpStream = struct {
+            \\    client: ?*std.http.Client = null,
+            \\    req: ?*std.http.Client.Request = null,
+            \\    body: ?*std.Io.Reader = null,
+            \\    status_: i32 = -1,
+            \\    hdr_names: []const []const u8 = &.{},
+            \\    hdr_values: []const []const u8 = &.{},
+            \\    done_: bool = true,
+            \\    fn __fail() *LumenHttpStream {
+            \\        const p = __sa().create(LumenHttpStream) catch unreachable;
+            \\        p.* = .{};
+            \\        return p;
+            \\    }
+            \\    fn status(self: *LumenHttpStream) i32 {
+            \\        return self.status_;
+            \\    }
+            \\    fn header(self: *LumenHttpStream, name: []const u8) []const u8 {
+            \\        for (self.hdr_names, self.hdr_values) |n, v| {
+            \\            if (std.ascii.eqlIgnoreCase(n, name)) return v;
+            \\        }
+            \\        return "";
+            \\    }
+            \\    fn done(self: *LumenHttpStream) bool {
+            \\        return self.done_;
+            \\    }
+            \\    fn readLine(self: *LumenHttpStream) []const u8 {
+            \\        if (self.done_) return "";
+            \\        const r = self.body orelse {
+            \\            self.done_ = true;
+            \\            return "";
+            \\        };
+            \\        const raw = r.takeDelimiterInclusive('\n') catch |e| {
+            \\            if (e == error.EndOfStream) {
+            \\                // A final line without a terminator: hand it out now;
+            \\                // the next call sees a clean end of stream.
+            \\                const left = r.buffered();
+            \\                if (left.len > 0) {
+            \\                    const line = __sa().dupe(u8, std.mem.trimEnd(u8, left, "\r")) catch "";
+            \\                    r.toss(left.len);
+            \\                    return line;
+            \\                }
+            \\            }
+            \\            self.done_ = true;
+            \\            self.__release();
+            \\            return "";
+            \\        };
+            \\        return __sa().dupe(u8, std.mem.trimEnd(u8, raw, "\r\n")) catch "";
+            \\    }
+            \\    fn close(self: *LumenHttpStream) void {
+            \\        self.done_ = true;
+            \\        self.__release();
+            \\    }
+            \\    fn __release(self: *LumenHttpStream) void {
+            \\        self.body = null;
+            \\        // Request.deinit marks a mid-body connection as closing;
+            \\        // Client.deinit then tears down every connection it still
+            \\        // owns, including TLS state — both the early-close and the
+            \\        // exhausted path release everything, no per-stream leak.
+            \\        if (self.req) |rq| {
+            \\            rq.deinit();
+            \\            self.req = null;
+            \\        }
+            \\        if (self.client) |c| {
+            \\            c.deinit();
+            \\            self.client = null;
+            \\        }
+            \\    }
+            \\};
+            \\fn __httpStreamOpen(io: std.Io, alloc: std.mem.Allocator, url: []const u8, method: []const u8, body: []const u8, headers: *LumenMap([]const u8, []const u8)) anyerror!*LumenHttpStream {
+            \\    const uri = try std.Uri.parse(url);
+            \\    const client = __sa().create(std.http.Client) catch unreachable;
+            \\    client.* = .{ .allocator = alloc, .io = io };
+            \\    errdefer client.deinit();
+            \\    const extra_headers = __sa().alloc(std.http.Header, headers.keys_.items.len) catch unreachable;
+            \\    for (headers.keys_.items, headers.values_.items, 0..) |k, v, i| extra_headers[i] = .{ .name = k, .value = v };
+            \\    const http_method = std.meta.stringToEnum(std.http.Method, method) orelse .GET;
+            \\    const req = __sa().create(std.http.Client.Request) catch unreachable;
+            \\    req.* = try client.request(http_method, uri, .{
+            \\        .extra_headers = extra_headers,
+            \\        .headers = .{ .accept_encoding = .{ .override = "identity" } },
+            \\        .redirect_behavior = if (body.len == 0) @enumFromInt(3) else .unhandled,
+            \\    });
+            \\    errdefer req.deinit();
+            \\    if (body.len > 0) {
+            \\        req.transfer_encoding = .{ .content_length = body.len };
+            \\        var bw = try req.sendBodyUnflushed(&.{});
+            \\        try bw.writer.writeAll(body);
+            \\        try bw.end();
+            \\        try req.connection.?.flush();
+            \\    } else {
+            \\        try req.sendBodiless();
+            \\    }
+            \\    const redirect_buffer = __sa().alloc(u8, 8 * 1024) catch unreachable;
+            \\    var response = try req.receiveHead(redirect_buffer);
+            \\    const p = __sa().create(LumenHttpStream) catch unreachable;
+            \\    p.* = .{ .client = client, .req = req, .status_ = @intFromEnum(response.head.status), .done_ = false };
+            \\    // Copy the header names/values out NOW: initializing the body
+            \\    // reader below invalidates the head's backing memory.
+            \\    var names: std.ArrayListUnmanaged([]const u8) = .empty;
+            \\    var values: std.ArrayListUnmanaged([]const u8) = .empty;
+            \\    var hit = std.http.HeaderIterator.init(response.head.bytes);
+            \\    while (hit.next()) |h| {
+            \\        names.append(__sa(), __sa().dupe(u8, h.name) catch unreachable) catch unreachable;
+            \\        values.append(__sa(), __sa().dupe(u8, h.value) catch unreachable) catch unreachable;
+            \\    }
+            \\    p.hdr_names = names.items;
+            \\    p.hdr_values = values.items;
+            \\    const tbuf = __sa().alloc(u8, 65536) catch unreachable;
+            \\    p.body = response.reader(tbuf);
+            \\    return p;
+            \\}
+            \\fn __httpStream(io: std.Io, alloc: std.mem.Allocator, url: []const u8, method: []const u8, body: []const u8, headers: *LumenMap([]const u8, []const u8)) *LumenHttpStream {
+            \\    return __httpStreamOpen(io, alloc, url, method, body, headers) catch LumenHttpStream.__fail();
+            \\}
+            \\
+        );
+    }
     if (program.needs_http_server) {
         // http.createServer (spec 042 Phase 2, concurrency in spec 049): a
         // real request-inspecting server, superseding the old canned-response
@@ -79,6 +220,59 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\pub const __LumenHttpRequest = struct { method: []const u8, path: []const u8, body: []const u8 };
             \\
         );
+        if (program.needs_http_server_stream) {
+            // ResponseWriter (spec 452): the write handle a two-parameter
+            // streaming handler receives. Every write() frames one chunk and
+            // flushes it to the socket immediately — immediate delivery is
+            // the entire point of the streaming form; buffering until end()
+            // would rebuild exactly the bug this exists to fix. writeHead()
+            // is once-only (later calls are no-ops); a write() or end()
+            // before any writeHead() implies writeHead(200, {}).
+            try out.appendSlice(arena,
+                \\pub const LumenResponseWriter = struct {
+                \\    w: *std.Io.Writer,
+                \\    keep_alive: bool,
+                \\    head_sent: bool = false,
+                \\    ended: bool = false,
+                \\    fn __head(self: *LumenResponseWriter, status: i32, headers: ?*LumenMap([]const u8, []const u8)) void {
+                \\        if (self.head_sent) return;
+                \\        self.head_sent = true;
+                \\        const conn_header: []const u8 = if (self.keep_alive) "keep-alive" else "close";
+                \\        self.w.print("HTTP/1.1 {d} OK\r\nTransfer-Encoding: chunked\r\nConnection: {s}\r\n", .{ status, conn_header }) catch return;
+                \\        if (headers) |hm| {
+                \\            for (hm.keys_.items, hm.values_.items) |hk, hv| {
+                \\                self.w.print("{s}: {s}\r\n", .{ hk, hv }) catch return;
+                \\            }
+                \\        }
+                \\        self.w.writeAll("\r\n") catch return;
+                \\        self.w.flush() catch {};
+                \\    }
+                \\    fn writeHead(self: *LumenResponseWriter, status: i32, headers: *LumenMap([]const u8, []const u8)) void {
+                \\        if (self.ended) return;
+                \\        self.__head(status, headers);
+                \\    }
+                \\    fn write(self: *LumenResponseWriter, chunk: []const u8) void {
+                \\        if (self.ended) return;
+                \\        if (!self.head_sent) self.__head(200, null);
+                \\        // A zero-length frame would be the stream terminator on
+                \\        // the wire — an empty write is a no-op instead.
+                \\        if (chunk.len == 0) return;
+                \\        self.w.print("{x}\r\n", .{chunk.len}) catch return;
+                \\        self.w.writeAll(chunk) catch return;
+                \\        self.w.writeAll("\r\n") catch return;
+                \\        self.w.flush() catch {};
+                \\    }
+                \\    fn end(self: *LumenResponseWriter) void {
+                \\        if (self.ended) return;
+                \\        if (!self.head_sent) self.__head(200, null);
+                \\        self.ended = true;
+                \\        self.w.writeAll("0\r\n\r\n") catch return;
+                \\        self.w.flush() catch {};
+                \\    }
+                \\};
+                \\
+            );
+        }
         if (needs_http_threadpool) {
             // Concurrent serving (spec 049): the accept loop used to handle
             // one connection fully (through keep-alive, to disconnect)
@@ -211,6 +405,106 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\}
                 \\
             );
+            if (program.needs_http_server_stream) {
+                // Streaming sibling of the loop above (spec 452): identical
+                // accept/parse/keep-alive structure, but instead of writing
+                // one buffered response after the handler returns, the
+                // handler drives the wire itself through a ResponseWriter.
+                // The buffered loop above stays byte-for-byte untouched; a
+                // program using both forms gets both loops (each server call
+                // is noreturn, so only one ever runs per process — the
+                // streaming variant still gets its own pool variable to keep
+                // the two definitions independent).
+                //
+                // Same documented trade-off as the buffered pool: a handler
+                // that blocks on a slow upstream stream (the proxy shape)
+                // occupies one worker for the stream's duration — the pool
+                // is sized for I/O concurrency, not CPU count, exactly for
+                // this.
+                try out.appendSlice(arena,
+                    \\var __http_stream_pool: xev.ThreadPool = undefined;
+                    \\fn __httpCreateServerStream(io: std.Io, alloc: std.mem.Allocator, port: i32, handler: anytype) noreturn {
+                    \\    _ = alloc;
+                    \\    const addr = std.Io.net.IpAddress.parse("0.0.0.0", @intCast(port)) catch std.process.exit(1);
+                    \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
+                    \\    const __http_cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
+                    \\    __http_stream_pool = xev.ThreadPool.init(.{
+                    \\        .max_threads = @max(256, __http_cpus * 32),
+                    \\        .stack_size = 512 * 1024,
+                    \\    });
+                    \\    const Handler = @TypeOf(handler);
+                    \\    const Conn = struct {
+                    \\        task: xev.ThreadPool.Task = .{ .callback = run },
+                    \\        io: std.Io,
+                    \\        stream: std.Io.net.Stream,
+                    \\        handler: Handler,
+                    \\        fn run(t: *xev.ThreadPool.Task) void {
+                    \\            const self: *@This() = @fieldParentPtr("task", t);
+                    \\            defer std.heap.page_allocator.destroy(self);
+                    \\            const io2 = self.io;
+                    \\            const stream = self.stream;
+                    \\            defer stream.close(io2);
+                    \\            var read_buf: [16 * 1024]u8 = undefined;
+                    \\            var reader = stream.reader(io2, &read_buf);
+                    \\            const r = &reader.interface;
+                    \\            var write_buf: [16 * 1024]u8 = undefined;
+                    \\            var writer = stream.writer(io2, &write_buf);
+                    \\            const w = &writer.interface;
+                    \\            var conn_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+                    \\            defer conn_arena.deinit();
+                    \\            const carena = conn_arena.allocator();
+                    \\            conn: while (true) {
+                    \\                _ = conn_arena.reset(.retain_capacity);
+                    \\                const first = r.takeDelimiterInclusive('\n') catch break :conn;
+                    \\                const line = std.mem.trimEnd(u8, first, "\r\n");
+                    \\                var it = std.mem.tokenizeScalar(u8, line, ' ');
+                    \\                const method = it.next() orelse break :conn;
+                    \\                const path = it.next() orelse break :conn;
+                    \\                var content_length: usize = 0;
+                    \\                var keep_alive = true;
+                    \\                while (true) {
+                    \\                    const raw = r.takeDelimiterInclusive('\n') catch break;
+                    \\                    const h = std.mem.trimEnd(u8, raw, "\r\n");
+                    \\                    if (h.len == 0) break;
+                    \\                    const colon = std.mem.indexOfScalar(u8, h, ':') orelse continue;
+                    \\                    const name = std.mem.trim(u8, h[0..colon], " \t");
+                    \\                    const value = std.mem.trim(u8, h[colon + 1 ..], " \t");
+                    \\                    if (std.ascii.eqlIgnoreCase(name, "content-length")) {
+                    \\                        content_length = std.fmt.parseInt(usize, value, 10) catch 0;
+                    \\                    } else if (std.ascii.eqlIgnoreCase(name, "connection") and std.ascii.eqlIgnoreCase(value, "close")) {
+                    \\                        keep_alive = false;
+                    \\                    }
+                    \\                }
+                    \\                const body = carena.alloc(u8, content_length) catch break :conn;
+                    \\                r.readSliceAll(body) catch break :conn;
+                    \\                const req: __LumenHttpRequest = .{
+                    \\                    .method = carena.dupe(u8, method) catch break :conn,
+                    \\                    .path = carena.dupe(u8, path) catch break :conn,
+                    \\                    .body = body,
+                    \\                };
+                    \\                var rw: LumenResponseWriter = .{ .w = w, .keep_alive = keep_alive };
+                    \\                self.handler.call(self.handler.ctx, req, &rw);
+                    \\                // A handler that returns without end() gets it
+                    \\                // called implicitly — a hung client is a bug,
+                    \\                // not a possible outcome.
+                    \\                if (!rw.ended) rw.end();
+                    \\                if (!keep_alive) break :conn;
+                    \\            }
+                    \\        }
+                    \\    };
+                    \\    while (true) {
+                    \\        const stream = server.accept(io) catch continue;
+                    \\        const conn = std.heap.page_allocator.create(Conn) catch {
+                    \\            stream.close(io);
+                    \\            continue;
+                    \\        };
+                    \\        conn.* = .{ .io = io, .stream = stream, .handler = handler };
+                    \\        __http_stream_pool.schedule(xev.ThreadPool.Batch.from(&conn.task));
+                    \\    }
+                    \\}
+                    \\
+                );
+            }
         } else {
             // wasm32-wasi: no real OS threads, and the CLI's own libxev-
             // wiring gate hard-fails any wasm build that references
@@ -279,6 +573,68 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\}
                 \\
             );
+            if (program.needs_http_server_stream) {
+                // Streaming sibling for the single-threaded wasm fallback
+                // loop (spec 452): the streaming form needs no threads at
+                // all — the handler runs synchronously and its writes are
+                // framed and flushed straight to the socket — so wasm gets
+                // the same semantics as the thread-pool build, never a
+                // silent buffer.
+                try out.appendSlice(arena,
+                    \\fn __httpCreateServerStream(io: std.Io, alloc: std.mem.Allocator, port: i32, handler: anytype) noreturn {
+                    \\    _ = alloc;
+                    \\    const addr = std.Io.net.IpAddress.parse("0.0.0.0", @intCast(port)) catch std.process.exit(1);
+                    \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
+                    \\    while (true) {
+                    \\        const stream = server.accept(io) catch continue;
+                    \\        defer stream.close(io);
+                    \\        var read_buf: [16 * 1024]u8 = undefined;
+                    \\        var reader = stream.reader(io, &read_buf);
+                    \\        const r = &reader.interface;
+                    \\        var write_buf: [16 * 1024]u8 = undefined;
+                    \\        var writer = stream.writer(io, &write_buf);
+                    \\        const w = &writer.interface;
+                    \\        conn: while (true) {
+                    \\            var conn_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+                    \\            defer conn_arena.deinit();
+                    \\            const carena = conn_arena.allocator();
+                    \\            const first = r.takeDelimiterInclusive('\n') catch break :conn;
+                    \\            const line = std.mem.trimEnd(u8, first, "\r\n");
+                    \\            var it = std.mem.tokenizeScalar(u8, line, ' ');
+                    \\            const method = it.next() orelse break :conn;
+                    \\            const path = it.next() orelse break :conn;
+                    \\            var content_length: usize = 0;
+                    \\            var keep_alive = true;
+                    \\            while (true) {
+                    \\                const raw = r.takeDelimiterInclusive('\n') catch break;
+                    \\                const h = std.mem.trimEnd(u8, raw, "\r\n");
+                    \\                if (h.len == 0) break;
+                    \\                const colon = std.mem.indexOfScalar(u8, h, ':') orelse continue;
+                    \\                const name = std.mem.trim(u8, h[0..colon], " \t");
+                    \\                const value = std.mem.trim(u8, h[colon + 1 ..], " \t");
+                    \\                if (std.ascii.eqlIgnoreCase(name, "content-length")) {
+                    \\                    content_length = std.fmt.parseInt(usize, value, 10) catch 0;
+                    \\                } else if (std.ascii.eqlIgnoreCase(name, "connection") and std.ascii.eqlIgnoreCase(value, "close")) {
+                    \\                    keep_alive = false;
+                    \\                }
+                    \\            }
+                    \\            const body = carena.alloc(u8, content_length) catch break :conn;
+                    \\            r.readSliceAll(body) catch break :conn;
+                    \\            const req: __LumenHttpRequest = .{
+                    \\                .method = carena.dupe(u8, method) catch break :conn,
+                    \\                .path = carena.dupe(u8, path) catch break :conn,
+                    \\                .body = body,
+                    \\            };
+                    \\            var rw: LumenResponseWriter = .{ .w = w, .keep_alive = keep_alive };
+                    \\            handler.call(handler.ctx, req, &rw);
+                    \\            if (!rw.ended) rw.end();
+                    \\            if (!keep_alive) break :conn;
+                    \\        }
+                    \\    }
+                    \\}
+                    \\
+                );
+            }
         }
     }
     if (program.needs_net) {
