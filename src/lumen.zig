@@ -1846,6 +1846,23 @@ fn reportBackendFailure(err: *std.Io.Writer, ts_source: []const u8, ts_path: []c
                 }
                 ts_line = lv;
                 ts_col = cv;
+            } else if (std.mem.indexOf(u8, zl, "// __lumen_decl ")) |mark2| {
+                // A declaration marker. Emitted as a comment because a
+                // signature error has no statement to attach to, and a runtime
+                // assignment cannot appear at declaration scope.
+                var q = mark2 + "// __lumen_decl ".len;
+                var lv: u32 = 0;
+                while (q < zl.len and zl[q] >= '0' and zl[q] <= '9') : (q += 1) lv = lv * 10 + (zl[q] - '0');
+                var cv: u32 = 1;
+                if (q < zl.len and zl[q] == ' ') {
+                    q += 1;
+                    cv = 0;
+                    while (q < zl.len and zl[q] >= '0' and zl[q] <= '9') : (q += 1) cv = cv * 10 + (zl[q] - '0');
+                }
+                if (lv > 0) {
+                    ts_line = lv;
+                    ts_col = cv;
+                }
             }
         }
         if (ts_line > 0) {
