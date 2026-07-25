@@ -48,6 +48,9 @@ In scope:
 
 - `embed("relative/or/absolute/path")` in expression position, producing a
   `string`.
+- `embedDir("relative/or/absolute/path")` in expression position, producing an
+  array of `{ name: string, text: string }` — one entry per regular file
+  directly in that directory, sorted by name so a build is reproducible.
 - The path is resolved against the source file that wrote it, not the working
   directory — the same rule `@link` follows, so a package that ships SQL beside
   its source works wherever it is compiled from.
@@ -60,8 +63,14 @@ In scope:
 Out of scope:
 
 - Embedding as anything but a string — no byte arrays, no typed parsing.
-- Globbing or embedding a directory. One call, one file, so what a program
-  contains is readable from the program.
+- Globbing, or filtering by extension. `embedDir` takes every regular file
+  directly in the directory; a directory holding things a program should not
+  embed is the wrong directory to point at.
+- Recursion into subdirectories. One level, so what a program contains stays
+  readable from the program.
+- Any interpretation of the file names. `embedDir` reports what it found;
+  deciding that `V1__create_agents.sql` means version 1 is the caller's
+  business, not the compiler's.
 - A size limit beyond the compiler's existing one for source files.
 - Caching: the file is read once per compile, which is already once.
 
@@ -79,7 +88,28 @@ This is deliberately the least invasive option. `embed` is not a function —
 there is nothing to call at run time — so giving it a signature the checker
 must special-case would model it as something it is not.
 
-### D2 — the path
+### D2 — a directory
+
+`embedDir` is the same substitution producing an array literal:
+
+```ts
+let files = embedDir("./sql");
+// [{ name: "V1__create_teams.sql", text: "CREATE TABLE ..." }, ...]
+```
+
+Entries are sorted by name, so two builds of unchanged sources produce the
+same program. Subdirectories and anything that is not a regular file are
+skipped rather than reported, since a directory is pointed at for what it
+holds, not for what it does not.
+
+An empty or missing directory is an error, for the same reason a missing file
+is: it is a build that will not do what it was written to do.
+
+`name` is the file's own name, without any path. What it means — a version, an
+order, a description — is the caller's to decide. The compiler does not know
+what `V1__create_agents.sql` is.
+
+### D3 — the path
 
 Resolved against the directory of the file whose source wrote the call, as
 `@link` is (`resolveLinkPath`). An absolute path is used as-is.
@@ -89,7 +119,7 @@ call, which is the flaw the pragma scanners have and get away with because
 `// @link` only appears at the start of a line. Here the scan tracks string
 and comment state.
 
-### D3 — errors
+### D4 — errors
 
 - `embed(name)` where the argument is not a string literal: *the path must be
   a literal — the file is read while compiling, so there is nothing to
@@ -111,8 +141,11 @@ the line map already gives.
 6. A non-literal argument is a compile error saying why.
 7. The compiled binary does not open the embedded file at run time.
 8. `zig build test` passes; `zig build conformance` adds no new failures.
-9. std-contrib: a plume migration plan whose SQL comes from `.sql` files, with
-   its tests passing against a live database.
+9. `embedDir` on a directory of three files yields three entries, sorted, each
+   with its own contents.
+10. std-contrib: a plume migration plan built by pointing at a directory, with
+    version and description read from each file name, and its tests passing
+    against a live database.
 
 ## Notes
 
