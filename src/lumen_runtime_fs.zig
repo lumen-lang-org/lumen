@@ -572,7 +572,24 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         // (Lumen has none yet), and are sequential (advance the OS file
         // position), matching Node's positionless readSync/writeSync.
         try out.appendSlice(arena,
+            \\// Open files, shared by every thread. A handler calling openSync from
+            \\// an HTTP worker appends here while another reads items[fd], and an
+            \\// append that grows the list frees the array the reader is holding.
+            \\//
+            \\// The lock covers the table, not the I/O: a File is a small handle,
+            \\// so it is copied out under the lock and read or written outside it.
+            \\// Holding the lock across a blocking read would serialise every file
+            \\// operation in the process to fix a problem that is only about the
+            \\// list's backing memory.
             \\var __fd_table: std.ArrayListUnmanaged(std.Io.File) = .empty;
+            \\var __fd_lock: std.Io.Mutex = .init;
+            \\fn __fdAt(io: std.Io, fd: i32) ?std.Io.File {
+            \\    if (fd < 0) return null;
+            \\    __fd_lock.lockUncancelable(io);
+            \\    defer __fd_lock.unlock(io);
+            \\    if (@as(usize, @intCast(fd)) >= __fd_table.items.len) return null;
+            \\    return __fd_table.items[@intCast(fd)];
+            \\}
             \\fn __openSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8, flags: []const u8) i32 {
             \\    const file = if (std.mem.eql(u8, flags, "w"))
             \\        std.Io.Dir.cwd().createFile(io, path, .{}) catch return -1
@@ -588,22 +605,25 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\        break :blk f;
             \\    } else
             \\        std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_only }) catch return -1;
+            \\    __fd_lock.lockUncancelable(io);
+            \\    defer __fd_lock.unlock(io);
             \\    __fd_table.append(alloc, file) catch return -1;
             \\    return @intCast(__fd_table.items.len - 1);
             \\}
             \\fn __closeSync(io: std.Io, fd: i32) void {
-            \\    if (fd < 0 or @as(usize, @intCast(fd)) >= __fd_table.items.len) return;
-            \\    __fd_table.items[@intCast(fd)].close(io);
+            \\    var file = __fdAt(io, fd) orelse return;
+            \\    file.close(io);
             \\}
             \\fn __readSync(io: std.Io, alloc: std.mem.Allocator, fd: i32, len: i32) []const u8 {
-            \\    if (fd < 0 or @as(usize, @intCast(fd)) >= __fd_table.items.len or len <= 0) return "";
+            \\    if (len <= 0) return "";
+            \\    var file = __fdAt(io, fd) orelse return "";
             \\    const buf = alloc.alloc(u8, @intCast(len)) catch return "";
-            \\    const n = __fd_table.items[@intCast(fd)].readStreaming(io, &.{buf}) catch return "";
+            \\    const n = file.readStreaming(io, &.{buf}) catch return "";
             \\    return buf[0..n];
             \\}
             \\fn __writeSync(io: std.Io, fd: i32, data: []const u8) i32 {
-            \\    if (fd < 0 or @as(usize, @intCast(fd)) >= __fd_table.items.len) return 0;
-            \\    __fd_table.items[@intCast(fd)].writeStreamingAll(io, data) catch return 0;
+            \\    var file = __fdAt(io, fd) orelse return 0;
+            \\    file.writeStreamingAll(io, data) catch return 0;
             \\    return @intCast(data.len);
             \\}
             \\
