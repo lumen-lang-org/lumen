@@ -47,7 +47,8 @@ type Agent = {
 };
 ```
 
-`@entity` is not known to the compiler. It resolves to a program that reads:
+`@entity` is not known to the compiler. It is an imported function, and it
+receives:
 
 ```json
 {
@@ -75,19 +76,22 @@ Anyone can write one. The compiler knows the syntax and the protocol, never the
 vocabulary — there is no built-in `@entity`, `@tool` or `@route`, and adding
 one requires no compiler change.
 
-## Why a subprocess
+## Why the compiler builds and runs it
 
-The compiler has no interpreter — that path was deliberately dropped, and the
-generated Zig is the product. So user code can only run at compile time if it
-is first compiled to a binary and then executed. That is staged compilation,
-and `child_process.spawn` (spec 450) already provides the mechanism.
+There is no interpreter — that path was deliberately dropped, and the generated
+Zig is the product. So user code can only run at compile time if it is compiled
+first. That is staged compilation, and the compiler is already the thing that
+compiles: resolving a decorator is recursion into its own entry point, not new
+machinery.
 
-It also keeps the protocol honest: JSON in, source out, over a pipe. A
-decorator is an ordinary program that can be run and tested by hand, without
-the compiler in the loop:
+The decorator itself stays an ordinary function of an ordinary type, so it is
+tested by calling it:
 
-```sh
-echo '{"kind":"type","name":"Agent",...}' | ./entity
+```ts
+test("entity maps a field to its column", () => {
+  let out = entity(descriptionFixture());
+  expect(out.indexOf("field(\"agentName\", \"agent_name\", \"text\")") >= 0);
+});
 ```
 
 ## Scope
@@ -99,7 +103,8 @@ In scope:
 - Arguments limited to literals: strings, integers, floats, booleans. Not
   expressions — a decorator argument is metadata, not code.
 - A declaration description as JSON, versioned, covering the shapes above.
-- Resolution of a decorator name to an executable.
+- Resolution of a decorator name through an ordinary import, and compilation
+  of the module it names.
 - Splicing returned source into the program before checking.
 - A decorator that fails — non-zero exit, unparseable output, or output that
   does not compile — reports as a located error at the decorator's own line.
@@ -135,7 +140,8 @@ decorator to read.
 
 ### D2 — the description
 
-One JSON document per decorated declaration, on the program's stdin:
+`Description` is a type the compiler provides, mirroring the JSON it also
+writes for `lumen describe`:
 
 ```
 { "protocol": 1,
@@ -158,20 +164,47 @@ the program is incomplete until generation finishes.
 
 ### D3 — resolution
 
-A decorator name resolves to an executable through a manifest beside the
-program, `lumen.decorators.json`:
+A decorator is an exported function, imported like anything else:
 
-```json
-{ "entity": "./tools/entity", "tool": "./tools/tool" }
+```ts
+import { entity } from "./tools/entity.ts";
+
+@entity("agents")
+type Agent = { ... };
 ```
 
-A name with no entry is an error naming the manifest. Paths are relative to the
-manifest, and are executables — building them is the project's business, the
-same way `// @link ./shim.o` expects an object file to exist.
+There is no manifest and no separate build step. The compiler resolves `@entity`
+to the imported binding, finds the module it came from, compiles that module,
+and runs it.
 
-The manifest is deliberately explicit rather than a search path: a compiler
-that runs programs found by convention is a compiler that runs programs you did
-not mean to run.
+The exported function has a fixed shape, which the checker enforces:
+
+```ts
+export function entity(d: Description): string
+```
+
+`Description` is a type the compiler provides. A function in decorator position
+with any other signature is an error naming the expected one.
+
+This makes a decorator a pure function of its description, which has three
+consequences worth the design:
+
+- It is unit-testable with `lumen test`, by calling it — no compiler, no pipes,
+  no fixtures on disk.
+- It cannot read files, make requests, or exit; a decorator that wants to do
+  those things is writing a build step, not a decorator.
+- Nothing needs stdin, which the standard library does not offer today.
+
+The module is compiled standalone rather than inlined into the importing
+program: a decorator import contributes the binding and nothing else, so a
+decorator's helpers do not land in the namespace of every program that uses it.
+The compiler generates the entry point that reads the description, calls the
+function, and prints what it returns.
+
+A cycle — a decorator module that imports, directly or otherwise, the file it
+decorates — is an error naming both files. Left alone it would be an infinite
+regress: the file cannot be compiled until the decorator runs, and the
+decorator cannot be compiled until the file is.
 
 ### D4 — splicing
 
@@ -229,22 +262,26 @@ decorators cost nothing on an unchanged rebuild.
   *generate*, check, emit — and every later feature has to consider it. The
   scope above is deliberately the minimum that is useful: no AST rewriting, no
   hygiene, no macro-defining-macros.
-- **Bootstrapping.** A decorator is a Lumen program, so building a project that
-  uses decorators means building its decorators first. This spec does not solve
-  build ordering; the manifest points at an executable and expects it to exist.
-  A project with a decorator that must itself be compiled needs two passes, by
-  hand, until something builds them.
+- **The compiler compiles during compilation.** Resolving a decorator means
+  building its module, which is recursion into the compiler's own entry point.
+  That is not new machinery, but it is new control flow: a failure inside it
+  must report as a failure of the decorator, and a cycle must be caught rather
+  than recursing until the stack ends.
 - **Error attribution is the whole battle.** D5's third case decides whether
   people use this or route around it. It needs the generated source retained
   and addressable, which the diagnostic machinery does not do today — it maps
   lines back to user files through `g_line_map`, and generated code has no user
   file to map to.
-- **A decorator can do anything a program can.** It runs at compile time with
-  the compiler's privileges: read files, make requests, write anywhere. That is
-  true of every macro system, and the manifest at least makes what runs
-  explicit rather than implicit.
-- **Compile time.** Each decorator is a process spawn. The cache makes the
-  steady state free, but a cold build pays per decorated declaration.
+- **A decorator runs at compile time, with whatever the language allows.**
+  Constraining it to a pure `(Description) => string` keeps it from reading
+  files or making requests by construction, rather than by policy — the
+  signature has nowhere to put a side effect. That is a stronger guarantee than
+  most macro systems offer, and it is free.
+- **Compile time.** Each decorator means compiling a module and running it. The
+  cache makes the steady state free, but a cold build pays a full compile per
+  decorator module — the cost the manifest-and-prebuilt-binary alternative was
+  trading against, and the reason the cache is in the first useful slice rather
+  than a later one.
 
 ## Notes
 

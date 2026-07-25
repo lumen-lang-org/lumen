@@ -20,14 +20,17 @@ feature is only useful after the third.
 
 ## Slice 2 — running one
 
-- [ ] Read `lumen.decorators.json` beside the entry file; a missing manifest is
-      only an error when a decorator is used.
-- [ ] Resolve a name to an executable; an unknown name reports the manifest
-      path and the missing key.
-- [ ] Spawn the executable, write the description to its stdin, read source
-      from its stdout, capture stderr.
-- [ ] Non-zero exit fails the compile at the decorator's line with the
-      program's stderr.
+- [ ] Resolve `@name` to an imported binding; a name that is not imported is an
+      error saying so at the decorator's line.
+- [ ] Check the bound function's signature is `(Description) => string`, and
+      name the expected shape when it is not.
+- [ ] Compile the decorator's module standalone, with a generated entry point
+      that reads the description, calls the function and prints the result.
+- [ ] Detect a cycle — a decorator module reaching the file it decorates — and
+      report both files rather than recursing.
+- [ ] Run the built binary, capture stdout as source and stderr as diagnostics.
+- [ ] A decorator whose own module fails to compile reports as a failure of the
+      decorator, naming it, not as a failure of the file being compiled.
 - [ ] Append the output to the declaring file's source before parsing, in
       source order across several decorators.
 - [ ] Run decorators for `check`, `compile`, `test` and `watch` alike.
@@ -53,20 +56,22 @@ feature is only useful after the third.
 - [ ] A decorator that exits non-zero fails with its stderr, at its own line.
 - [ ] Output that does not parse fails, attributed to the decorator.
 - [ ] Output that does not check fails, attributed to the decorator.
-- [ ] An unknown name names the manifest and the key.
+- [ ] An unimported decorator name reports at its own line.
+- [ ] A decorator function with the wrong signature names the expected one.
+- [ ] A decorator module that imports the decorated file reports a cycle.
 - [ ] A non-literal argument is refused with the specific message.
 - [ ] Nothing changed: the second compile spawns no decorator.
 - [ ] The binary changed: the next compile does spawn it.
-- [ ] A decorated program with no manifest, and no decorator used elsewhere,
-      still compiles.
+- [ ] A decorator is unit-tested by calling it directly under `lumen test`,
+      with no compiler involvement.
 
 ## Gates
 
 - [ ] `zig build` and `zig build test` pass.
 - [ ] One clean `zig build conformance` run: no new failures against the
       193 passed / 50 failed baseline.
-- [ ] An undecorated program compiles byte-identically to before, and pays
-      nothing: no manifest read, no spawn.
+- [ ] An undecorated program compiles byte-identically to before and pays
+      nothing: no resolution, no build, no run.
 - [ ] New examples land as conformance cases with a manifest wired into
       `build.zig`.
 
@@ -87,6 +92,6 @@ feature is only useful after the third.
 - [ ] Hygiene. Generated names live in the flat namespace and collide through
       the ordinary duplicate diagnostic.
 - [ ] Decorators that build other decorators, or any staging beyond one level.
-- [ ] Build ordering for the decorator binaries themselves. The manifest points
-      at an executable and expects it to exist, as `// @link` does for an
-      object file.
+- [ ] Decorators with side effects. The signature is a pure
+      `(Description) => string`; anything wanting the filesystem or the network
+      is a build step, not a decorator.
