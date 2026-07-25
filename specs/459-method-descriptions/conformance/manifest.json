@@ -1,0 +1,19 @@
+{
+  "feature": "459-method-descriptions",
+  "cases": [
+    {
+      "id": "methods.valid.decorated-methods-reach-the-decorator",
+      "source": "../examples/valid/decorated-methods.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "/agents 3\nget /:id find(id:string@param(the id)) -> string\npost / create(name:string,count:int) -> int\nnone  ping() -> string\n/agents/7 pong"
+      }
+    },
+    {
+      "id": "methods.valid.class-without-methods-describes-an-empty-array",
+      "source": "../examples/valid/class-without-methods.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "/plain 0" }
+    }
+  ]
+}

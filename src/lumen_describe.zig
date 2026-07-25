@@ -108,13 +108,37 @@ fn writeClass(out: *std.Io.Writer, file: []const u8, c: ast.ClassDecl, d: ast.De
         try writeDecorators(out, f.decorators);
         try out.writeByte('}');
     }
+    // A method is described exactly as a decorated free function is (spec 459),
+    // so a class decorator that turns methods into routes reads one shape, not
+    // two. Always present, empty for a class with no methods.
+    try out.writeAll("],\"methods\":[");
+    for (c.methods, 0..) |m, i| {
+        if (i > 0) try out.writeByte(',');
+        try out.writeAll("{\"name\":");
+        try writeString(out, m.name);
+        try out.writeAll(",\"returns\":");
+        try writeReturns(out, m);
+        try out.writeAll(",\"params\":");
+        try writeParams(out, m.params);
+        try out.writeAll(",\"decorators\":");
+        try writeDecorators(out, m.decorators);
+        try out.writeByte('}');
+    }
     try out.writeAll("]}\n");
 }
 
 fn writeFunction(out: *std.Io.Writer, file: []const u8, f: ast.FunctionDecl, d: ast.Decorator) !void {
     try writeHead(out, "function", f.name, file, f.line, d);
-    try out.writeAll(",\"params\":[");
-    for (f.params, 0..) |p, i| {
+    try out.writeAll(",\"params\":");
+    try writeParams(out, f.params);
+    try out.writeAll(",\"returns\":");
+    try writeReturns(out, f);
+    try out.writeAll("}\n");
+}
+
+fn writeParams(out: *std.Io.Writer, params: []const ast.FunctionParam) !void {
+    try out.writeByte('[');
+    for (params, 0..) |p, i| {
         if (i > 0) try out.writeByte(',');
         try out.writeAll("{\"name\":");
         try writeString(out, p.name);
@@ -124,11 +148,13 @@ fn writeFunction(out: *std.Io.Writer, file: []const u8, f: ast.FunctionDecl, d: 
         try writeDecorators(out, p.decorators);
         try out.writeByte('}');
     }
-    try out.writeAll("],\"returns\":");
-    // An omitted return type is inferred from the body, which has not been
-    // checked here — the description reports what the source says, so nothing.
+    try out.writeByte(']');
+}
+
+/// An omitted return type is inferred from the body, which has not been checked
+/// here — the description reports what the source says, so nothing.
+fn writeReturns(out: *std.Io.Writer, f: ast.FunctionDecl) !void {
     try writeString(out, if (f.infer_return) "" else f.return_annotation);
-    try out.writeAll("}\n");
 }
 
 fn writeHead(out: *std.Io.Writer, kind: []const u8, name: []const u8, file: []const u8, line: u32, d: ast.Decorator) !void {
@@ -250,7 +276,29 @@ test "a decorated class describes its fields and their decorators (spec 455)" {
     var diag: diag_mod.Diag = .{};
     try describeSource(arena, src, "agent.ts", &out.writer, &diag);
     try std.testing.expectEqualStrings(
-        \\{"protocol":1,"kind":"class","name":"Agent","args":["agents",2,true],"file":"agent.ts","line":4,"fields":[{"name":"id","type":"string","decorators":[{"name":"id","args":[]},{"name":"column","args":["id","text"]}]},{"name":"agentName","type":"string","decorators":[{"name":"column","args":["agent_name","text"]}]},{"name":"steps","type":"int[]","decorators":[]}]}
+        \\{"protocol":1,"kind":"class","name":"Agent","args":["agents",2,true],"file":"agent.ts","line":4,"fields":[{"name":"id","type":"string","decorators":[{"name":"id","args":[]},{"name":"column","args":["id","text"]}]},{"name":"agentName","type":"string","decorators":[{"name":"column","args":["agent_name","text"]}]},{"name":"steps","type":"int[]","decorators":[]}],"methods":[]}
+        \\
+    , out.written());
+}
+
+test "a decorated class describes its methods, their params and decorators (spec 459)" {
+    var buf: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer buf.deinit();
+    const arena = buf.allocator();
+    const src =
+        \\@controller("/agents")
+        \\class AgentApi {
+        \\  @get("/:id")
+        \\  find(@param("the id") id: string): string { return id; }
+        \\  count(): int { return 1; }
+        \\}
+        \\
+    ;
+    var out: std.Io.Writer.Allocating = .init(arena);
+    var diag: diag_mod.Diag = .{};
+    try describeSource(arena, src, "api.ts", &out.writer, &diag);
+    try std.testing.expectEqualStrings(
+        \\{"protocol":1,"kind":"class","name":"AgentApi","args":["/agents"],"file":"api.ts","line":2,"fields":[],"methods":[{"name":"find","returns":"string","params":[{"name":"id","type":"string","decorators":[{"name":"param","args":["the id"]}]}],"decorators":[{"name":"get","args":["/:id"]}]},{"name":"count","returns":"int","params":[],"decorators":[]}]}
         \\
     , out.written());
 }

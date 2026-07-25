@@ -56,7 +56,7 @@ CompileOptions:130, CompileError:146, Diag:147, LineOrigin:148, compileToZig:254
 Running a decorator (spec 455 slice 2): the protocol, without the plumbing.
 Failure:24, Generated:34, Signature:40, description_type:47, signature:53, entrySource:136, constantName:152, literal:162
 
-## src/lumen_describe.zig (332 lines)
+## src/lumen_describe.zig (380 lines)
 `lumen describe <file.ts>` -- the decorator description protocol (spec 455).
 protocol:18, Application:24, collect:34, parseAlone:76, describeSource:85
 
@@ -269,3 +269,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 447-template-mixed-ternary 448-map-from-map 449-module-level-bindings-in-tests 
 450-persistent-subprocess 451-exported-types-and-module-scoped-imports 452-streaming-http 
 453-ref-for-value-types 455-decorators 456-json-for-classes 457-prelude-parameter-collisions 
+459-method-descriptions 
