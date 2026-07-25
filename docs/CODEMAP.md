@@ -48,9 +48,9 @@ fsCallType:18, pathCallType:855, processCallType:1010, osCallType:1274, readline
 Statement and function/class-body type-checking.
 declareExtern:43, checkBlock:108, checkFunctionBody:123, checkClass:191, checkMemberAssign:296, assignField:360, blockBreaksOut:374, blockReturns:433, stmtReturns:440, firstReturnExpr:472, checkVarDecl:506, checkStmt:549
 
-## src/lumen_compiler.zig (951 lines)
+## src/lumen_compiler.zig (969 lines)
 TypeScript-syntax -> Zig -> native compiler seed.
-CompileOptions:130, CompileError:146, Diag:147, LineOrigin:148, compileToZig:254, compileToZigWithOptions:258
+CompileOptions:137, CompileError:153, Diag:154, LineOrigin:155, compileToZig:261, compileToZigWithOptions:265
 
 ## src/lumen_decorator.zig (508 lines)
 Running a decorator (spec 455 slice 2): the protocol, without the plumbing.
@@ -270,4 +270,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 450-persistent-subprocess 451-exported-types-and-module-scoped-imports 452-streaming-http 
 453-ref-for-value-types 455-decorators 456-json-for-classes 457-prelude-parameter-collisions 
 458-embed-file 459-http-request-headers 459-method-descriptions 461-parameter-shadowing 
-464-generated-temporaries 465-builtin-name-collisions 467-crypto-aead 
+464-generated-temporaries 465-builtin-name-collisions 467-crypto-aead 468-thread-safe-arena 

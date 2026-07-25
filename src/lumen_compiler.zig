@@ -31,6 +31,13 @@ const std = @import("std");
 const REGEX_RT = @embedFile("regex_rt.zig");
 
 // JS-semantics parseInt/parseFloat, emitted into every program's prelude.
+//
+// `__rng_state`/`__rng_ready` at the end of this block are `threadlocal` for the
+// reason spec 468 gives: a generator's state belongs to the stream drawing from
+// it, and two HTTP handlers on two pool threads calling `Math.random()` at once
+// would otherwise interleave their reads and writes of one Xoshiro state -- and
+// race the lazy-init flag, so both could seed it. Per-thread is also the better
+// seed: the anchor is a stack address, and each thread's stack is its own.
 const PARSE_RT =
     \\fn __parseInt(__s: []const u8, __radix_in: i32) ?i32 {
     \\    var __i: usize = 0;
@@ -110,8 +117,8 @@ const PARSE_RT =
     \\    }
     \\    return __b.items;
     \\}
-    \\var __rng_state: std.Random.DefaultPrng = undefined;
-    \\var __rng_ready: bool = false;
+    \\threadlocal var __rng_state: std.Random.DefaultPrng = undefined;
+    \\threadlocal var __rng_ready: bool = false;
     \\fn __mathRandom() f64 {
     \\    if (!__rng_ready) {
     \\        var __anchor: u8 = 0;
@@ -480,15 +487,26 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         };
 
         try out.print(arena, "const __lumen_file = \"{s}\";\n", .{safe_name});
-        try out.appendSlice(arena, "var __lumen_line: u32 = 0;\nvar __lumen_col: u32 = 0;\nvar __lumen_throwing: bool = false;\nvar __lumen_color: bool = false;\nvar __lumen_err_msg: []const u8 = \"\";\n");
+        // Where execution is, what is being thrown, and why: all of it belongs to
+        // one call stack, and a program with an `http.createServer` has as many
+        // call stacks as the connection pool has worker threads (spec 468). Kept
+        // process-global, two handlers running at once interleave their writes to
+        // these: one handler's `throw` is read by another's `catch`, and the two
+        // depth counters collide badly enough to underflow `__lumen_depth` and
+        // abort the whole server. `threadlocal` is the honest description of what
+        // this state is -- per call stack, not per process -- and costs a
+        // register-offset load rather than a lock. `__lumen_color` stays global:
+        // `main` writes it once before any thread exists and nothing writes it
+        // again, so every thread wants the same answer.
+        try out.appendSlice(arena, "threadlocal var __lumen_line: u32 = 0;\nthreadlocal var __lumen_col: u32 = 0;\nthreadlocal var __lumen_throwing: bool = false;\nvar __lumen_color: bool = false;\nthreadlocal var __lumen_err_msg: []const u8 = \"\";\n");
         // Call-stack frames for runtime stack traces. Each user function pushes a
         // frame on entry (recording its name and the caller's statement position,
         // i.e. the call site) and pops on exit. Depth keeps counting past the
         // fixed capacity so a deep recursion still reports its true depth.
         try out.appendSlice(arena,
             \\const __LumenFrame = struct { name: []const u8, line: u32, col: u32 };
-            \\var __lumen_stack: [128]__LumenFrame = undefined;
-            \\var __lumen_depth: usize = 0;
+            \\threadlocal var __lumen_stack: [128]__LumenFrame = undefined;
+            \\threadlocal var __lumen_depth: usize = 0;
             \\fn __lumenPush(name: []const u8) void {
             \\    if (__lumen_depth < __lumen_stack.len) __lumen_stack[__lumen_depth] = .{ .name = name, .line = __lumen_line, .col = __lumen_col };
             \\    __lumen_depth += 1;
