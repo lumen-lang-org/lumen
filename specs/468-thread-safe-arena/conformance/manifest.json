@@ -1,0 +1,29 @@
+{
+  "feature": "468-thread-safe-arena",
+  "cases": [
+    {
+      "id": "threads.valid.worker-error-isolation",
+      "source": "../examples/valid/worker-error-isolation.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "20000\n20000\n20000\n20000" }
+    },
+    {
+      "id": "threads.valid.worker-unwind-depth",
+      "source": "../examples/valid/worker-unwind-depth.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "8000\n8000\n8000\n8000" }
+    },
+    {
+      "id": "threads.valid.worker-random-independent",
+      "source": "../examples/valid/worker-random-independent.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "5000\n5000\n5000\n5000" }
+    },
+    {
+      "id": "threads.valid.single-thread-unchanged",
+      "source": "../examples/valid/single-thread-unchanged.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "outer[middle(inner:one)]\nouter[middle(inner:two)]\nafter-unwind:floor\nlast:inner:last\ntrue" }
+    }
+  ]
+}

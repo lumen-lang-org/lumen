@@ -300,6 +300,11 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_467.addArg("specs/467-crypto-aead/conformance/manifest.json");
     conformance_cmd_467.addArg("zig-out/bin/lumen");
 
+    const conformance_cmd_468 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_468.step.dependOn(b.getInstallStep());
+    conformance_cmd_468.addArg("specs/468-thread-safe-arena/conformance/manifest.json");
+    conformance_cmd_468.addArg("zig-out/bin/lumen");
+
     const conformance_step = b.step("conformance", "Run Lumen manifest conformance cases");
     conformance_step.dependOn(&conformance_cmd.step);
     conformance_step.dependOn(&conformance_cmd_010.step);
@@ -339,4 +344,5 @@ pub fn build(b: *std.Build) void {
     conformance_step.dependOn(&conformance_cmd_458.step);
     conformance_step.dependOn(&conformance_cmd_464.step);
     conformance_step.dependOn(&conformance_cmd_467.step);
+    conformance_step.dependOn(&conformance_cmd_468.step);
 }
