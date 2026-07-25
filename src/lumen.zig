@@ -1476,16 +1476,37 @@ fn fetchLibxev(arena: std.mem.Allocator, io: std.Io) ![]const u8 {
 }
 
 /// Links from each `// @link <lib>` pragma line in the source.
+///
+/// A relative path is resolved against the file that wrote the pragma, not the
+/// working directory: a package that ships `@link ./shim.o` beside its source
+/// links the same object however deep in the tree the program compiling it
+/// happens to sit. `g_line_map` supplies the origin, since import inlining has
+/// already merged every module into one text by this point.
 fn collectLinkLibs(arena: std.mem.Allocator, source: []const u8, argv: *std.ArrayListUnmanaged([]const u8)) !void {
     const marker = "// @link ";
     var lines = std.mem.splitScalar(u8, source, '\n');
+    var line_no: u32 = 0;
     while (lines.next()) |line| {
+        line_no += 1;
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (!std.mem.startsWith(u8, trimmed, marker)) continue;
         const lib = std.mem.trim(u8, trimmed[marker.len..], " \t");
         if (lib.len == 0) continue;
-        try appendLink(arena, argv, lib);
+        try appendLink(arena, argv, try resolveLinkPath(arena, lib, line_no));
     }
+}
+
+/// A `@link` token as the linker should see it. A bare library name and an
+/// absolute path pass through; a relative path is joined to the directory of
+/// the source file that declared it.
+fn resolveLinkPath(arena: std.mem.Allocator, token: []const u8, line_no: u32) ![]const u8 {
+    if (token.len == 0 or token[0] == '/') return token;
+    if (std.mem.indexOfScalar(u8, token, '/') == null) return token;
+    if (line_no == 0 or line_no - 1 >= g_line_map.len) return token;
+    const origin = g_line_map[line_no - 1].file;
+    const dir = std.fs.path.dirname(origin) orelse return token;
+    if (dir.len == 0) return token;
+    return try std.fs.path.join(arena, &.{ dir, token });
 }
 
 /// Writes the lowercase hex SHA-256 of `bytes` into `out`, returning the slice.
