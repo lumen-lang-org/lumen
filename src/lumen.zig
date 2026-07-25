@@ -652,6 +652,11 @@ fn setImportLoc(file: []const u8, line: u32) void {
 }
 
 /// Display form of a module path: no `././` stacking.
+const TypeOwner = struct {
+    key: []const u8,
+    path: []const u8,
+};
+
 fn displayPath(path: []const u8) []const u8 {
     var p = path;
     while (std.mem.startsWith(u8, p, "./")) p = p[2..];
@@ -763,6 +768,20 @@ fn scanTopLevelDecls(arena: std.mem.Allocator, source: []const u8, out: *std.Arr
 /// A local path resolves to an absolute path; a URL keeps its path
 /// case-sensitive but has its scheme and host lowercased, a default `:443`
 /// dropped, empty/`.`/`..` segments resolved and any trailing `/` removed.
+/// A module's identity, for deciding whether two imports name the same module.
+///
+/// Not the path: `resolve` collapses `.` and `..` but leaves a relative path
+/// relative, so a package's index reached as `../pkg/index.ts` from one
+/// importer and as `index.ts` from another keys two different ways and the
+/// module is inlined twice — which surfaces as every type in it being
+/// "declared by both". The file's own inode settles it, and a URL is already
+/// canonical.
+fn moduleIdentity(arena: std.mem.Allocator, io: std.Io, key: []const u8, is_url: bool) []const u8 {
+    if (is_url) return key;
+    const st = std.Io.Dir.cwd().statFile(io, key, .{}) catch return key;
+    return std.fmt.allocPrint(arena, "inode:{d}", .{st.inode}) catch key;
+}
+
 fn canonicalModuleKey(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
     const scheme = "https://";
     if (!std.mem.startsWith(u8, path, scheme) and !std.mem.startsWith(u8, path, "HTTPS://"))
@@ -806,7 +825,11 @@ const Expander = struct {
     /// Value identifier in the flat program -> key of the module that declared it.
     taken: std.StringHashMapUnmanaged([]const u8) = .empty,
     /// Type name in the flat program -> path of the module that declared it.
-    type_owners: std.StringHashMapUnmanaged([]const u8) = .empty,
+    /// Which module declares each type name. Keyed by type name, holding the
+    /// declaring module's canonical key alongside the path to show, because
+    /// the same file reached two ways has two paths and one key — comparing
+    /// paths would report a module as conflicting with itself.
+    type_owners: std.StringHashMapUnmanaged(TypeOwner) = .empty,
     mangle_seq: u32 = 0,
 
     fn claimed(self: *Expander, name: []const u8) bool {
@@ -844,18 +867,19 @@ fn appendExpandedSource(
     if (depth > 16) return error.InvalidImport;
     const is_url = std.mem.startsWith(u8, path, "https://");
     const key = try canonicalModuleKey(arena, path);
-    if (exp.visiting.get(key) != null) {
+    const id = moduleIdentity(arena, io, key, is_url);
+    if (exp.visiting.get(id) != null) {
         setImportDetail(arena, "import cycle through '{s}'", .{displayPath(path)});
         return error.ImportCycle;
     }
-    if (exp.emitted.get(key)) |info| {
+    if (exp.emitted.get(id)) |info| {
         // The module is already inlined, but a fresh importer may still request
         // named bindings: validate them against what the module exports.
         try validateNamedImport(arena, io, is_url, path, key, import_kind);
         return info;
     }
-    try exp.visiting.put(arena, key, {});
-    defer _ = exp.visiting.remove(key);
+    try exp.visiting.put(arena, id, {});
+    defer _ = exp.visiting.remove(id);
 
     const source = if (is_url)
         fetchUrl(arena, io, path) catch {
@@ -913,16 +937,16 @@ fn appendExpandedSource(
         } else if (d.kind == .type_name) {
             // Two modules declaring the same type name is a real conflict, and
             // the flat program cannot hold both. Name them (spec 451 D3).
-            if (exp.type_owners.get(d.name)) |owner| if (!std.mem.eql(u8, owner, path)) {
-                setImportDetail(arena, "type '{s}' is declared by both {s} and {s}", .{ d.name, displayPath(owner), displayPath(path) });
+            if (exp.type_owners.get(d.name)) |owner| if (!std.mem.eql(u8, owner.key, id)) {
+                setImportDetail(arena, "type '{s}' is declared by both {s} and {s}", .{ d.name, displayPath(owner.path), displayPath(path) });
                 setImportLoc(path, d.line);
                 return error.DuplicateTypeName;
             };
         }
         try physical.put(arena, d.name, name);
         switch (d.kind) {
-            .value => if (exp.taken.get(name) == null) try exp.taken.put(arena, name, key),
-            .type_name => if (exp.type_owners.get(name) == null) try exp.type_owners.put(arena, name, path),
+            .value => if (exp.taken.get(name) == null) try exp.taken.put(arena, name, id),
+            .type_name => if (exp.type_owners.get(name) == null) try exp.type_owners.put(arena, name, .{ .key = id, .path = path }),
         }
         if (d.exported) try info.exports.put(arena, d.name, name);
         if (d.is_default) default_physical = name;
@@ -1089,7 +1113,7 @@ fn appendExpandedSource(
         try appendTransformed(arena, out, line, file_namespaces.items, renames.items);
         try out.append(arena, '\n');
     }
-    try exp.emitted.put(arena, key, info);
+    try exp.emitted.put(arena, id, info);
     return info;
 }
 
@@ -1127,7 +1151,7 @@ fn collectWatchPaths(
     while (lines.next()) |line| {
         const import_spec = (parseImportSpec(arena, line) catch continue) orelse continue;
         if (std.mem.startsWith(u8, import_spec.spec, "https://")) continue;
-        const child = std.fs.path.join(arena, &.{ dir, import_spec.spec }) catch continue;
+        const child = std.fs.path.join(arena, &.{ dir, import_spec.spec } ) catch continue;
         collectWatchPaths(arena, io, child, set, depth + 1);
     }
 }
