@@ -479,6 +479,14 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         try out.appendSlice(arena, "var __environ: std.process.Environ = .empty;\n");
     }
 
+    // `throw` and `catch` are built out of these two, so they are declared
+    // whenever a program can throw — not alongside the line and column, which
+    // exist only to make a message readable. Gating them on
+    // `runtime_locations` meant `--release-fast` could not compile any program
+    // that throws: the emitter still wrote `__lumen_throwing = true` and
+    // nothing had declared it.
+    try out.appendSlice(arena, "threadlocal var __lumen_throwing: bool = false;\nthreadlocal var __lumen_err_msg: []const u8 = \"\";\n");
+
     if (options.runtime_locations) {
         // Sanitize the filename for a Zig string literal (backslashes/quotes break it).
         const safe_name = try arena.dupe(u8, filename);
@@ -498,7 +506,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         // register-offset load rather than a lock. `__lumen_color` stays global:
         // `main` writes it once before any thread exists and nothing writes it
         // again, so every thread wants the same answer.
-        try out.appendSlice(arena, "threadlocal var __lumen_line: u32 = 0;\nthreadlocal var __lumen_col: u32 = 0;\nthreadlocal var __lumen_throwing: bool = false;\nvar __lumen_color: bool = false;\nthreadlocal var __lumen_err_msg: []const u8 = \"\";\n");
+        try out.appendSlice(arena, "threadlocal var __lumen_line: u32 = 0;\nthreadlocal var __lumen_col: u32 = 0;\nvar __lumen_color: bool = false;\n");
         // Call-stack frames for runtime stack traces. Each user function pushes a
         // frame on entry (recording its name and the caller's statement position,
         // i.e. the call site) and pops on exit. Depth keeps counting past the
