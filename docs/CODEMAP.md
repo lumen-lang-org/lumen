@@ -8,13 +8,13 @@ Format: one section per file: role (from its //! header), then
 Lumen compiler CLI: TypeScript syntax -> generated Zig -> native binary.
 main:2365
 
-## src/lumen_ast.zig (683 lines)
+## src/lumen_ast.zig (689 lines)
 The Abstract Syntax Tree -- the data structure shared by the parser, the
-FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:39, TypeField:46, EnumValue:59, EnumMember:61, EnumDecl:67, TypeDecl:75, FunctionParam:107, ExternDecl:137, ClassDecl:146, MemberAssign:168, Accessor:181, FunctionDecl:183, VarDecl:212, UsingDecl:238, DestructBinding:254, DestructureDecl:264, Assign:275, ConsoleLog:293, WhileStmt:303, DoWhileStmt:311, ForStmt:319, ForOfStmt:333, ForInStmt:356, IfStmt:368, SwitchCase:376, SwitchStmt:383, ExprStmt:396, ReturnStmt:402, ThrowStmt:409, TryStmt:415, ControlStmt:428, DeferStmt:436, TestDecl:442, SuperCtor:451, StaticCall:458, Stmt:476, BlockStmt:509, Program:515, Expr:611, FieldBuiltin:650, Capture:660, ArrowExpr:664, TemplatePart:679
+FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:39, TypeField:46, EnumValue:59, EnumMember:61, EnumDecl:67, TypeDecl:75, FunctionParam:107, ExternDecl:143, ClassDecl:152, MemberAssign:174, Accessor:187, FunctionDecl:189, VarDecl:218, UsingDecl:244, DestructBinding:260, DestructureDecl:270, Assign:281, ConsoleLog:299, WhileStmt:309, DoWhileStmt:317, ForStmt:325, ForOfStmt:339, ForInStmt:362, IfStmt:374, SwitchCase:382, SwitchStmt:389, ExprStmt:402, ReturnStmt:408, ThrowStmt:415, TryStmt:421, ControlStmt:434, DeferStmt:442, TestDecl:448, SuperCtor:457, StaticCall:464, Stmt:482, BlockStmt:515, Program:521, Expr:617, FieldBuiltin:656, Capture:666, ArrowExpr:670, TemplatePart:685
 
-## src/lumen_check.zig (1889 lines)
+## src/lumen_check.zig (1893 lines)
 The type checker -- stage 3, between parsing and codegen.
-classImplements:73, Checker:135, refInner:1841, isAddressable:1853, isCSafe:1861, findField:1868, checkProgram:1875
+classImplements:73, Checker:135, refInner:1845, isAddressable:1857, isCSafe:1865, findField:1872, checkProgram:1879
 
 ## src/lumen_check_assign.zig (381 lines)
 Assignability and cast checking: "can a value of type X be used where Y is
@@ -24,9 +24,9 @@ ensureAssignable:19, castAllowed:370
 Class member resolution: field/method/accessor lookup across the
 classField:27, resolveField:34, resolveStaticField:46, resolveMethod:60, resolveStaticMethod:72, resolveAccessor:84, isSubclassOf:97, checkVisibility:109, visibilityOk:125
 
-## src/lumen_check_expr.zig (2399 lines)
+## src/lumen_check_expr.zig (2403 lines)
 Expression type-checking -- `exprType` is the heart of the checker: given
-checkCbArg:30, wrapStringify:40, wrapFloat:87, exprType:95, fieldType:2378
+checkCbArg:30, wrapStringify:40, wrapFloat:87, exprType:95, fieldType:2382
 
 ## src/lumen_check_generics.zig (740 lines)
 Generic function/class/type-alias specialization (monomorphization).
@@ -36,9 +36,9 @@ isGenericTemplateStmt:31, appendStmt:41, isIdentChar:50, substAnnotation:57, ann
 Type-checking for stdlib *instance* methods: methods called on a value of
 cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:869, responseWriterMethod:923, bufferMethod:976, numberInstanceMethod:1033, stringMethod:1113, hashMethod:1265, hmacMethod:1294
 
-## src/lumen_check_stdlib.zig (1430 lines)
+## src/lumen_check_stdlib.zig (1435 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
-staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:203, zlibCallType:385, urlCallType:413, assertCallType:478, dateCallType:519, timeCallType:534, httpCallType:549, netCallType:727, jsonCallType:774, jsonSerializable:853, registerLumenHttpResponse:866, registerLumenHttpRequest:888, promiseCallType:909, mathCallType:981, stringCallType:1233, arrayCallType:1297
+staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:203, zlibCallType:385, urlCallType:413, assertCallType:478, dateCallType:519, timeCallType:534, httpCallType:549, netCallType:727, jsonCallType:774, jsonSerializable:853, registerLumenHttpResponse:871, registerLumenHttpRequest:893, promiseCallType:914, mathCallType:986, stringCallType:1238, arrayCallType:1302
 
 ## src/lumen_check_stdlib_os.zig (1412 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
@@ -67,17 +67,17 @@ CompileError:1, Diag:7, LineOrigin:11
 Code generation -- the final stage: typed AST -> Zig source text.
 emitStmt:46, emitStmtWithThrow:47, SourceLoc:55, externZigName:57, emitFieldName:100, emitStrLit:108, emitExpr:135, CompileOptions:1311, g_program:1337, g_options:1342, g_from_char_code_seq:1346, g_number_tostring_seq:1349, g_number_toexp_seq:1352, g_global_pred_seq:1355, g_async_inner:1365, g_dest_acc:1371, g_cur_into_acc:1372, g_throw_target:1378, g_fn_can_error:1379, emitThrowingCallPrefix:1384, emitThrowingCallSuffix:1394, safeGlobalName:1408, findClass:1426, MODULE_INIT_FN:1474, emitProgram:1517
 
-## src/lumen_emit_analysis.zig (434 lines)
+## src/lumen_emit_analysis.zig (443 lines)
 Small static-analysis helpers used while emitting statements and class
-zigZeroValue:24, g_throwing_fns:42, g_method_arena:46, fnThrows:49, ctorThrows:56, methodThrows:66, exprCanThrow:75, stmtCanThrow:146, bodyCanThrow:201, stmtAlwaysThrows:209, bodyAlwaysThrows:217, stmtAlwaysReturns:225, bodyAlwaysReturns:233, exprUsesThis:239, stmtUsesThis:302, bodyUsesThis:336, emitUnusedParamDiscards:344, paramSigName:355, emitReassignedParamCopies:364, bodyReassignsBinding:375, printFormat:422
+zigZeroValue:24, g_throwing_fns:42, g_method_arena:46, fnThrows:49, ctorThrows:56, methodThrows:66, exprCanThrow:75, stmtCanThrow:146, bodyCanThrow:201, stmtAlwaysThrows:209, bodyAlwaysThrows:217, stmtAlwaysReturns:225, bodyAlwaysReturns:233, exprUsesThis:239, stmtUsesThis:302, bodyUsesThis:336, emitUnusedParamDiscards:344, paramName:356, paramSigName:364, emitReassignedParamCopies:373, bodyReassignsBinding:384, printFormat:431
 
 ## src/lumen_emit_array_string.zig (845 lines)
 Codegen for array and string instance methods (`.filter`, `.map`,
 emitElemEq:26, emitArrayMethod:131, emitStringMethod:515, emitTemplateText:817
 
-## src/lumen_emit_class.zig (483 lines)
+## src/lumen_emit_class.zig (514 lines)
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
-collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:286, emitSuperCopies:352, collectSuperInStmt:356, collectSuperInExpr:376, ifaceMethodThrows:430, emitIfaceDecl:443, emitClassVtables:461
+collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:317, emitSuperCopies:383, collectSuperInStmt:387, collectSuperInExpr:407, ifaceMethodThrows:461, emitIfaceDecl:474, emitClassVtables:492
 
 ## src/lumen_emit_static.zig (1107 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
@@ -269,4 +269,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 447-template-mixed-ternary 448-map-from-map 449-module-level-bindings-in-tests 
 450-persistent-subprocess 451-exported-types-and-module-scoped-imports 452-streaming-http 
 453-ref-for-value-types 455-decorators 456-json-for-classes 457-prelude-parameter-collisions 
-459-http-request-headers 459-method-descriptions 
+459-http-request-headers 459-method-descriptions 461-parameter-shadowing 

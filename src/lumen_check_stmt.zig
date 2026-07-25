@@ -162,7 +162,7 @@ pub fn checkFunctionBody(self: *Checker, program: *ast.Program, decl: *ast.Funct
     }
     try self.pushScope();
     defer self.popScope();
-    for (decl.params) |param| try self.declareParam(param, decl.line, decl.col);
+    for (decl.params) |*param| try self.declareParam(param, decl.line, decl.col);
     self.nested_stmt_depth += 1;
     defer self.nested_stmt_depth -= 1;
     warnUnreachable(self, decl.body);
@@ -271,7 +271,7 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
     if (c.has_ctor) {
         try self.pushScope();
         defer self.popScope();
-        for (c.ctor_params) |param| try self.declareParam(param, c.line, c.col);
+        for (c.ctor_params) |*param| try self.declareParam(param, c.line, c.col);
         self.nested_stmt_depth += 1;
         defer self.nested_stmt_depth -= 1;
         self.in_constructor = true;

@@ -1,0 +1,41 @@
+{
+  "feature": "461-parameter-shadowing",
+  "cases": [
+    {
+      "id": "paramshadow.valid.cross-package",
+      "source": "../examples/valid/cross-package-param-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "agents<-{\"id\":1}\n201 created\n200 fine" }
+    },
+    {
+      "id": "paramshadow.valid.same-file-function-class-type",
+      "source": "../examples/valid/same-file-param-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "6:7\n21" }
+    },
+    {
+      "id": "paramshadow.valid.reassigned-shadowing-param",
+      "source": "../examples/valid/reassigned-shadowing-param-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "7\n10" }
+    },
+    {
+      "id": "paramshadow.valid.ref-shadowing-param",
+      "source": "../examples/valid/ref-shadowing-param-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "3 10" }
+    },
+    {
+      "id": "paramshadow.valid.arrow-shadowing-param",
+      "source": "../examples/valid/arrow-shadowing-param-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "a!,b!\n[z]" }
+    },
+    {
+      "id": "paramshadow.valid.extern-shadowing-param",
+      "source": "../examples/valid/extern-shadowing-param-main.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "10" }
+    }
+  ]
+}

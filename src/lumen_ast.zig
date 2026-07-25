@@ -130,6 +130,12 @@ pub const FunctionParam = struct {
     // field `x` and assigns `this.x = x` at construction.
     is_property: bool = false,
     decorators: []Decorator = &.{},
+    // The identifier this parameter is emitted under, when it cannot be its own
+    // name: every module is inlined into one flat namespace and the generated
+    // code forbids a parameter shadowing a top-level declaration, so a parameter
+    // that happens to be spelled like a declaration elsewhere in the program is
+    // renamed for emission only (spec 461). Null means "emit as written".
+    emit_name: ?[]const u8 = null,
 };
 
 /// `extern function name(params): ret;` — an external C-ABI function. No body;

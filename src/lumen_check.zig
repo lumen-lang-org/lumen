@@ -259,6 +259,10 @@ pub const Checker = struct {
     subst_args: []const []const u8 = &.{},
     current_class: ?[]const u8 = null,
     in_constructor: bool = false,
+    // Set once every top-level declaration is registered. Parameter renaming
+    // (spec 461) needs the complete set of top-level names, so it stays off
+    // during the declaration passes themselves.
+    decls_ready: bool = false,
     next_binding_id: u32 = 0,
     current_return_type: ?types.Type = null,
     // True while checking a function whose return annotation was omitted but the
@@ -736,11 +740,12 @@ pub const Checker = struct {
         scope.put(self.arena, name, .{ .ty = ty, .mutable = decl.mutable, .decl = decl, .emit_name = emit_name }) catch return error.OutOfMemory;
     }
 
-    pub fn declareParam(self: *Checker, param: ast.FunctionParam, line: u32, col: u32) CompileError!void {
+    pub fn declareParam(self: *Checker, param: *ast.FunctionParam, line: u32, col: u32) CompileError!void {
         const scope = self.currentScope();
         if (scope.get(param.name) != null) return self.fail(line, col, "E_DUPLICATE_BINDING");
         const param_type = param.checked_type orelse try self.typeFromAnnotation(param.annotation, line, col);
-        scope.put(self.arena, param.name, .{ .ty = param_type, .mutable = true, .emit_name = param.name, .ref_scalar = param.ref_scalar, .is_ref = param.is_ref }) catch return error.OutOfMemory;
+        const emit_name = try self.paramEmitName(param);
+        scope.put(self.arena, param.name, .{ .ty = param_type, .mutable = true, .emit_name = emit_name, .ref_scalar = param.ref_scalar, .is_ref = param.is_ref }) catch return error.OutOfMemory;
     }
 
     pub fn declareCatch(self: *Checker, stmt: *ast.TryStmt) CompileError!void {
@@ -1271,47 +1276,38 @@ pub const Checker = struct {
         param.checked_type = try self.typeFromAnnotation(param.annotation, line, col);
     }
 
-    /// Rejects a parameter that reuses a top-level name.
-    ///
-    /// Every module is inlined into one flat namespace, and the generated code
-    /// disallows shadowing, so a parameter called `tool` in a program that also
-    /// declares `tool` at the top level cannot be emitted. Without this the
-    /// backend reports it — one collision per build, at a generated line, under
-    /// a message inviting a compiler bug report. Runs after every declaration
-    /// pass so a name declared later in the file still counts.
-    fn rejectShadowingParams(self: *Checker, program: *ast.Program) CompileError!void {
-        for (program.stmts) |*stmt| switch (stmt.*) {
-            .function_decl => |*f| {
-                for (f.params) |p| {
-                    if (self.topLevelDeclares(p.name)) {
-                        return self.fail(f.line, f.col, try std.fmt.allocPrint(self.arena, "the parameter '{s}' of {s} reuses a top-level name — every module shares one namespace, so a parameter cannot shadow a declaration [E_PARAM_SHADOWS]", .{ p.name, f.name }));
-                    }
-                }
-            },
-            .class_decl => |*c| {
-                for (c.ctor_params) |p| {
-                    if (self.topLevelDeclares(p.name)) {
-                        return self.fail(c.line, c.col, try std.fmt.allocPrint(self.arena, "the constructor parameter '{s}' of {s} reuses a top-level name — every module shares one namespace, so a parameter cannot shadow a declaration [E_PARAM_SHADOWS]", .{ p.name, c.name }));
-                    }
-                }
-                for (c.methods) |m| {
-                    for (m.params) |p| {
-                        if (self.topLevelDeclares(p.name)) {
-                            return self.fail(m.line, m.col, try std.fmt.allocPrint(self.arena, "the parameter '{s}' of {s}.{s} reuses a top-level name — every module shares one namespace, so a parameter cannot shadow a declaration [E_PARAM_SHADOWS]", .{ p.name, c.name, m.name }));
-                        }
-                    }
-                }
-            },
-            else => {},
-        };
+    /// Whether a top-level declaration claims this name. A record, interface or
+    /// union type counts: it lowers to a top-level struct declaration, so it
+    /// occupies the same generated namespace a function does.
+    pub fn topLevelDeclares(self: *Checker, name: []const u8) bool {
+        return self.funcs.get(name) != null or
+            self.generic_funcs.get(name) != null or
+            self.classes.get(name) != null or
+            self.generic_classes.get(name) != null or
+            self.type_decls.get(name) != null;
     }
 
-    /// Whether a top-level value declaration claims this name. Types are not
-    /// included: a type and a value live in separate namespaces in the
-    /// generated code, so a parameter may share a name with a type.
-    fn topLevelDeclares(self: *Checker, name: []const u8) bool {
-        return self.funcs.get(name) != null or
-            self.generic_funcs.get(name) != null;
+    /// The identifier a parameter is emitted under, assigned on first use.
+    ///
+    /// Two packages must be able to pick ordinary words independently: a library
+    /// taking a `json` parameter cannot know that some other module a program
+    /// also imports exports a `json()` function. Since every module is inlined
+    /// into one flat namespace and the generated code rejects a parameter that
+    /// shadows a top-level declaration, the collision is resolved by renaming
+    /// the parameter — invisibly, in the generated code alone. Body references
+    /// follow because they resolve through this binding's emit name (spec 461).
+    ///
+    /// Only assigned once the declaration passes have run, so a name declared
+    /// later in the program still counts; before that (return-type inference
+    /// during the declaration pass) a parameter binds under its own name and is
+    /// revisited when its body is checked.
+    pub fn paramEmitName(self: *Checker, param: *ast.FunctionParam) CompileError![]const u8 {
+        if (param.emit_name) |en| return en;
+        if (!self.decls_ready) return param.name;
+        if (!self.topLevelDeclares(param.name)) return param.name;
+        const en = try self.freshEmitName(param.name);
+        param.emit_name = en;
+        return en;
     }
 
     pub fn declareFunction(self: *Checker, program: ?*ast.Program, decl: *ast.FunctionDecl) CompileError!void {
@@ -1335,7 +1331,7 @@ pub const Checker = struct {
                 if (check_stmt.firstReturnExpr(decl.body)) |rexpr| {
                     try self.pushScope();
                     defer self.popScope();
-                    for (decl.params) |param| self.declareParam(param, decl.line, decl.col) catch {};
+                    for (decl.params) |*param| self.declareParam(param, decl.line, decl.col) catch {};
                     if (self.exprType(prog, rexpr, decl.line, decl.col)) |inferred| {
                         if (inferred != .void) return_type = inferred;
                     }
@@ -1712,7 +1708,15 @@ pub const Checker = struct {
                 try self.declareFunction(program, &stmt.function_decl);
             }
         }
-        try self.rejectShadowingParams(program);
+        self.decls_ready = true;
+        // An `extern function`'s parameters never enter a scope (there is no
+        // body to check), so their emit names are assigned here rather than in
+        // `declareParam`.
+        for (program.stmts) |*stmt| {
+            if (stmt.* == .extern_decl) {
+                for (stmt.extern_decl.params) |*param| _ = try self.paramEmitName(param);
+            }
+        }
         for (program.stmts) |*stmt| {
             if (self.isGenericTemplateStmt(stmt)) continue;
             self.checkStmt(program, stmt) catch |e| {
@@ -1791,7 +1795,7 @@ pub const Checker = struct {
                         defer self.current_class = prev_class;
                         try self.pushScope();
                         defer self.popScope();
-                        for (m.params) |param| self.declareParam(param, m.line, m.col) catch {};
+                        for (m.params) |*param| self.declareParam(param, m.line, m.col) catch {};
                         if (self.exprType(prog, rexpr, m.line, m.col)) |inferred| {
                             if (inferred != .void) ret = inferred;
                         }

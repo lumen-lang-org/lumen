@@ -12,6 +12,27 @@ Active product goal: TypeScript syntax -> generated Zig -> native binary.
 Do NOT add `Co-Authored-By:` trailers (or any AI/assistant attribution) to commit
 messages. Write plain commit messages with no co-author lines.
 
+## Fix the Cause, Not the Symptom
+
+When something fails, find what is actually wrong before changing anything. The
+first thing that makes the error go away is usually not it.
+
+- **Never work around a compiler limitation in user code.** If a std-contrib
+  package has to rename a parameter, restructure a type, or avoid a name
+  because the compiler cannot cope, that is a compiler bug. Fix the compiler.
+  A library author cannot know which names a future package will export.
+- **A better error message for a wrong rule is still the wrong rule.** Ask
+  whether the thing being reported should be an error at all before improving
+  how it is reported.
+- **Read the code to find the cause; run it to confirm.** Neither alone is
+  enough — a source reading can point at dead code, and a passing run can be
+  measuring a stale binary or someone else's build.
+- **Two packages that break each other by choosing ordinary names are not
+  misnamed.** The namespace is wrong.
+- **Do not migrate fixtures to make a suite pass.** If a format change breaks
+  every existing consumer, the change needs to be backward-compatible in the
+  compiler, and the untouched fixtures are the proof that it is.
+
 ## Project Direction
 
 This branch is no longer driven by Test262 or ECMAScript engine conformance.
