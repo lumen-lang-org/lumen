@@ -200,6 +200,27 @@ pub fn bufferCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
     return null;
 }
 
+/// AES-256's key length. Named here so the checker's diagnostic and the
+/// prelude's run-time check cannot drift apart.
+const aead_key_length = 32;
+
+/// Byte length of a string literal once its escapes are resolved.
+///
+/// `Expr.str` holds the raw source text between the quotes, so `"a\nb"` is
+/// four bytes there and three in the compiled program. The decoding must match
+/// `lumen_emit.emitStrLit` exactly — a backslash consumes the byte after it,
+/// whatever that byte is — or the checker would measure a different key than
+/// the one the program ends up holding.
+fn literalByteLen(raw: []const u8) usize {
+    var n: usize = 0;
+    var i: usize = 0;
+    while (i < raw.len) : (i += 1) {
+        if (raw[i] == '\\' and i + 1 < raw.len) i += 1;
+        n += 1;
+    }
+    return n;
+}
+
 pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
     if (std.mem.eql(u8, call.name, "randomBytes")) {
         if (call.args.len != 1) {
@@ -240,6 +261,48 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         // hex-encoded output, and __alloc's declaration is gated on uses_io.
         program.uses_io = true;
         program.needs_crypto_api = true;
+        call.checked_type = .string;
+        return .string;
+    }
+    if (std.mem.eql(u8, call.name, "randomKey")) {
+        if (call.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_crypto_api = true;
+        program.needs_aead = true;
+        call.checked_type = .string;
+        return .string;
+    }
+    if (std.mem.eql(u8, call.name, "encrypt") or std.mem.eql(u8, call.name, "decrypt")) {
+        if (call.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        for (call.args) |arg| {
+            self.ensureAssignable(program, .string, arg, line, col) catch return null;
+        }
+        // A literal key is the one case where the 32-byte requirement can be
+        // settled before the program runs, so settle it: a key of the wrong
+        // length is never a value the caller meant, and the run-time check
+        // that catches the non-literal cases only fires once that code path
+        // is actually exercised.
+        if (call.args[1].* == .str) {
+            const len = literalByteLen(call.args[1].str);
+            if (len != aead_key_length) {
+                const msg = std.fmt.allocPrint(
+                    self.arena,
+                    "crypto.{s} needs a {d}-byte key, got a {d}-byte string literal — generate one with `crypto.randomKey()` rather than padding or truncating this one",
+                    .{ call.name, aead_key_length, len },
+                ) catch "E_CRYPTO_KEY_LENGTH";
+                _ = self.fail(line, col, msg) catch {};
+                return null;
+            }
+        }
+        program.uses_io = true;
+        program.needs_crypto_api = true;
+        program.needs_aead = true;
         call.checked_type = .string;
         return .string;
     }

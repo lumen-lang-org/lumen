@@ -8,9 +8,9 @@ Format: one section per file: role (from its //! header), then
 Lumen compiler CLI: TypeScript syntax -> generated Zig -> native binary.
 main:2763
 
-## src/lumen_ast.zig (689 lines)
+## src/lumen_ast.zig (693 lines)
 The Abstract Syntax Tree -- the data structure shared by the parser, the
-FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:39, TypeField:46, EnumValue:59, EnumMember:61, EnumDecl:67, TypeDecl:75, FunctionParam:107, ExternDecl:143, ClassDecl:152, MemberAssign:174, Accessor:187, FunctionDecl:189, VarDecl:218, UsingDecl:244, DestructBinding:260, DestructureDecl:270, Assign:281, ConsoleLog:299, WhileStmt:309, DoWhileStmt:317, ForStmt:325, ForOfStmt:339, ForInStmt:362, IfStmt:374, SwitchCase:382, SwitchStmt:389, ExprStmt:402, ReturnStmt:408, ThrowStmt:415, TryStmt:421, ControlStmt:434, DeferStmt:442, TestDecl:448, SuperCtor:457, StaticCall:464, Stmt:482, BlockStmt:515, Program:521, Expr:617, FieldBuiltin:656, Capture:666, ArrowExpr:670, TemplatePart:685
+FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:39, TypeField:46, EnumValue:59, EnumMember:61, EnumDecl:67, TypeDecl:75, FunctionParam:107, ExternDecl:143, ClassDecl:152, MemberAssign:174, Accessor:187, FunctionDecl:189, VarDecl:218, UsingDecl:244, DestructBinding:260, DestructureDecl:270, Assign:281, ConsoleLog:299, WhileStmt:309, DoWhileStmt:317, ForStmt:325, ForOfStmt:339, ForInStmt:362, IfStmt:374, SwitchCase:382, SwitchStmt:389, ExprStmt:402, ReturnStmt:408, ThrowStmt:415, TryStmt:421, ControlStmt:434, DeferStmt:442, TestDecl:448, SuperCtor:457, StaticCall:464, Stmt:482, BlockStmt:515, Program:521, Expr:621, FieldBuiltin:660, Capture:670, ArrowExpr:674, TemplatePart:689
 
 ## src/lumen_check.zig (1893 lines)
 The type checker -- stage 3, between parsing and codegen.
@@ -36,9 +36,9 @@ isGenericTemplateStmt:31, appendStmt:41, isIdentChar:50, substAnnotation:57, ann
 Type-checking for stdlib *instance* methods: methods called on a value of
 cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:869, responseWriterMethod:923, bufferMethod:976, numberInstanceMethod:1033, stringMethod:1113, hashMethod:1265, hmacMethod:1294
 
-## src/lumen_check_stdlib.zig (1435 lines)
+## src/lumen_check_stdlib.zig (1498 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
-staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:203, zlibCallType:385, urlCallType:413, assertCallType:478, dateCallType:519, timeCallType:534, httpCallType:549, netCallType:727, jsonCallType:774, jsonSerializable:853, registerLumenHttpResponse:871, registerLumenHttpRequest:893, promiseCallType:914, mathCallType:986, stringCallType:1238, arrayCallType:1302
+staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:448, urlCallType:476, assertCallType:541, dateCallType:582, timeCallType:597, httpCallType:612, netCallType:790, jsonCallType:837, jsonSerializable:916, registerLumenHttpResponse:934, registerLumenHttpRequest:956, promiseCallType:977, mathCallType:1049, stringCallType:1301, arrayCallType:1365
 
 ## src/lumen_check_stdlib_os.zig (1412 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
@@ -79,7 +79,7 @@ emitElemEq:26, emitArrayMethod:75, emitStringMethod:455, emitTemplateText:762
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:317, emitSuperCopies:383, collectSuperInStmt:387, collectSuperInExpr:407, ifaceMethodThrows:461, emitIfaceDecl:474, emitClassVtables:492
 
-## src/lumen_emit_static.zig (1118 lines)
+## src/lumen_emit_static.zig (1132 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
 emitStaticCall:12
 
@@ -119,7 +119,7 @@ emitFsRuntime:14
 Runtime prelude codegen for the network surface: the `http` client
 emitNetRuntime:14
 
-## src/lumen_runtime_os.zig (948 lines)
+## src/lumen_runtime_os.zig (1019 lines)
 Runtime prelude codegen for stdio/process/OS surfaces: process
 emitStdioRuntime:14, emitOsCryptoRuntime:472
 
@@ -270,4 +270,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 450-persistent-subprocess 451-exported-types-and-module-scoped-imports 452-streaming-http 
 453-ref-for-value-types 455-decorators 456-json-for-classes 457-prelude-parameter-collisions 
 458-embed-file 459-http-request-headers 459-method-descriptions 461-parameter-shadowing 
-464-generated-temporaries 465-builtin-name-collisions 
+464-generated-temporaries 465-builtin-name-collisions 467-crypto-aead 

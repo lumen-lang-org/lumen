@@ -568,6 +568,10 @@ pub const Program = struct {
     needs_process_uptime: bool = false,
     needs_os_api: bool = false,
     needs_crypto_api: bool = false,
+    // crypto.encrypt/decrypt/randomKey (spec 467): string-in, string-out
+    // AES-256-GCM over a base64 envelope. Separate from needs_crypto_api so a
+    // program that only hashes does not carry the cipher.
+    needs_aead: bool = false,
     needs_url_api: bool = false,
     needs_zlib_api: bool = false,
     needs_child_process_api: bool = false,

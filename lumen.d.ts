@@ -29,6 +29,24 @@ declare const console: {
   error(...args: any[]): void;
 };
 
+// The `crypto` namespace. Only the string-in/string-out calls are declared
+// here; the Buffer-facing ones (`randomBytesBuffer`, `hmacSync`, `createHash`,
+// …) need a `Buffer` type this file does not yet describe.
+//
+// `encrypt` seals a string under a 32-byte `key` with AES-256-GCM and returns
+// a base64 envelope; `decrypt` opens one, returning `""` for any envelope this
+// key did not produce. `randomKey()` returns a key of the right length —
+// nothing else here produces one, and a key of any other length is rejected
+// rather than padded or truncated.
+declare const crypto: {
+  randomBytes(n: i32): string;
+  randomUUID(): string;
+  sha256(data: string): string;
+  randomKey(): string;
+  encrypt(plaintext: string, key: string): string;
+  decrypt(envelope: string, key: string): string;
+};
+
 // `using` resource management (TypeScript 5.2). A `using x = value;` declaration
 // disposes `value` at the end of the enclosing scope; multiple declarations
 // dispose in reverse (LIFO) order. The ESNext lib already defines `Disposable`

@@ -1,0 +1,47 @@
+{
+  "feature": "467-crypto-aead",
+  "cases": [
+    {
+      "id": "aead.valid.roundtrip",
+      "source": "../examples/valid/roundtrip.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "true\ntrue\ntrue\ntrue\n9" }
+    },
+    {
+      "id": "aead.valid.fresh-nonce",
+      "source": "../examples/valid/fresh-nonce.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "true\ntrue\ntrue\ntrue\ntrue\ntrue" }
+    },
+    {
+      "id": "aead.valid.tampered",
+      "source": "../examples/valid/tampered.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "true\ntrue\ntrue\ntrue" }
+    },
+    {
+      "id": "aead.valid.malformed",
+      "source": "../examples/valid/malformed.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "true\ntrue\ntrue\ntrue\ntrue" }
+    },
+    {
+      "id": "aead.valid.random-key",
+      "source": "../examples/valid/random-key.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "32\n32\ntrue\ntrue\ntrue" }
+    },
+    {
+      "id": "aead.invalid.short-key-literal",
+      "source": "../examples/invalid/short-key-literal.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "crypto.encrypt needs a 32-byte key, got a 9-byte string literal" }
+    },
+    {
+      "id": "aead.invalid.long-key-literal",
+      "source": "../examples/invalid/long-key-literal.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "crypto.decrypt needs a 32-byte key, got a 33-byte string literal" }
+    }
+  ]
+}
