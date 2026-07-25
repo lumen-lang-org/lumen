@@ -2020,24 +2020,19 @@ fn expandEmbeds(arena: std.mem.Allocator, io: std.Io, source: []const u8, diag: 
             // `obj.embed(x)` is a method call and `function embed(...)` is a
             // declaration; neither is the compile-time form.
             const shadowed = prev_sig == '.' or std.mem.eql(u8, prev_word, "function");
-            // `embed` and `embedDir` are reserved words. They read a file while
-            // compiling, so a program using one as a variable would read like
-            // an ordinary name and mean something else entirely — and the
-            // reader would have no way to tell which.
+            // Only a call is the compile-time form. `let embed = "x"` declares
+            // a variable and `stringify(embed)` reads one; neither reads a
+            // file, so neither is this feature's business.
             //
-            // Used as anything but a call, the name is refused by name. It used
-            // to fall through to the argument diagnostic, which complained
-            // about a path the program never wrote.
+            // `embed` is not a reserved word. A package should not have to know
+            // which names the compiler has taken — that is the same fault as a
+            // parameter colliding with another module's function (spec 461),
+            // seen from the compiler's side.
             const called = blk: {
                 const j = skipBlanks(source, e);
                 break :blk j < source.len and source[j] == '(';
             };
-            if (is_embed and !shadowed and !called) {
-                const col: u32 = @intCast(i - line_start + 1);
-                diag.* = .{ .line = line, .col = col, .msg = try std.fmt.allocPrint(arena, "'{s}' is a reserved word — it reads a file while compiling, so it cannot name a variable; pick another name [E_EMBED]", .{word}) };
-                return error.EmbedFailed;
-            }
-            if (is_embed and !shadowed) {
+            if (is_embed and !shadowed and called) {
                 const col: u32 = @intCast(i - line_start + 1);
                 const call = try parseEmbedCall(arena, source, e, line, col, diag);
                 const resolved = try resolveEmbedPath(arena, call.path, line);
