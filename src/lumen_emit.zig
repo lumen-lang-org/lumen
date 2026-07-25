@@ -305,11 +305,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ")) < __lumen_argv.len) __lumen_argv[@as(usize, @intCast(");
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, "))] else \"\")");
-            } else if (std.mem.eql(u8, cl.name, "httpGet")) {
+            } else if (std.mem.eql(u8, cl.name, "httpGet") and !userDeclares("httpGet")) {
                 try w.appendSlice(arena, "__httpGet(__io, __alloc, ");
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
                 try w.append(arena, ')');
-            } else if (std.mem.eql(u8, cl.name, "serve")) {
+            } else if (std.mem.eql(u8, cl.name, "serve") and !userDeclares("serve")) {
                 try w.appendSlice(arena, "__serve(__io, __alloc, ");
                 if (cl.args.len > 0) try emitExpr(cl.args[0], w, arena);
                 try w.appendSlice(arena, ", ");
@@ -1335,6 +1335,18 @@ pub const CompileOptions = struct {
 
 /// Collect the inheritance chain from a root ancestor down to `c` (inclusive).
 pub var g_program: ?*const Program = null;
+
+/// Whether the program declares this name itself. The undocumented `serve` and
+/// `httpGet` builtins defer to it, so a program may use either as an ordinary
+/// function name.
+fn userDeclares(name: []const u8) bool {
+    const prog = g_program orelse return false;
+    for (prog.stmts) |stmt| switch (stmt) {
+        .function_decl => |f| if (std.mem.eql(u8, f.name, name)) return true,
+        else => {},
+    };
+    return false;
+}
 
 /// Compile options captured at program-emit time so nested emitters (a
 /// statement-body arrow) can reach them without threading them through every
