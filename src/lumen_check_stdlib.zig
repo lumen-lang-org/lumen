@@ -1313,7 +1313,9 @@ pub fn stringCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         return .bool;
     }
     if (std.mem.eql(u8, call.name, "fromCharCode") or std.mem.eql(u8, call.name, "fromCodePoint")) {
-        // Variadic: one byte per code, each masked to & 0xFF.
+        // Both are variadic and take integers. They differ in what an integer
+        // means: `fromCharCode` writes one byte per code, masked to & 0xFF,
+        // while `fromCodePoint` encodes each as UTF-8 (spec 472).
         if (call.args.len < 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;

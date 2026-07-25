@@ -300,7 +300,32 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.appendSlice(arena, ", ");
         try em.emitExpr(cl.args[1], w, arena);
         try w.appendSlice(arena, ")) { .lt => -1, .eq => 0, .gt => 1 })");
-    } else if (std.mem.eql(u8, cl.namespace, "String") and (std.mem.eql(u8, cl.name, "fromCharCode") or std.mem.eql(u8, cl.name, "fromCodePoint"))) {
+    } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "fromCodePoint")) {
+        // A code point is a character, so each argument is encoded as UTF-8 —
+        // one to four bytes (spec 472). `fromCharCode` below is the byte-at-a-
+        // time form and stays that way; that the two differ is why there are
+        // two names.
+        //
+        // What is not a code point — a surrogate half, a negative, anything
+        // past 0x10FFFF — becomes U+FFFD rather than raising: these values
+        // arrive from documents being read, and a malformed escape should mark
+        // itself in the text rather than stop the program.
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const fcp_lbl = try std.fmt.allocPrint(arena, "__fcp{d}", .{ts.seq});
+        try w.print(arena, "({s}: {{ var __b: std.ArrayListUnmanaged(u8) = .empty; ", .{fcp_lbl});
+        for (cl.args) |arg| {
+            try w.appendSlice(arena, "{ const __cp: i64 = @intCast(");
+            try em.emitExpr(arg, w, arena);
+            try w.appendSlice(arena,
+                "); var __u: [4]u8 = undefined; var __n: usize = 0; " ++
+                "if (__cp >= 0 and __cp <= 0x10FFFF and (__cp < 0xD800 or __cp > 0xDFFF)) " ++
+                "{ __n = @intCast(std.unicode.utf8Encode(@intCast(__cp), &__u) catch 0); } " ++
+                "if (__n == 0) { __b.appendSlice(__sa(), \"\\u{FFFD}\") catch unreachable; } " ++
+                "else { __b.appendSlice(__sa(), __u[0..__n]) catch unreachable; } } ");
+        }
+        try w.print(arena, "break :{s} @as([]const u8, __b.items); }})", .{fcp_lbl});
+    } else if (std.mem.eql(u8, cl.namespace, "String") and std.mem.eql(u8, cl.name, "fromCharCode")) {
         const ts = em.TempScope.open(w, arena);
         defer ts.close();
         const fcc_lbl = try std.fmt.allocPrint(arena, "__fcc{d}", .{ts.seq});
