@@ -1,0 +1,33 @@
+// Every array method that opens a block, called on a receiver that is itself
+// such a call, so the two blocks nest.
+const n: int[] = [3, 1, 4, 1, 5];
+const base: int[] = n.slice(0, n.length);
+console.log(n.slice(0, 3).map((v: int): int => v + 1).length);
+console.log(n.slice(0, 3).filter((v: int): boolean => v > 1).length);
+console.log(n.slice(0, 3).reduce((a: int, b: int): int => a + b, 0));
+console.log(n.slice(0, 3).reduceRight((a: int, b: int): int => a + b, 0));
+console.log(n.slice(0, 3).find((v: int): boolean => v > 1) ?? -1);
+console.log(n.slice(0, 3).findLast((v: int): boolean => v > 1) ?? -1);
+console.log(n.slice(0, 3).findIndex((v: int): boolean => v > 1));
+console.log(n.slice(0, 3).findLastIndex((v: int): boolean => v > 1));
+console.log(n.slice(0, 3).some((v: int): boolean => v > 3));
+console.log(n.slice(0, 3).every((v: int): boolean => v > 0));
+console.log(n.slice(0, 3).indexOf(base.slice(1, 2)[0]));
+console.log(n.slice(0, 3).lastIndexOf(base.slice(1, 2)[0]));
+console.log(n.slice(0, 3).includes(base.slice(1, 2)[0]));
+console.log(n.slice(0, 3).at(base.slice(0, 1).length) ?? -1);
+console.log(n.slice(0, base.slice(0, 4).length).length);
+console.log(n.slice(0, 3).concat(base.slice(3, 5)).length);
+console.log(n.slice(0, 3).sort((a: int, b: int): int => a - b)[0]);
+console.log(n.slice(0, 3).toSorted((a: int, b: int): int => b - a)[0]);
+console.log(n.slice(0, 3).reverse()[0]);
+console.log(n.slice(0, 3).toReversed()[0]);
+console.log(n.slice(0, 3).fill(base.slice(0, 1)[0])[2]);
+console.log(n.slice(0, 3).with(base.slice(0, 1).length, 9)[1]);
+console.log(n.slice(0, 3).copyWithin(0, base.slice(0, 1).length)[0]);
+console.log(n.slice(0, 3).join(base.slice(0, 1).length > 0 ? "-" : "+"));
+console.log(n.slice(0, 3).toString());
+n.slice(0, 3).forEach((v: int): void => {});
+const nested: int[][] = [[1, 2], [3]];
+console.log(nested.slice(0, 2).flat().length);
+console.log(nested.slice(0, 2).flatMap((r: int[]): int[] => r.slice(0, 1)).length);
