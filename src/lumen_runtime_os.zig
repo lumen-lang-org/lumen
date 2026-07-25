@@ -704,6 +704,77 @@ pub fn emitOsCryptoRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanage
             \\
         );
     }
+    if (program.needs_aead) {
+        // crypto.encrypt/decrypt (spec 467): AES-256-GCM, an *authenticated*
+        // cipher. Decryption verifies the tag over the whole ciphertext
+        // before it hands anything back, so an envelope that was altered in
+        // storage or in transit is rejected instead of decrypting to
+        // plausible-looking garbage the caller would go on to use.
+        try out.appendSlice(arena,
+            \\const __CryptoAead = std.crypto.aead.aes_gcm.Aes256Gcm;
+            \\fn __cryptoRequireKey(key: []const u8) [__CryptoAead.key_length]u8 {
+            \\    // Truncating or zero-padding a wrong-length key would keep
+            \\    // working while encrypting under a key nobody chose, which is
+            \\    // a weak cipher that looks like a working one. Refuse instead.
+            \\    // The key is the caller's own configuration, not attacker
+            \\    // input, so being loud about it discloses nothing.
+            \\    if (key.len != __CryptoAead.key_length) @panic("crypto key must be exactly 32 bytes");
+            \\    var k: [__CryptoAead.key_length]u8 = undefined;
+            \\    @memcpy(&k, key);
+            \\    return k;
+            \\}
+            \\fn __cryptoEncrypt(io: std.Io, alloc: std.mem.Allocator, plaintext: []const u8, key: []const u8) []const u8 {
+            \\    const k = __cryptoRequireKey(key);
+            \\    // A fresh random nonce for every call, never derived from the
+            \\    // plaintext and never reused. Two messages encrypted under one
+            \\    // key with one nonce hand an attacker the XOR of the two
+            \\    // plaintexts and enough to forge tags for that key: nonce reuse
+            \\    // breaks GCM outright, so this is the one value that must come
+            \\    // from the entropy source on every single call.
+            \\    var nonce: [__CryptoAead.nonce_length]u8 = undefined;
+            \\    std.Io.random(io, &nonce);
+            \\    const raw = alloc.alloc(u8, nonce.len + plaintext.len + __CryptoAead.tag_length) catch return "";
+            \\    @memcpy(raw[0..nonce.len], &nonce);
+            \\    var tag: [__CryptoAead.tag_length]u8 = undefined;
+            \\    __CryptoAead.encrypt(raw[nonce.len..][0..plaintext.len], &tag, plaintext, "", nonce, k);
+            \\    @memcpy(raw[nonce.len + plaintext.len ..], &tag);
+            \\    // base64 so the envelope survives a text column, a JSON string
+            \\    // and an HTTP header with no further encoding step.
+            \\    const enc = std.base64.standard.Encoder;
+            \\    const out = alloc.alloc(u8, enc.calcSize(raw.len)) catch return "";
+            \\    return enc.encode(out, raw);
+            \\}
+            \\fn __cryptoDecrypt(alloc: std.mem.Allocator, envelope: []const u8, key: []const u8) []const u8 {
+            \\    const k = __cryptoRequireKey(key);
+            \\    // Every failure below returns the same empty string: input that
+            \\    // is not base64, an envelope too short to hold a nonce and a
+            \\    // tag, a key that does not match, a single flipped bit. Which
+            \\    // check rejected the envelope is exactly what an attacker
+            \\    // submitting modified envelopes is trying to learn, so the
+            \\    // caller is not told either.
+            \\    const dec = std.base64.standard.Decoder;
+            \\    const raw_len = dec.calcSizeForSlice(envelope) catch return "";
+            \\    const raw = alloc.alloc(u8, raw_len) catch return "";
+            \\    dec.decode(raw, envelope) catch return "";
+            \\    if (raw.len < __CryptoAead.nonce_length + __CryptoAead.tag_length) return "";
+            \\    var nonce: [__CryptoAead.nonce_length]u8 = undefined;
+            \\    @memcpy(&nonce, raw[0..__CryptoAead.nonce_length]);
+            \\    const ct_end = raw.len - __CryptoAead.tag_length;
+            \\    var tag: [__CryptoAead.tag_length]u8 = undefined;
+            \\    @memcpy(&tag, raw[ct_end..]);
+            \\    const ct = raw[__CryptoAead.nonce_length..ct_end];
+            \\    const out = alloc.alloc(u8, ct.len) catch return "";
+            \\    __CryptoAead.decrypt(out, ct, tag, "", nonce, k) catch return "";
+            \\    return out;
+            \\}
+            \\fn __cryptoRandomKey(io: std.Io, alloc: std.mem.Allocator) []const u8 {
+            \\    const key = alloc.alloc(u8, __CryptoAead.key_length) catch return "";
+            \\    std.Io.random(io, key);
+            \\    return key;
+            \\}
+            \\
+        );
+    }
     if (program.needs_buffer and program.needs_crypto_api) {
         // spec 057: HMAC-SHA256, AES-256-GCM, and raw (non-hex) random
         // bytes, all Buffer in/out -- see spec.md's "Why additive, not

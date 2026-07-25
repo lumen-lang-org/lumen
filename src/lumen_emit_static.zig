@@ -1005,6 +1005,20 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.appendSlice(arena, "__cryptoSha256(__alloc, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "randomKey")) {
+        try w.appendSlice(arena, "__cryptoRandomKey(__io, __alloc)");
+    } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "encrypt")) {
+        try w.appendSlice(arena, "__cryptoEncrypt(__io, __alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.appendSlice(arena, ", ");
+        try em.emitExpr(cl.args[1], w, arena);
+        try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "decrypt")) {
+        try w.appendSlice(arena, "__cryptoDecrypt(__alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.appendSlice(arena, ", ");
+        try em.emitExpr(cl.args[1], w, arena);
+        try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "randomBytesBuffer")) {
         try w.appendSlice(arena, "__cryptoRandomBytesBuffer(__io, ");
         try em.emitExpr(cl.args[0], w, arena);
