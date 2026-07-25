@@ -39,13 +39,20 @@ that is spliced into the program.
 
 ```ts
 @entity("agents")
-type Agent = {
-  @column("agent_name", "text")
-  agentName: string,
+class Agent {
   @id @column("id", "text")
-  id: string,
-};
+  id: string;
+
+  @column("agent_name", "text")
+  agentName: string;
+}
 ```
+
+Decorators attach to classes and their members, as they do in TypeScript, and
+not to a type alias — `tsc` rejects a decorated `type`, and there is no reason
+to diverge from that placement. This makes spec 456 a prerequisite: an entity
+is a class, and the mapping generated for it moves data as JSON, which a class
+instance cannot do today.
 
 `@entity` is not known to the compiler. It is an imported function, and it
 receives:
@@ -98,8 +105,8 @@ test("entity maps a field to its column", () => {
 
 In scope:
 
-- `@name` and `@name(args...)` on a type declaration, on a field within one, on
-  a function declaration, and on a function parameter.
+- `@name` and `@name(args...)` on a class declaration, on a class member, on a
+  function declaration, and on a function parameter.
 - Arguments limited to literals: strings, integers, floats, booleans. Not
   expressions — a decorator argument is metadata, not code.
 - A declaration description as JSON, versioned, covering the shapes above.
@@ -145,11 +152,11 @@ writes for `lumen describe`:
 
 ```
 { "protocol": 1,
-  "kind": "type" | "function",
+  "kind": "class" | "function",
   "name": string,
   "args": [literal],
   "file": string, "line": int,
-  "fields":  [ { "name", "type", "decorators": [{ "name", "args" }] } ],   // kind=type
+  "fields":  [ { "name", "type", "decorators": [{ "name", "args" }] } ],   // kind=class
   "params":  [ { "name", "type", "decorators": [...] } ],                  // kind=function
   "returns": string                                                        // kind=function
 }
