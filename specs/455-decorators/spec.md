@@ -264,9 +264,13 @@ has the JSON and the type, and turning the two into a record literal is the
 same walk the JSON runtime already does. A program pays nothing at runtime for
 a decorator.
 
-The constant is declared at the end of the file that carried the decorator, so
-the return type's own import is in scope. It is then checked with everything
-else — a decorator's output cannot skip the checker.
+The constant is declared in the file that carried the decorator, directly after
+the declaration it belongs to: the file's imports are above it, so the return
+type's own import is in scope, and everything written below can use it. The end
+of the file would be too late — a top-level binding is not in scope before its
+own line, so a constant appended after the program's last statement is one
+nothing can name. It is then checked with everything else — a decorator's output
+cannot skip the checker.
 
 Ordering: decorators run in source order, each producing its own constant. A
 decorator cannot see another's output; they receive declarations, not the

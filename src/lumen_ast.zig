@@ -22,6 +22,27 @@ pub const FieldInit = struct { name: []const u8, value: *Expr, is_spread: bool =
 
 pub const Visibility = enum { public, private, protected };
 
+/// A decorator argument. A decorator carries metadata, not code, so an argument
+/// is a literal and nothing else. `str` holds the raw source text between the
+/// quotes, as every other string literal on this tree does.
+pub const DecoratorArg = union(enum) {
+    str: []const u8,
+    int: i64,
+    flt: f64,
+    boolean: bool,
+};
+
+/// `@name` or `@name(literal, ...)` written before a class, a class member, a
+/// function, or a parameter (spec 455). The parser attaches it to the
+/// declaration that follows; nothing downstream reads it yet, so a decorated
+/// program compiles exactly as an undecorated one.
+pub const Decorator = struct {
+    name: []const u8,
+    args: []DecoratorArg = &.{},
+    line: u32,
+    col: u32,
+};
+
 pub const TypeField = struct {
     name: []const u8,
     annotation: []const u8,
@@ -29,6 +50,7 @@ pub const TypeField = struct {
     visibility: Visibility = .public,
     is_static: bool = false,
     is_readonly: bool = false,
+    decorators: []Decorator = &.{},
     // A class field declared with an initializer but no annotation (`count = 0`):
     // its type is inferred from this expression during the class-type pass.
     init: ?*Expr = null,
@@ -107,6 +129,7 @@ pub const FunctionParam = struct {
     // A constructor parameter property (`constructor(public x: T)`): declares a
     // field `x` and assigns `this.x = x` at construction.
     is_property: bool = false,
+    decorators: []Decorator = &.{},
 };
 
 /// `extern function name(params): ret;` — an external C-ABI function. No body;
@@ -134,6 +157,7 @@ pub const ClassDecl = struct {
     // Type parameters for a generic class, e.g. `Box<T>`. When non-empty the
     // class is a template; concrete copies are generated per `new C<...>`.
     type_params: [][]const u8 = &.{},
+    decorators: []Decorator = &.{},
     line: u32,
     col: u32,
 };
@@ -180,6 +204,7 @@ pub const FunctionDecl = struct {
     // Type parameters for a generic function, e.g. `f<T, U>`. When non-empty the
     // function is a template; concrete copies are generated per call instance.
     type_params: [][]const u8 = &.{},
+    decorators: []Decorator = &.{},
     line: u32,
     col: u32,
 };

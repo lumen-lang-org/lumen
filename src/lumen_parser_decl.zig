@@ -22,6 +22,65 @@ const Expr = ast.Expr;
 const Stmt = ast.Stmt;
 const Parser = parser_mod.Parser;
 
+/// One decorator argument. Literals only: a decorator carries metadata, and an
+/// expression would have to be evaluated by a program that does not exist yet
+/// at the point the decorator runs.
+fn parseDecoratorArg(self: *Parser) CompileError!ast.DecoratorArg {
+    switch (self.cur) {
+        .str => |s| {
+            try self.advance();
+            return .{ .str = s };
+        },
+        .num => |v| {
+            try self.advance();
+            return .{ .int = v };
+        },
+        .flt => |v| {
+            try self.advance();
+            return .{ .flt = v };
+        },
+        .ident => |id| {
+            if (std.mem.eql(u8, id, "true") or std.mem.eql(u8, id, "false")) {
+                try self.advance();
+                return .{ .boolean = std.mem.eql(u8, id, "true") };
+            }
+        },
+        else => {},
+    }
+    self.last_err = "E_DECORATOR_ARG";
+    return error.ParseError;
+}
+
+/// `@name` / `@name(literal, ...)`, as many as are written in a row. Returns an
+/// empty slice when the cursor is not on a `@`, so every declaration site can
+/// call it unconditionally and an undecorated program pays nothing.
+pub fn parseDecorators(self: *Parser) CompileError![]ast.Decorator {
+    if (!self.isOp('@')) return &.{};
+    var list: std.ArrayListUnmanaged(ast.Decorator) = .empty;
+    while (self.isOp('@')) {
+        const line = self.cur_line;
+        const col = self.cur_col;
+        try self.advance(); // '@'
+        if (self.cur != .ident) {
+            self.last_err = "a decorator needs a name — write `@name` or `@name(\"argument\")`";
+            return error.ParseError;
+        }
+        const name = self.cur.ident;
+        try self.advance();
+        var args: std.ArrayListUnmanaged(ast.DecoratorArg) = .empty;
+        if (self.isOp('(')) {
+            try self.advance();
+            while (!self.isOp(')')) {
+                try args.append(self.arena, try parseDecoratorArg(self));
+                if (self.isOp(',')) try self.advance() else break;
+            }
+            try self.expectOp(')');
+        }
+        try list.append(self.arena, .{ .name = name, .args = try args.toOwnedSlice(self.arena), .line = line, .col = col });
+    }
+    return list.toOwnedSlice(self.arena);
+}
+
 pub fn parseTypeDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     try self.advance();
     if (self.cur != .ident) return error.ParseError;
@@ -448,6 +507,7 @@ pub fn parseParamList(self: *Parser) CompileError![]ast.FunctionParam {
     var params: std.ArrayListUnmanaged(ast.FunctionParam) = .empty;
     var seen_rest = false;
     while (!self.isOp(')')) {
+        const decorators = try parseDecorators(self);
         // A rest parameter `...name: T[]` may only appear last.
         var is_rest = false;
         if (self.isSpread()) {
@@ -481,7 +541,7 @@ pub fn parseParamList(self: *Parser) CompileError![]ast.FunctionParam {
             try self.advance();
             default_value = try self.parseExpr();
         }
-        try params.append(self.arena, .{ .name = param_name, .annotation = annotation, .is_rest = is_rest, .default = default_value, .is_optional = is_optional, .is_property = is_property });
+        try params.append(self.arena, .{ .name = param_name, .annotation = annotation, .is_rest = is_rest, .default = default_value, .is_optional = is_optional, .is_property = is_property, .decorators = decorators });
         if (self.isOp(',')) try self.advance() else break;
     }
     // A rest parameter must be the final parameter.
@@ -652,6 +712,7 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
     // the constructor body (a constructor is synthesized if the class has none).
     var field_inits: std.ArrayListUnmanaged(Stmt) = .empty;
     while (!self.isOp('}')) {
+        const member_decorators = try parseDecorators(self);
         // Optional member modifiers, in any order.
         var visibility: ast.Visibility = .public;
         var is_static = false;
@@ -717,6 +778,13 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
             return error.ParseError;
         }
         if (accessor == .none and std.mem.eql(u8, member, "constructor")) {
+            // A constructor is not a member with a declaration of its own — its
+            // parameters and body hang off the class — so there is nothing for a
+            // decorator on it to describe.
+            if (member_decorators.len > 0) {
+                self.last_err = "E_DECORATOR_TARGET";
+                return error.ParseError;
+            }
             ctor_params = try self.parseParamList();
             ctor_body = try self.parseBlock();
             has_ctor = true;
@@ -749,6 +817,7 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 .is_static = is_static,
                 .is_async = is_async,
                 .accessor = accessor,
+                .decorators = member_decorators,
                 .line = m_line,
                 .col = m_col,
             });
@@ -784,6 +853,7 @@ pub fn parseClassDecl(self: *Parser, line: u32, col: u32) CompileError!Stmt {
                 // Keep the initializer for type inference (un-annotated instance
                 // fields) and for static-field storage initialization.
                 .init = init_expr,
+                .decorators = member_decorators,
             });
             if (self.isOp(';') or self.isOp(',')) try self.advance();
         }

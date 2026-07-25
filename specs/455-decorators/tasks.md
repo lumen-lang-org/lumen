@@ -20,25 +20,40 @@ feature is only useful after the third.
 
 ## Slice 2 — running one
 
-- [ ] Resolve `@name` to an imported binding; a name that is not imported is an
+- [x] Resolve `@name` to an imported binding; a name that is not imported is an
       error saying so at the decorator's line.
-- [ ] Check the bound function takes one `Description` and returns a type JSON
+- [x] Check the bound function takes one `Description` and returns a type JSON
       can carry; name the expected shape when it does not, and name the
       offending field when the return type cannot be serialised.
-- [ ] Compile the decorator's module standalone, with a generated entry point
+- [x] Compile the decorator's module standalone, with a generated entry point
       that reads the description, calls the function, and prints its return
       value as JSON.
-- [ ] Detect a cycle — a decorator module reaching the file it decorates — and
+- [x] Detect a cycle — a decorator module reaching the file it decorates — and
       report both files rather than recursing.
-- [ ] Run the built binary, capture stdout as the value and stderr as
+- [x] Run the built binary, capture stdout as the value and stderr as
       diagnostics.
-- [ ] A decorator whose own module fails to compile reports as a failure of the
+- [x] A decorator whose own module fails to compile reports as a failure of the
       decorator, naming it, not as a failure of the file being compiled.
-- [ ] Emit a constant named `<decorator><Declaration>`, of the decorator's
+- [x] Emit a constant named `<decorator><Declaration>`, of the decorator's
       declared return type, initialised to the returned value as a literal —
-      not as a runtime parse. Declared at the end of the file that carried the
-      decorator, in source order across several decorators.
-- [ ] Run decorators for `check`, `compile`, `test` and `watch` alike.
+      not as a runtime parse. Emitted once the decorated declaration has closed,
+      in source order across several decorators.
+- [x] Run decorators for `check`, `compile`, `run` and `test` alike.
+
+Two constraints this slice carries, both to be lifted rather than lived with:
+
+- A decorator's module must export `Description` as well as the function. The
+  entry point parses the description into it, and the compiler does not provide
+  the type yet — so the module declares it, and every key the compiler writes is
+  named there exactly once.
+- A decorator can only read a description whose arguments are all strings.
+  `args` is a JSON array of literals of any kind and Lumen has no type for a
+  mixed array, so a decorator taking `@size(3)` cannot parse what it is handed.
+  The arguments still reach the description; nothing can read them yet.
+
+The constant lands directly after the declaration it belongs to rather than at
+the end of the file: a top-level binding is not in scope before its own line,
+so a constant appended after `main()` is one nothing can use.
 
 ## Slice 3 — errors and caching
 

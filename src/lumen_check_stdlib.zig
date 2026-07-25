@@ -846,7 +846,11 @@ pub fn jsonCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
 // deliberately excluded -- those lower to Lumen-specific runtime types
 // (LumenMap/LumenSet/positional structs) std.json's default reflection
 // doesn't understand the shape of (see spec 051's "Not planned" table).
-fn jsonSerializable(t: types.Type) bool {
+//
+// A decorator's declared return type answers to the same predicate (spec 455
+// D3): the value comes back through JSON, so "anything JSON can carry" is not a
+// second rule, it is this one.
+pub fn jsonSerializable(t: types.Type) bool {
     return switch (t) {
         .string, .i32, .i64, .f64, .bool => true,
         .named => true,

@@ -57,6 +57,8 @@ pub fn build(b: *std.Build) void {
         "src/lumen_check_assign.zig",
         "src/lumen_check_expr.zig",
         "src/lumen_check_stdlib.zig",
+        "src/lumen_decorator.zig",
+        "src/lumen_describe.zig",
         "src/lumen_diag.zig",
         "src/lumen_lexer.zig",
         "src/lumen_types.zig",
@@ -228,6 +230,11 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_451.addArg("specs/451-exported-types-and-module-scoped-imports/conformance/manifest.json");
     conformance_cmd_451.addArg("zig-out/bin/lumen");
 
+    const conformance_cmd_455 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_455.step.dependOn(b.getInstallStep());
+    conformance_cmd_455.addArg("specs/455-decorators/conformance/manifest.json");
+    conformance_cmd_455.addArg("zig-out/bin/lumen");
+
     const conformance_cmd_453 = b.addRunArtifact(conformance_runner);
     conformance_cmd_453.step.dependOn(b.getInstallStep());
     conformance_cmd_453.addArg("specs/453-ref-for-value-types/conformance/manifest.json");
@@ -269,4 +276,5 @@ pub fn build(b: *std.Build) void {
     conformance_step.dependOn(&conformance_cmd_451.step);
     conformance_step.dependOn(&conformance_cmd_452.step);
     conformance_step.dependOn(&conformance_cmd_453.step);
+    conformance_step.dependOn(&conformance_cmd_455.step);
 }
