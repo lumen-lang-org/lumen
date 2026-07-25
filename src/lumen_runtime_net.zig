@@ -395,14 +395,19 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\    // that starves in the queue until an active one closes. HTTP
                 \\    // serving is I/O-bound (workers mostly wait, not compute), so a
                 \\    // large pool is the right shape here (as Node's epoll loop and
-                \\    // Go's scheduler are). A modest per-thread stack keeps the
-                \\    // virtual-memory cost of many idle workers negligible.
+                \\    // Go's scheduler are). Stacks are reserved, not committed:
+                \\    // an idle worker costs address space, and a worker's real cost
+                \\    // is the pages its deepest call chain ever touched. 8 MiB
+                \\    // matches what the OS gives the main thread, and it has to be
+                \\    // that large because a handler may do anything main can --
+                \\    // the TLS handshake inside std.http's client alone segfaulted
+                \\    // the previous 512 KiB stack from inside a handler.
                 \\    // Initialized here (not at file scope) because `getCpuCount`
                 \\    // and the `@max` below are runtime values, not comptime-known.
                 \\    const __http_cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
                 \\    __http_pool = xev.ThreadPool.init(.{
                 \\        .max_threads = @max(4, __http_cpus * 2),
-                \\        .stack_size = 512 * 1024,
+                \\        .stack_size = 8 * 1024 * 1024,
                 \\    });
                 \\    const Handler = @TypeOf(handler);
                 \\    const Conn = struct {
@@ -513,7 +518,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\    const __http_cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
                     \\    __http_stream_pool = xev.ThreadPool.init(.{
                     \\        .max_threads = @max(4, __http_cpus * 2),
-                    \\        .stack_size = 512 * 1024,
+                    \\        .stack_size = 8 * 1024 * 1024,
                     \\    });
                     \\    const Handler = @TypeOf(handler);
                     \\    const Conn = struct {
