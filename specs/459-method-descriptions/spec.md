@@ -60,31 +60,30 @@ a decorator never asks whether it exists.
   decorator to read, resolved by nobody — the standing field decorators already
   have (spec 455).
 
-## Migration
+## A decorator is handed only what it asked for
 
-`JSON.parse` accepts only the keys the target type declares, so a decorator
-whose `Description` type does not name `methods` now fails to parse a class
-description. Every class decorator must add the key:
+`JSON.parse` accepts only the keys its target type declares. So the first cut
+of this feature was not additive at all: adding `methods` took the 455 suite
+from ten passing cases to six, every one of them a class decorator, each dying
+with `JSON.parse: invalid JSON (UnknownField)`. Every decorator anyone had
+written would have broken on a compiler upgrade, and the format could never
+have grown again — which would make `protocol` a number nobody can use, since
+the version a decorator refuses would never be the version that reaches it.
 
-```ts
-export type MethodDescription = {
-  name: string,
-  returns: string,
-  params: ParamDescription[],
-  decorators: DecoratorUse[],
-};
+The compiler now narrows the description before handing it over
+(`narrow` in `src/lumen_decorator.zig`): it reads the decorator module's own
+`Description` type — already parsed, to check the decorator's signature — and
+drops every key that type does not declare, recursively, through arrays and
+nested record types alike. A decorator that names `fields` and not `methods`
+is handed a description with no `methods` in it.
 
-export type Description = {
-  // ...
-  fields: FieldDescription[],
-  methods: MethodDescription[],
-};
-```
+Narrowing only ever removes. A key the type declares and the description does
+not is left missing and fails the decorator's parse, which is the right answer:
+it asked for something the compiler does not describe.
 
-This is what makes `protocol` a version a decorator can refuse rather than a
-number nobody reads: an additive field is observable to a strict parser. The
-in-repo decorators (`specs/455-decorators/examples/*/tools/`) are updated with
-this change.
+The 455 decorators are therefore unchanged by this spec, and one of them —
+`caption`, declaring exactly the seven keys spec 455 had — is a conformance
+case here, run against a class with decorated methods.
 
 ## Conformance
 
@@ -94,3 +93,4 @@ this change.
 | --- | --- | --- |
 | `methods.valid.decorated-methods-reach-the-decorator` | compile-run | a `@routes` class decorator reads each method's decorator, its parameters and their decorators as written, and its return type — including a method nobody decorated |
 | `methods.valid.class-without-methods-describes-an-empty-array` | compile-run | a class with no methods parses against a `Description` declaring `methods`, so the key is present and empty rather than absent |
+| `methods.valid.a-decorator-that-never-heard-of-methods-still-runs` | compile-run | a decorator declaring only spec 455's seven keys runs against a class with decorated methods — the description is narrowed to what it asked for |

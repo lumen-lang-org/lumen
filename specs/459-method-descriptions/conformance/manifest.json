@@ -13,7 +13,17 @@
       "id": "methods.valid.class-without-methods-describes-an-empty-array",
       "source": "../examples/valid/class-without-methods.ts",
       "phase": "compile-run",
-      "expect": { "stdout": "/plain 0" }
+      "expect": {
+        "stdout": "/plain 0"
+      }
+    },
+    {
+      "id": "methods.valid.a-decorator-that-never-heard-of-methods-still-runs",
+      "source": "../examples/valid/unaware-decorator.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "agents/AgentApi/1"
+      }
     }
   ]
 }

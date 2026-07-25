@@ -926,7 +926,7 @@ fn runDecorators(
             else => return e,
         };
 
-        const value = try buildAndRun(exp, path, module_path, binding, app);
+        const value = try buildAndRun(exp, path, module_path, binding, app, sig.description);
         const literal = decorator.literal(arena, value, app, &fail) catch |e| switch (e) {
             error.DecoratorFailed => {
                 g_decorator_fail = .{ .file = path, .at = fail };
@@ -956,6 +956,10 @@ fn buildAndRun(
     module_path: []const u8,
     binding: DecoratorBinding,
     app: describe.Application,
+    /// The description to hand over: `app.json` narrowed to the keys the
+    /// module's own `Description` declares, so a key it never named cannot
+    /// fail its parse.
+    description: []const u8,
     // Explicit, because this calls the compiler's own entry point: an inferred
     // error set here would close a loop through everything compiling a file can
     // fail with. A failure of the decorator's module is the decorator's failure
@@ -985,7 +989,7 @@ fn buildAndRun(
     if (built != 0)
         return decoratorFailed(arena, path, app, "'@{s}' does not compile:\n{s}", .{ app.name, std.mem.trim(u8, captured.written(), "\n") });
 
-    const ran = std.process.run(arena, io, .{ .argv = &.{ exe, app.json } }) catch
+    const ran = std.process.run(arena, io, .{ .argv = &.{ exe, description } }) catch
         return decoratorFailed(arena, path, app, "'@{s}' was built but could not be run", .{app.name});
     switch (ran.term) {
         .exited => |code| if (code != 0) return decoratorFailed(arena, path, app, "'@{s}' failed:\n{s}", .{ app.name, std.mem.trim(u8, if (ran.stderr.len > 0) ran.stderr else ran.stdout, "\n") }),
