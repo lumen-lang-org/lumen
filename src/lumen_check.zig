@@ -1271,6 +1271,49 @@ pub const Checker = struct {
         param.checked_type = try self.typeFromAnnotation(param.annotation, line, col);
     }
 
+    /// Rejects a parameter that reuses a top-level name.
+    ///
+    /// Every module is inlined into one flat namespace, and the generated code
+    /// disallows shadowing, so a parameter called `tool` in a program that also
+    /// declares `tool` at the top level cannot be emitted. Without this the
+    /// backend reports it — one collision per build, at a generated line, under
+    /// a message inviting a compiler bug report. Runs after every declaration
+    /// pass so a name declared later in the file still counts.
+    fn rejectShadowingParams(self: *Checker, program: *ast.Program) CompileError!void {
+        for (program.stmts) |*stmt| switch (stmt.*) {
+            .function_decl => |*f| {
+                for (f.params) |p| {
+                    if (self.topLevelDeclares(p.name)) {
+                        return self.fail(f.line, f.col, try std.fmt.allocPrint(self.arena, "the parameter '{s}' of {s} reuses a top-level name — every module shares one namespace, so a parameter cannot shadow a declaration [E_PARAM_SHADOWS]", .{ p.name, f.name }));
+                    }
+                }
+            },
+            .class_decl => |*c| {
+                for (c.ctor_params) |p| {
+                    if (self.topLevelDeclares(p.name)) {
+                        return self.fail(c.line, c.col, try std.fmt.allocPrint(self.arena, "the constructor parameter '{s}' of {s} reuses a top-level name — every module shares one namespace, so a parameter cannot shadow a declaration [E_PARAM_SHADOWS]", .{ p.name, c.name }));
+                    }
+                }
+                for (c.methods) |m| {
+                    for (m.params) |p| {
+                        if (self.topLevelDeclares(p.name)) {
+                            return self.fail(m.line, m.col, try std.fmt.allocPrint(self.arena, "the parameter '{s}' of {s}.{s} reuses a top-level name — every module shares one namespace, so a parameter cannot shadow a declaration [E_PARAM_SHADOWS]", .{ p.name, c.name, m.name }));
+                        }
+                    }
+                }
+            },
+            else => {},
+        };
+    }
+
+    /// Whether a top-level value declaration claims this name. Types are not
+    /// included: a type and a value live in separate namespaces in the
+    /// generated code, so a parameter may share a name with a type.
+    fn topLevelDeclares(self: *Checker, name: []const u8) bool {
+        return self.funcs.get(name) != null or
+            self.generic_funcs.get(name) != null;
+    }
+
     pub fn declareFunction(self: *Checker, program: ?*ast.Program, decl: *ast.FunctionDecl) CompileError!void {
         if (self.funcs.get(decl.name) != null) return self.fail(decl.line, decl.col, "E_DUPLICATE_BINDING");
         var return_type = try self.typeFromAnnotation(decl.return_annotation, decl.line, decl.col);
@@ -1669,6 +1712,7 @@ pub const Checker = struct {
                 try self.declareFunction(program, &stmt.function_decl);
             }
         }
+        try self.rejectShadowingParams(program);
         for (program.stmts) |*stmt| {
             if (self.isGenericTemplateStmt(stmt)) continue;
             self.checkStmt(program, stmt) catch |e| {
