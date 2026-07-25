@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const compiler = @import("lumen_compiler.zig");
+const describe = @import("lumen_describe.zig");
 
 const CompileMode = enum {
     release_safe,
@@ -70,6 +71,8 @@ fn humanizeDiag(code: []const u8) []const u8 {
     if (eq(u8, code, "E_REF_TARGET")) return "invalid Ref<T> target type [E_REF_TARGET]";
     if (eq(u8, code, "E_FFI_TYPE")) return "type not supported across the FFI boundary [E_FFI_TYPE]";
     if (eq(u8, code, "E_UNKNOWN_MATCHER")) return "unknown test matcher [E_UNKNOWN_MATCHER]";
+    if (eq(u8, code, "E_DECORATOR_ARG")) return "a decorator argument is metadata, not an expression — pass a string, number or boolean literal [E_DECORATOR_ARG]";
+    if (eq(u8, code, "E_DECORATOR_TARGET")) return "a decorator belongs on a class, a class member, a function or a parameter [E_DECORATOR_TARGET]";
     return code;
 }
 
@@ -1611,6 +1614,32 @@ fn reactorWrappers(arena: std.mem.Allocator, names: []const []const u8) ![]const
     return w.items;
 }
 
+/// `lumen describe <file.ts>`: the decorator description JSON for every
+/// decorated declaration in one file (spec 455). Deliberately absent from the
+/// usage text — it exists to exercise the protocol, not as a user-facing tool.
+fn describeFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, err: *std.Io.Writer) !u8 {
+    if (!std.mem.endsWith(u8, path, ".ts")) {
+        try err.print("error: expected a .ts source file, got {s}\n", .{path});
+        return 2;
+    }
+    const source = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 * 1024 * 1024)) catch {
+        try err.print("error: cannot read file {s}\n", .{path});
+        return 2;
+    };
+    var out_buf: [4096]u8 = undefined;
+    var out_fw: std.Io.File.Writer = .init(.stdout(), io, &out_buf);
+    var diag: compiler.Diag = .{};
+    describe.describeSource(arena, source, path, &out_fw.interface, &diag) catch |e| switch (e) {
+        error.ParseError => {
+            try printDiag(err, source, path, diag);
+            return 1;
+        },
+        else => return e,
+    };
+    try out_fw.interface.flush();
+    return 0;
+}
+
 fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, action: Action, cli_libs: []const []const u8, wasm: bool, reactor: bool, err: *std.Io.Writer) !u8 {
     const compile_start = std.Io.Clock.Timestamp.now(io, .awake);
     if (!std.mem.endsWith(u8, path, ".ts")) {
@@ -2105,6 +2134,12 @@ pub fn main(init: std.process.Init) !void {
             break :blk 2;
         }
         break :blk try compileFile(arena, io, args[2], .release_safe, .check_only, &.{}, false, false, err);
+    } else if (std.mem.eql(u8, args[1], "describe")) blk: {
+        if (args.len < 3) {
+            try err.writeAll("usage: lumen describe <file.ts>\n");
+            break :blk 2;
+        }
+        break :blk try describeFile(arena, io, args[2], err);
     } else if (std.mem.eql(u8, args[1], "watch")) blk: {
         if (args.len < 3) {
             try err.writeAll("usage: lumen watch [--no-run] [--release-fast] <file.ts>\n");

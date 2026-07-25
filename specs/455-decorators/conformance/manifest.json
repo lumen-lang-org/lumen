@@ -1,0 +1,29 @@
+{
+  "feature": "455-decorators",
+  "cases": [
+    {
+      "id": "decorators.valid.decorated-class-compiles",
+      "source": "../examples/valid/decorated-class-compiles.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "a1:researcher" }
+    },
+    {
+      "id": "decorators.valid.decorated-function-compiles",
+      "source": "../examples/valid/decorated-function-compiles.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "ababab" }
+    },
+    {
+      "id": "decorators.valid.argument-kinds",
+      "source": "../examples/valid/decorator-argument-kinds.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "a1" }
+    },
+    {
+      "id": "decorators.invalid.argument-is-not-an-expression",
+      "source": "../examples/invalid/decorator-argument-is-not-an-expression.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "E_DECORATOR_ARG" }
+    }
+  ]
+}

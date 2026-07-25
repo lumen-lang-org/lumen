@@ -78,6 +78,7 @@ pub const Parser = struct {
     pub const parseTypeArgs = parser_decl.parseTypeArgs;
     pub const looksLikeTypeArgs = parser_decl.looksLikeTypeArgs;
     pub const parseClassDecl = parser_decl.parseClassDecl;
+    pub const parseDecorators = parser_decl.parseDecorators;
 
     arena: std.mem.Allocator,
     lex: Lexer,
@@ -273,6 +274,27 @@ pub const Parser = struct {
         if (self.cur == .op2 and (std.mem.eql(u8, self.cur.op2, "++") or std.mem.eql(u8, self.cur.op2, "--"))) {
             const op = self.cur.op2;
             return .{ .assign = try self.parsePrefixUpdate(op, line, col, true) };
+        }
+        // `@name(...)` before a declaration (spec 455). The target is checked
+        // before the declaration is parsed, so the diagnostic lands on the
+        // offending keyword rather than wherever the statement happened to end.
+        if (self.isOp('@')) {
+            const decorators = try self.parseDecorators();
+            const is_async_fn = self.isKw("async") and self.peekIsKw("function");
+            if (!self.isKw("class") and !self.isKw("function") and !is_async_fn) {
+                self.last_err = "E_DECORATOR_TARGET";
+                return error.ParseError;
+            }
+            var decl = try self.parseStmt();
+            switch (decl) {
+                .class_decl => |*c| c.decorators = decorators,
+                .function_decl => |*f| f.decorators = decorators,
+                else => {
+                    self.last_err = "E_DECORATOR_TARGET";
+                    return error.ParseError;
+                },
+            }
+            return decl;
         }
         // An expression statement whose leading token is not an identifier —
         // e.g. a method call on an array/string literal or a parenthesized

@@ -337,8 +337,11 @@ pub const Lexer = struct {
             self.i += 3;
             return .{ .op3 = s };
         }
+        // `@` starts a decorator (spec 455). It has no other meaning in the
+        // language, so it is a plain single-character operator token and the
+        // parser decides where one may appear.
         switch (c) {
-            '+', '-', '*', '/', '%', '?', '(', ')', '[', ']', ';', ',', '.', ':', '{', '}', '^', '~' => {
+            '+', '-', '*', '/', '%', '?', '(', ')', '[', ']', ';', ',', '.', ':', '{', '}', '^', '~', '@' => {
                 self.i += 1;
                 return .{ .op = c };
             },
@@ -530,4 +533,26 @@ test "regex literal lexing and `/` disambiguation" {
         try t.expect(r == .regex);
         try t.expectEqualStrings("a\\/b", r.regex.pattern);
     }
+}
+
+test "`@` lexes as its own operator token (spec 455)" {
+    const t = std.testing;
+    var lx = Lexer{ .src = "@entity(\"agents\")\nclass Agent {}" };
+    const at = try lx.next();
+    try t.expect(at == .op and at.op == '@');
+    try t.expectEqual(@as(u32, 1), lx.tok_line);
+    try t.expectEqual(@as(u32, 1), lx.tok_col);
+    const name = try lx.next();
+    try t.expect(name == .ident);
+    try t.expectEqualStrings("entity", name.ident);
+    const open = try lx.next();
+    try t.expect(open == .op and open.op == '(');
+    const arg = try lx.next();
+    try t.expect(arg == .str);
+    try t.expectEqualStrings("agents", arg.str);
+    _ = try lx.next(); // ')'
+    const kw = try lx.next();
+    try t.expect(kw == .ident);
+    try t.expectEqualStrings("class", kw.ident);
+    try t.expectEqual(@as(u32, 2), lx.tok_line);
 }
