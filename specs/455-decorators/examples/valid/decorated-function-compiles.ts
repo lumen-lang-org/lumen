@@ -1,18 +1,23 @@
-// Decorators on a function and on its parameters, likewise recorded and
-// otherwise inert.
-@tool("echo the phrase back")
-function echoPhrase(@param("the phrase") phrase: string, @param("how many times") times: int): string {
-  let out = "";
+// A decorator on a function receives its parameters, their own decorators, and
+// its return type — as written, since the file has not been checked when the
+// decorator runs.
+import { signatureOf } from "./tools/sig.ts";
+import { Signature } from "./tools/signature.ts";
+
+@signatureOf("search")
+function search(@describe("what to look for") q: string, limit: int): string[] {
+  let out: string[] = [];
   let i: int = 0;
-  while (i < times) {
-    out = out + phrase;
+  while (i < limit) {
+    out.push(q);
     i = i + 1;
   }
   return out;
 }
 
 function main(): void {
-  console.log(echoPhrase("ab", 3));
+  let s: Signature = signatureOfSearch;
+  console.log(s.name + " " + s.params + " -> " + s.returns + " " + search("ab", 3).length);
 }
 
 main();

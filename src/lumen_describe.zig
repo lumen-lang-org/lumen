@@ -17,6 +17,71 @@ const parser_mod = @import("lumen_parser.zig");
 /// does not know.
 pub const protocol = 1;
 
+/// One decorator written on one declaration: the description it will be handed,
+/// plus the two positions the compiler needs — the decorator's own line, which
+/// every failure of it is reported at, and the declaration's, which decides
+/// where the constant it produces lands (spec 455 D4).
+pub const Application = struct {
+    name: []const u8,
+    target: []const u8,
+    json: []const u8,
+    line: u32,
+    col: u32,
+    decl_line: u32,
+};
+
+/// Every decorator application in one file, in source order.
+pub fn collect(
+    arena: std.mem.Allocator,
+    source: []const u8,
+    file: []const u8,
+    diag: *diag_mod.Diag,
+) ![]const Application {
+    const program = try parseAlone(arena, source, diag);
+    var apps: std.ArrayListUnmanaged(Application) = .empty;
+    for (program.stmts) |stmt| switch (stmt) {
+        .class_decl => |c| for (c.decorators) |d| {
+            var out: std.Io.Writer.Allocating = .init(arena);
+            try writeClass(&out.writer, file, c, d);
+            try apps.append(arena, .{
+                .name = d.name,
+                .target = c.name,
+                .json = std.mem.trimEnd(u8, out.written(), "\n"),
+                .line = d.line,
+                .col = d.col,
+                .decl_line = c.line,
+            });
+        },
+        .function_decl => |f| for (f.decorators) |d| {
+            var out: std.Io.Writer.Allocating = .init(arena);
+            try writeFunction(&out.writer, file, f, d);
+            try apps.append(arena, .{
+                .name = d.name,
+                .target = f.name,
+                .json = std.mem.trimEnd(u8, out.written(), "\n"),
+                .line = d.line,
+                .col = d.col,
+                .decl_line = f.line,
+            });
+        },
+        else => {},
+    };
+    return apps.items;
+}
+
+/// Parses one module on its own: module syntax dropped, nothing checked, no
+/// imports followed. The description is syntax, and so is everything read off a
+/// decorator's own module — its signature and the `Description` type it must
+/// export (spec 455 D3).
+pub fn parseAlone(arena: std.mem.Allocator, source: []const u8, diag: *diag_mod.Diag) !ast.Program {
+    const text = try stripModuleSyntax(arena, source);
+    var p = try parser_mod.Parser.init(arena, text);
+    return p.parseProgram() catch |e| {
+        diag.* = .{ .line = p.cur_line, .col = p.cur_col, .msg = p.last_err };
+        return e;
+    };
+}
+
 pub fn describeSource(
     arena: std.mem.Allocator,
     source: []const u8,
@@ -24,17 +89,10 @@ pub fn describeSource(
     out: *std.Io.Writer,
     diag: *diag_mod.Diag,
 ) !void {
-    const text = try stripModuleSyntax(arena, source);
-    var p = try parser_mod.Parser.init(arena, text);
-    const program = p.parseProgram() catch |e| {
-        diag.* = .{ .line = p.cur_line, .col = p.cur_col, .msg = p.last_err };
-        return e;
-    };
-    for (program.stmts) |stmt| switch (stmt) {
-        .class_decl => |c| for (c.decorators) |d| try writeClass(out, file, c, d),
-        .function_decl => |f| for (f.decorators) |d| try writeFunction(out, file, f, d),
-        else => {},
-    };
+    for (try collect(arena, source, file, diag)) |app| {
+        try out.writeAll(app.json);
+        try out.writeByte('\n');
+    }
 }
 
 fn writeClass(out: *std.Io.Writer, file: []const u8, c: ast.ClassDecl, d: ast.Decorator) !void {
@@ -158,10 +216,10 @@ fn stripModuleSyntax(arena: std.mem.Allocator, source: []const u8) ![]const u8 {
             if (std.mem.startsWith(u8, trimmed, "export {")) break :blk "";
             if (std.mem.startsWith(u8, trimmed, "export *")) break :blk "";
             if (std.mem.startsWith(u8, trimmed, "export default ")) {
-                break :blk try std.mem.concat(arena, u8, &.{ line[0 .. std.mem.indexOf(u8, line, "export default ").? ], trimmed["export default ".len..] });
+                break :blk try std.mem.concat(arena, u8, &.{ line[0..std.mem.indexOf(u8, line, "export default ").?], trimmed["export default ".len..] });
             }
             if (std.mem.startsWith(u8, trimmed, "export ")) {
-                break :blk try std.mem.concat(arena, u8, &.{ line[0 .. std.mem.indexOf(u8, line, "export ").? ], trimmed["export ".len..] });
+                break :blk try std.mem.concat(arena, u8, &.{ line[0..std.mem.indexOf(u8, line, "export ").?], trimmed["export ".len..] });
             }
             break :blk line;
         };

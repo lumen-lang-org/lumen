@@ -5,25 +5,61 @@
       "id": "decorators.valid.decorated-class-compiles",
       "source": "../examples/valid/decorated-class-compiles.ts",
       "phase": "compile-run",
-      "expect": { "stdout": "a1:researcher" }
+      "expect": { "stdout": "a1:researcher agents agent_name 2" }
     },
     {
       "id": "decorators.valid.decorated-function-compiles",
       "source": "../examples/valid/decorated-function-compiles.ts",
       "phase": "compile-run",
-      "expect": { "stdout": "ababab" }
+      "expect": { "stdout": "search q:string@describe,limit:int -> string[] 3" }
+    },
+    {
+      "id": "decorators.valid.two-decorators-in-source-order",
+      "source": "../examples/valid/two-decorators-in-source-order.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "agents people/Agent/2" }
     },
     {
       "id": "decorators.valid.argument-kinds",
       "source": "../examples/valid/decorator-argument-kinds.ts",
       "phase": "compile-run",
-      "expect": { "stdout": "a1" }
+      "expect": { "stdout": "a1 agents 1" }
     },
     {
       "id": "decorators.invalid.argument-is-not-an-expression",
       "source": "../examples/invalid/decorator-argument-is-not-an-expression.ts",
       "phase": "diagnostics",
       "expect": { "diagnostic": "E_DECORATOR_ARG" }
+    },
+    {
+      "id": "decorators.invalid.not-imported",
+      "source": "../examples/invalid/decorator-not-imported.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "'@entity' is not imported" }
+    },
+    {
+      "id": "decorators.invalid.wrong-signature",
+      "source": "../examples/invalid/decorator-signature.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "must be `export function widen(d: Description): T`" }
+    },
+    {
+      "id": "decorators.invalid.module-does-not-compile",
+      "source": "../examples/invalid/decorator-module-does-not-compile.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "'@halfWritten' does not compile" }
+    },
+    {
+      "id": "decorators.invalid.exits-nonzero",
+      "source": "../examples/invalid/decorator-exits-nonzero.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "@boom wants at least three fields, and Agent has 1" }
+    },
+    {
+      "id": "decorators.invalid.cycle",
+      "source": "../examples/invalid/decorator-cycle.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "the file it decorates, so neither can be compiled first" }
     }
   ]
 }

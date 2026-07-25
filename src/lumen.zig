@@ -3,6 +3,7 @@
 const std = @import("std");
 const compiler = @import("lumen_compiler.zig");
 const describe = @import("lumen_describe.zig");
+const decorator = @import("lumen_decorator.zig");
 
 const CompileMode = enum {
     release_safe,
@@ -796,6 +797,184 @@ fn canonicalModuleKey(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
     return buf.items;
 }
 
+/// The decorator that could not run, for `compileFile` to report once the
+/// expansion has unwound. Mirrors `g_import_detail`: the expander returns an
+/// error, and the located message waits here.
+const DecoratorFail = struct { file: []const u8, at: decorator.Failure };
+var g_decorator_fail: ?DecoratorFail = null;
+
+/// A decorator module is compiled by the compiler itself, so a decorator whose
+/// module carries decorators nests. One level of that is staging; four is a
+/// program that has lost track of what it is building.
+var g_decorator_depth: u8 = 0;
+
+fn decoratorFailed(arena: std.mem.Allocator, file: []const u8, app: describe.Application, comptime fmt: []const u8, args: anytype) error{ DecoratorFailed, OutOfMemory } {
+    g_decorator_fail = .{ .file = file, .at = .{
+        .line = app.line,
+        .col = app.col,
+        .msg = std.fmt.allocPrint(arena, fmt, args) catch "a decorator failed",
+    } };
+    return error.DecoratorFailed;
+}
+
+/// Where a decorator name came from: the import binding that introduced it.
+const DecoratorBinding = struct {
+    /// The name the module exports it under, which the alias may differ from.
+    exported: []const u8,
+    /// The module specifier as written, resolved against the importing file.
+    spec: []const u8,
+};
+
+/// Runs every decorator written in one file and returns the constants they
+/// produced (spec 455 D3/D4).
+///
+/// A decorator is resolved through the file's own imports, its module is
+/// compiled standalone with a generated entry point, and the binary is run with
+/// the description as its one argument. What it prints is the value; what it
+/// writes to stderr is the diagnostic if it exits non-zero. Every failure is
+/// reported at the decorator's own line, naming the decorator — a decorator's
+/// module failing to compile is a failure of the decorator, not of this file.
+///
+/// `decorator_lines` collects the import lines that contributed decorator
+/// bindings and nothing else, so the caller can leave them out of the flat
+/// program: a decorator import contributes a binding to the compiler, and the
+/// module's helpers have no business in the namespace of every program that
+/// uses it. By line and not by module, since the same module may also be
+/// imported for a type the generated constant needs.
+fn runDecorators(
+    exp: *Expander,
+    path: []const u8,
+    key: []const u8,
+    dir: []const u8,
+    is_url: bool,
+    source: []const u8,
+    apps: []const describe.Application,
+    decorator_lines: *std.AutoHashMapUnmanaged(u32, void),
+) ![]const decorator.Generated {
+    const arena = exp.arena;
+    const io = exp.io;
+
+    // Bindings first: a name used as a decorator is not inlined as a value, so
+    // which imports to skip has to be known before any line is emitted.
+    var bindings: std.StringHashMapUnmanaged(DecoratorBinding) = .empty;
+    var line_no: u32 = 0;
+    var lines = std.mem.splitScalar(u8, source, '\n');
+    while (lines.next()) |line| {
+        line_no += 1;
+        const spec = (parseImportSpec(arena, line) catch continue) orelse continue;
+        if (spec.kind != .named) continue;
+        var only_decorators = true;
+        for (spec.kind.named) |b| {
+            var used = false;
+            for (apps) |app| {
+                if (!std.mem.eql(u8, app.name, b.alias)) continue;
+                used = true;
+                try bindings.put(arena, b.alias, .{ .exported = b.name, .spec = spec.spec });
+            }
+            if (!used) only_decorators = false;
+        }
+        if (only_decorators) try decorator_lines.put(arena, line_no, {});
+    }
+
+    if (g_decorator_depth >= 4) return decoratorFailed(arena, path, apps[0], "'@{s}' is four decorator modules deep — the compiler stopped rather than staging further", .{apps[0].name});
+    g_decorator_depth += 1;
+    defer g_decorator_depth -= 1;
+
+    var generated: std.ArrayListUnmanaged(decorator.Generated) = .empty;
+    for (apps) |app| {
+        const binding = bindings.get(app.name) orelse return decoratorFailed(arena, path, app, "'@{s}' is not imported — a decorator is an ordinary imported function, so add `import {{ {s} }} from \"./…\";`", .{ app.name, app.name });
+        if (is_url or std.mem.startsWith(u8, binding.spec, "https://"))
+            return decoratorFailed(arena, path, app, "'@{s}' comes from {s}: a decorator is compiled and run from a local file, so it cannot be fetched over https", .{ app.name, binding.spec });
+
+        const module_path = try std.fs.path.resolve(arena, &.{ dir, binding.spec });
+
+        // A decorator module that reaches the file it decorates cannot be
+        // compiled: that file is not finished until this decorator has run.
+        var closure: std.StringArrayHashMapUnmanaged(void) = .empty;
+        collectWatchPaths(arena, io, module_path, &closure, 0);
+        if (closure.contains(key))
+            return decoratorFailed(arena, path, app, "'@{s}' cannot run: {s} imports {s}, the file it decorates, so neither can be compiled first", .{ app.name, displayPath(module_path), displayPath(path) });
+
+        const module_source = std.Io.Dir.cwd().readFileAlloc(io, module_path, arena, .limited(16 * 1024 * 1024)) catch
+            return decoratorFailed(arena, path, app, "'@{s}' names {s}, which cannot be read", .{ app.name, displayPath(module_path) });
+
+        var fail: decorator.Failure = undefined;
+        const sig = decorator.signature(arena, module_source, displayPath(module_path), binding.exported, app, &fail) catch |e| switch (e) {
+            error.DecoratorFailed => {
+                g_decorator_fail = .{ .file = path, .at = fail };
+                return e;
+            },
+            else => return e,
+        };
+
+        const value = try buildAndRun(exp, path, module_path, binding, app);
+        const literal = decorator.literal(arena, value, app, &fail) catch |e| switch (e) {
+            error.DecoratorFailed => {
+                g_decorator_fail = .{ .file = path, .at = fail };
+                return e;
+            },
+            else => return e,
+        };
+        try generated.append(arena, .{
+            .decl_line = app.decl_line,
+            .text = try std.fmt.allocPrint(arena, "let {s}: {s} = {s};\n", .{
+                try decorator.constantName(arena, app.name, app.target),
+                sig.returns,
+                literal,
+            }),
+        });
+    }
+    return generated.items;
+}
+
+/// Compiles one decorator's module with a generated entry point and runs the
+/// binary, returning what it printed. The entry point is written beside the
+/// module so its import is the module's own relative path, and so a `// @link`
+/// in the module's closure resolves exactly as it does for any other build.
+fn buildAndRun(
+    exp: *Expander,
+    path: []const u8,
+    module_path: []const u8,
+    binding: DecoratorBinding,
+    app: describe.Application,
+    // Explicit, because this calls the compiler's own entry point: an inferred
+    // error set here would close a loop through everything compiling a file can
+    // fail with. A failure of the decorator's module is the decorator's failure
+    // anyway, so nothing else escapes.
+) error{ DecoratorFailed, OutOfMemory }![]const u8 {
+    const arena = exp.arena;
+    const io = exp.io;
+
+    // The entry point is a temporary file in someone else's directory, so its
+    // name carries the running process: two compiles of the same decorator at
+    // once write and delete their own.
+    const entry_name = try std.fmt.allocPrint(arena, ".lumen-decorator-{s}-{x}.ts", .{ binding.exported, std.Thread.getCurrentId() });
+    const entry_path = try std.fs.path.join(arena, &.{ std.fs.path.dirname(module_path) orelse ".", entry_name });
+    const entry = try decorator.entrySource(arena, try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.basename(module_path)}), binding.exported);
+    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = entry_path, .data = entry }) catch
+        return decoratorFailed(arena, path, app, "'@{s}' could not be run: {s} is not writable, and the generated entry point is written beside the module it calls", .{ app.name, displayPath(std.fs.path.dirname(module_path) orelse ".") });
+    defer std.Io.Dir.cwd().deleteFile(io, entry_path) catch {};
+
+    // The decorator's module is the user's own code with its own file and
+    // lines, so its diagnostics are the message — captured rather than printed,
+    // so they arrive under the decorator that pulled the module in.
+    var captured: std.Io.Writer.Allocating = .init(arena);
+    const built = compileFile(arena, io, entry_path, .release_safe, .build_quiet, &.{}, false, false, &captured.writer) catch |e|
+        return decoratorFailed(arena, path, app, "'@{s}' could not be compiled: {s}", .{ app.name, @errorName(e) });
+    const exe = try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.stem(entry_name)});
+    defer std.Io.Dir.cwd().deleteFile(io, exe) catch {};
+    if (built != 0)
+        return decoratorFailed(arena, path, app, "'@{s}' does not compile:\n{s}", .{ app.name, std.mem.trim(u8, captured.written(), "\n") });
+
+    const ran = std.process.run(arena, io, .{ .argv = &.{ exe, app.json } }) catch
+        return decoratorFailed(arena, path, app, "'@{s}' was built but could not be run", .{app.name});
+    switch (ran.term) {
+        .exited => |code| if (code != 0) return decoratorFailed(arena, path, app, "'@{s}' failed:\n{s}", .{ app.name, std.mem.trim(u8, if (ran.stderr.len > 0) ran.stderr else ran.stdout, "\n") }),
+        else => return decoratorFailed(arena, path, app, "'@{s}' was terminated before it returned a value", .{app.name}),
+    }
+    return ran.stdout;
+}
+
 /// Shared state for one expansion of an entry module's import closure.
 const Expander = struct {
     arena: std.mem.Allocator,
@@ -943,6 +1122,30 @@ fn appendExpandedSource(
         break :blk path[0..slash];
     } else (std.fs.path.dirname(key) orelse ".");
 
+    // Decorators (spec 455). A file with no `@` in it cannot carry one, and
+    // pays nothing here: no parse, no resolution, no build, no run. One that
+    // might is parsed on its own to find them — a file whose decorators the
+    // parser cannot reach has a real syntax error, which the ordinary pipeline
+    // reports against the user's own line rather than from here.
+    var generated: []const decorator.Generated = &.{};
+    var decorator_lines: std.AutoHashMapUnmanaged(u32, void) = .empty;
+    if (std.mem.indexOfScalar(u8, source, '@') != null) {
+        var describe_diag: compiler.Diag = .{};
+        const apps = describe.collect(arena, source, displayPath(path), &describe_diag) catch &.{};
+        if (apps.len > 0) generated = try runDecorators(exp, path, key, dir, is_url, source, apps, &decorator_lines);
+    }
+    var pending: usize = 0;
+    var brace_depth: i32 = 0;
+    // A generated constant is mapped back to the declaration it belongs to, so
+    // a checker error in it lands on a line the user wrote.
+    const appendGenerated = struct {
+        fn f(a: std.mem.Allocator, e: *Expander, o: *std.ArrayListUnmanaged(u8), file: []const u8, g: decorator.Generated) !void {
+            try o.appendSlice(a, g.text);
+            var nl = std.mem.count(u8, g.text, "\n");
+            while (nl > 0) : (nl -= 1) try e.line_map.append(a, .{ .file = file, .line = g.decl_line });
+        }
+    }.f;
+
     // Records `alias -> target` for an identifier this module uses to reach a
     // child's declaration. Skipped when the module declares `alias` itself (a
     // genuine duplicate binding, which the checker reports) and rejected when it
@@ -980,6 +1183,12 @@ fn appendExpandedSource(
     var lines = std.mem.splitScalar(u8, source, '\n');
     while (lines.next()) |line| {
         src_line += 1;
+        // A generated constant lands once the declaration it was written on has
+        // closed: everything after can use it, and its value is assigned before
+        // any of that runs (spec 455 D4).
+        while (pending < generated.len and brace_depth == 0 and generated[pending].decl_line < src_line) : (pending += 1)
+            try appendGenerated(arena, exp, out, path, generated[pending]);
+        brace_depth += braceDelta(line);
         const out_len_before = out.items.len;
         var child_recorded = false;
         // Record where any lines appended for this source line came from.
@@ -993,6 +1202,10 @@ fn appendExpandedSource(
             continue;
         }
         if (try parseImportSpec(arena, line)) |import_spec| {
+            // An import that contributed only decorator bindings is not inlined:
+            // it named a function for the compiler to run, and the module's own
+            // helpers stay out of this program's namespace (spec 455 D3).
+            if (decorator_lines.get(src_line) != null) continue;
             if (local_imports.get(import_spec.spec) != null) {
                 setImportDetail(arena, "duplicate import of '{s}'", .{import_spec.spec});
                 return error.DuplicateImport;
@@ -1092,6 +1305,9 @@ fn appendExpandedSource(
         try appendTransformed(arena, out, line, file_namespaces.items, renames.items);
         try out.append(arena, '\n');
     }
+    // A declaration that closes on the file's last line still gets its constant.
+    while (pending < generated.len) : (pending += 1)
+        try appendGenerated(arena, exp, out, path, generated[pending]);
     try exp.emitted.put(arena, key, info);
     return info;
 }
@@ -1655,6 +1871,10 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             error.ImportCycle => try err.print("{s}:1:1: error: {s} [E_IMPORT_CYCLE]\n", .{ path, detail orelse "import cycle detected" }),
             error.DuplicateImport => try err.print("{s}:1:1: error: {s} [E_DUPLICATE_IMPORT]\n", .{ path, detail orelse "module imported twice" }),
             error.MissingExport => try err.print("{s}:1:1: error: {s} [E_MISSING_EXPORT]\n", .{ path, detail orelse "imported name is not exported" }),
+            error.DecoratorFailed => {
+                const f: DecoratorFail = g_decorator_fail orelse .{ .file = path, .at = .{ .line = 1, .col = 1, .msg = "a decorator failed" } };
+                try err.print("{s}:{d}:{d}: error: {s} [E_DECORATOR]\n", .{ displayPath(f.file), f.at.line, f.at.col, f.at.msg });
+            },
             error.DuplicateTypeName => {
                 const loc = g_import_loc;
                 try err.print("{s}:{d}:1: error: {s} [E_DUPLICATE_TYPE]\n", .{
