@@ -887,10 +887,21 @@ pub fn registerLumenHttpResponse(self: *Checker) ?void {
 // `http.createServer`'s handler.
 pub fn registerLumenHttpRequest(self: *Checker) ?void {
     if (self.type_decls.get("__LumenHttpRequest") == null) {
-        const fields = self.arena.alloc(ast.TypeField, 3) catch return null;
+        const fields = self.arena.alloc(ast.TypeField, 4) catch return null;
         fields[0] = .{ .name = "method", .annotation = "string", .checked_type = .string };
         fields[1] = .{ .name = "path", .annotation = "string", .checked_type = .string };
         fields[2] = .{ .name = "body", .annotation = "string", .checked_type = .string };
+        // spec 459: the same `Map<string,string>` the response carries, built
+        // the same way, so one shape answers for headers in both directions.
+        // Names arrive lowercased, which is what makes `headers.get("authorization")`
+        // a lookup rather than a search over whatever case the client chose.
+        const key_ty = self.arena.create(types.Type) catch return null;
+        key_ty.* = .string;
+        const val_ty = self.arena.create(types.Type) catch return null;
+        val_ty.* = .string;
+        const map_ty = self.arena.create(types.MapType) catch return null;
+        map_ty.* = .{ .key = key_ty, .value = val_ty };
+        fields[3] = .{ .name = "headers", .annotation = "Map<string,string>", .checked_type = .{ .map_type = map_ty } };
         self.type_decls.put(self.arena, "__LumenHttpRequest", .{ .fields = fields }) catch return null;
     }
 }

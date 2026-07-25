@@ -316,8 +316,41 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
         // this; root cause was closing the connection after every single
         // response (a fresh TCP handshake per request), the same gap this
         // closes.
+        //
+        // Request headers (spec 459): the header block was already being read
+        // to find Content-Length, so surfacing it costs one map insert per
+        // line and no second parse. The map is built in the connection arena,
+        // not the process-wide one: it is valid for the handler call and no
+        // longer, exactly like the method/path/body slices beside it, and a
+        // per-request allocation in a process-lifetime arena would grow a
+        // server that is meant to run forever.
         try out.appendSlice(arena,
-            \\pub const __LumenHttpRequest = struct { method: []const u8, path: []const u8, body: []const u8 };
+            \\pub const __LumenHttpRequest = struct { method: []const u8, path: []const u8, body: []const u8, headers: *LumenMap([]const u8, []const u8) };
+            \\fn __httpReqHeaders(alloc: std.mem.Allocator) ?*LumenMap([]const u8, []const u8) {
+            \\    const m = alloc.create(LumenMap([]const u8, []const u8)) catch return null;
+            \\    m.* = .{};
+            \\    return m;
+            \\}
+            \\fn __httpReqHeader(m: *LumenMap([]const u8, []const u8), alloc: std.mem.Allocator, name: []const u8, value: []const u8) void {
+            \\    // A line with no name, or none of the value a name promises, is
+            \\    // dropped rather than stored: a server answers whatever a client
+            \\    // sends it, including nonsense. A line with no colon at all never
+            \\    // reaches here -- the caller's parse skips it.
+            \\    if (name.len == 0 or value.len == 0) return;
+            \\    // Both sides are copied out of the read buffer, which the next
+            \\    // line read overwrites.
+            \\    const lower = alloc.alloc(u8, name.len) catch return;
+            \\    for (name, 0..) |c, i| lower[i] = std.ascii.toLower(c);
+            \\    const val = alloc.dupe(u8, value) catch return;
+            \\    // A header sent twice keeps the last value, which is what setting
+            \\    // the same key twice on a Map does.
+            \\    for (m.keys_.items, 0..) |k, i| if (std.mem.eql(u8, k, lower)) {
+            \\        m.values_.items[i] = val;
+            \\        return;
+            \\    };
+            \\    m.keys_.append(alloc, lower) catch return;
+            \\    m.values_.append(alloc, val) catch return;
+            \\}
             \\
         );
         if (needs_http_threadpool) {
@@ -405,6 +438,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\                var it = std.mem.tokenizeScalar(u8, line, ' ');
                 \\                const method = it.next() orelse break :conn;
                 \\                const path = it.next() orelse break :conn;
+                \\                const hdrs = __httpReqHeaders(carena) orelse break :conn;
                 \\                var content_length: usize = 0;
                 \\                var keep_alive = true;
                 \\                while (true) {
@@ -414,6 +448,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\                    const colon = std.mem.indexOfScalar(u8, h, ':') orelse continue;
                 \\                    const name = std.mem.trim(u8, h[0..colon], " \t");
                 \\                    const value = std.mem.trim(u8, h[colon + 1 ..], " \t");
+                \\                    __httpReqHeader(hdrs, carena, name, value);
                 \\                    if (std.ascii.eqlIgnoreCase(name, "content-length")) {
                 \\                        content_length = std.fmt.parseInt(usize, value, 10) catch 0;
                 \\                    } else if (std.ascii.eqlIgnoreCase(name, "connection") and std.ascii.eqlIgnoreCase(value, "close")) {
@@ -426,6 +461,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\                    .method = carena.dupe(u8, method) catch break :conn,
                 \\                    .path = carena.dupe(u8, path) catch break :conn,
                 \\                    .body = body,
+                \\                    .headers = hdrs,
                 \\                };
                 \\                const res = self.handler.call(self.handler.ctx, req);
                 \\                const conn_header: []const u8 = if (keep_alive) "keep-alive" else "close";
@@ -507,6 +543,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\                var it = std.mem.tokenizeScalar(u8, line, ' ');
                     \\                const method = it.next() orelse break :conn;
                     \\                const path = it.next() orelse break :conn;
+                    \\                const hdrs = __httpReqHeaders(carena) orelse break :conn;
                     \\                var content_length: usize = 0;
                     \\                var keep_alive = true;
                     \\                while (true) {
@@ -516,6 +553,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\                    const colon = std.mem.indexOfScalar(u8, h, ':') orelse continue;
                     \\                    const name = std.mem.trim(u8, h[0..colon], " \t");
                     \\                    const value = std.mem.trim(u8, h[colon + 1 ..], " \t");
+                    \\                    __httpReqHeader(hdrs, carena, name, value);
                     \\                    if (std.ascii.eqlIgnoreCase(name, "content-length")) {
                     \\                        content_length = std.fmt.parseInt(usize, value, 10) catch 0;
                     \\                    } else if (std.ascii.eqlIgnoreCase(name, "connection") and std.ascii.eqlIgnoreCase(value, "close")) {
@@ -528,6 +566,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\                    .method = carena.dupe(u8, method) catch break :conn,
                     \\                    .path = carena.dupe(u8, path) catch break :conn,
                     \\                    .body = body,
+                    \\                    .headers = hdrs,
                     \\                };
                     \\                var rw: LumenResponseWriter = .{ .w = w, .keep_alive = keep_alive };
                     \\                self.handler.call(self.handler.ctx, req, &rw);
@@ -583,6 +622,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\            var it = std.mem.tokenizeScalar(u8, line, ' ');
                 \\            const method = it.next() orelse break :conn;
                 \\            const path = it.next() orelse break :conn;
+                \\            const hdrs = __httpReqHeaders(carena) orelse break :conn;
                 \\            var content_length: usize = 0;
                 \\            var keep_alive = true;
                 \\            while (true) {
@@ -592,6 +632,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\                const colon = std.mem.indexOfScalar(u8, h, ':') orelse continue;
                 \\                const name = std.mem.trim(u8, h[0..colon], " \t");
                 \\                const value = std.mem.trim(u8, h[colon + 1 ..], " \t");
+                \\                __httpReqHeader(hdrs, carena, name, value);
                 \\                if (std.ascii.eqlIgnoreCase(name, "content-length")) {
                 \\                    content_length = std.fmt.parseInt(usize, value, 10) catch 0;
                 \\                } else if (std.ascii.eqlIgnoreCase(name, "connection") and std.ascii.eqlIgnoreCase(value, "close")) {
@@ -604,6 +645,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\                .method = carena.dupe(u8, method) catch break :conn,
                 \\                .path = carena.dupe(u8, path) catch break :conn,
                 \\                .body = body,
+                \\                .headers = hdrs,
                 \\            };
                 \\            const res = handler.call(handler.ctx, req);
                 \\            const conn_header: []const u8 = if (keep_alive) "keep-alive" else "close";
@@ -650,6 +692,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\            var it = std.mem.tokenizeScalar(u8, line, ' ');
                     \\            const method = it.next() orelse break :conn;
                     \\            const path = it.next() orelse break :conn;
+                    \\            const hdrs = __httpReqHeaders(carena) orelse break :conn;
                     \\            var content_length: usize = 0;
                     \\            var keep_alive = true;
                     \\            while (true) {
@@ -659,6 +702,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\                const colon = std.mem.indexOfScalar(u8, h, ':') orelse continue;
                     \\                const name = std.mem.trim(u8, h[0..colon], " \t");
                     \\                const value = std.mem.trim(u8, h[colon + 1 ..], " \t");
+                    \\                __httpReqHeader(hdrs, carena, name, value);
                     \\                if (std.ascii.eqlIgnoreCase(name, "content-length")) {
                     \\                    content_length = std.fmt.parseInt(usize, value, 10) catch 0;
                     \\                } else if (std.ascii.eqlIgnoreCase(name, "connection") and std.ascii.eqlIgnoreCase(value, "close")) {
@@ -671,6 +715,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\                .method = carena.dupe(u8, method) catch break :conn,
                     \\                .path = carena.dupe(u8, path) catch break :conn,
                     \\                .body = body,
+                    \\                .headers = hdrs,
                     \\            };
                     \\            var rw: LumenResponseWriter = .{ .w = w, .keep_alive = keep_alive };
                     \\            handler.call(handler.ctx, req, &rw);

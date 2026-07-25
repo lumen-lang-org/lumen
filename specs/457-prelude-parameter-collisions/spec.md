@@ -48,6 +48,24 @@ program. Which of them is fatal depends on which standard-library calls the
 program happens to make, so the failure appears when an unrelated line is
 added, and points at the call rather than at the declaration.
 
+`handler` is the sharpest of them, because it is the name the documentation's
+own shape invites (found again while adding request headers, spec 459):
+
+```ts
+function handler(req: HttpRequest): HttpResponse {
+  return { status: 200, body: "ok", ok: true, headers: new Map<string, string>() };
+}
+http.createServer(8099, handler);
+```
+
+```
+srv.ts:2:3: error: function parameter shadows declaration of 'handler'
+```
+
+The prelude function is `__httpCreateServer(io, alloc, port, handler)` in
+`src/lumen_runtime_net.zig`. Renaming the user's function is the only way
+through, and nothing in the message says so.
+
 This also blocks a decorator module (spec 455) from declaring a top-level
 `label` or `sig`, because the generated entry point pulls in the process
 runtime whether the decorator wants it or not.

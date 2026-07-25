@@ -1,0 +1,35 @@
+{
+  "feature": "459-http-request-headers",
+  "cases": [
+    {
+      "id": "reqheaders.valid.read-request-headers",
+      "source": "../examples/valid/read-request-headers.ts",
+      "phase": "static",
+      "expect": {}
+    },
+    {
+      "id": "reqheaders.valid.map-methods-apply",
+      "source": "../examples/valid/request-headers-map-methods.ts",
+      "phase": "static",
+      "expect": {}
+    },
+    {
+      "id": "reqheaders.valid.streaming-handler-reads-them-too",
+      "source": "../examples/valid/streaming-handler-headers.ts",
+      "phase": "static",
+      "expect": {}
+    },
+    {
+      "id": "reqheaders.invalid.value-is-a-string",
+      "source": "../examples/invalid/header-value-is-a-string.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "expected `string`, got `i32`" }
+    },
+    {
+      "id": "reqheaders.invalid.headers-map-string-to-string",
+      "source": "../examples/invalid/headers-are-strings-to-strings.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "expected `Map<string, i32>`, got `Map<string, string>`" }
+    }
+  ]
+}

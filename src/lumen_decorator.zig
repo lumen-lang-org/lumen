@@ -40,6 +40,9 @@ pub const Generated = struct {
 pub const Signature = struct {
     /// The declared return type, which becomes the generated constant's type.
     returns: []const u8,
+    /// The description this decorator is handed, narrowed to the keys its own
+    /// `Description` type declares (see `narrow`).
+    description: []const u8,
 };
 
 /// The one parameter type a decorator takes, and the type its module must
@@ -98,7 +101,61 @@ pub fn signature(
     if (!has_description)
         return expected(arena, app, module_path, exported, "its module must also export `type Description` for the description to be parsed into", fail);
 
-    return .{ .returns = f.return_annotation };
+    return .{ .returns = f.return_annotation, .description = try narrow(arena, program, app.json) };
+}
+
+/// The description narrowed to what this decorator's own `Description` type
+/// asks for: every key that type does not declare is dropped, recursively,
+/// before the JSON reaches the generated entry point.
+///
+/// `JSON.parse` accepts only the keys its target type declares, so without this
+/// every field the description gains breaks every decorator already written —
+/// spec 459's `methods` took the 455 suite from ten passing to six on the day
+/// it was added, and the format could never have grown again. A decorator now
+/// sees exactly what it named, and a key it did not name is invisible to it;
+/// `protocol` is what a decorator refuses a description by, not the arrival of
+/// a field it never reads.
+///
+/// Narrowing only ever removes. A key the type declares and the description
+/// does not is left missing, and the decorator fails to parse it, which is the
+/// right answer: it asked for something the compiler does not describe.
+fn narrow(arena: std.mem.Allocator, program: ast.Program, json: []const u8) ![]const u8 {
+    var decls: std.StringHashMapUnmanaged([]const ast.TypeField) = .empty;
+    for (program.stmts) |stmt| switch (stmt) {
+        .type_decl => |t| if (t.alias == null and t.fields.len > 0) try decls.put(arena, t.name, t.fields),
+        else => {},
+    };
+    const parsed = std.json.parseFromSlice(std.json.Value, arena, json, .{}) catch return json;
+    const kept = try narrowValue(arena, &decls, parsed.value, description_type);
+    return std.json.Stringify.valueAlloc(arena, kept, .{}) catch json;
+}
+
+/// One value against one annotation. An annotation naming a record the module
+/// declares narrows through it; an array narrows each element; anything else —
+/// a scalar, or a type declared somewhere this parse cannot see — is carried
+/// through untouched, because nothing here knows enough to drop from it.
+fn narrowValue(
+    arena: std.mem.Allocator,
+    decls: *const std.StringHashMapUnmanaged([]const ast.TypeField),
+    value: std.json.Value,
+    annotation: []const u8,
+) !std.json.Value {
+    const a = std.mem.trim(u8, annotation, " \t");
+    if (std.mem.endsWith(u8, a, "[]")) {
+        if (value != .array) return value;
+        const elem = a[0 .. a.len - 2];
+        var items: std.json.Array = .init(arena);
+        for (value.array.items) |item| try items.append(try narrowValue(arena, decls, item, elem));
+        return .{ .array = items };
+    }
+    const fields = decls.get(a) orelse return value;
+    if (value != .object) return value;
+    var obj: std.json.ObjectMap = .empty;
+    for (fields) |f| {
+        const got = value.object.get(f.name) orelse continue;
+        try obj.put(arena, f.name, try narrowValue(arena, decls, got, f.annotation));
+    }
+    return .{ .object = obj };
 }
 
 /// Whether a declared return type is one the value can travel back through JSON
@@ -393,6 +450,44 @@ test "a decorator's signature is read off its module (spec 455)" {
         try std.testing.expect(std.mem.indexOf(u8, fail.msg, "'@entity' must be") != null);
         try std.testing.expectEqual(@as(u32, 3), fail.line);
     }
+}
+
+test "a decorator is handed only the keys its own Description declares (spec 459)" {
+    var buf: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer buf.deinit();
+    const arena = buf.allocator();
+    // What the compiler describes a class as today, methods and all.
+    const full =
+        \\{"protocol":1,"kind":"class","name":"AgentApi","args":["/agents"],"file":"api.ts","line":2,"fields":[{"name":"base","type":"string","decorators":[]}],"methods":[{"name":"find","returns":"string","params":[{"name":"id","type":"string","decorators":[{"name":"param","args":["the id"]}]}],"decorators":[{"name":"get","args":["/:id"]}]}]}
+    ;
+    const app: describe.Application = .{ .name = "entity", .target = "AgentApi", .json = full, .line = 3, .col = 1, .decl_line = 4 };
+    var fail: Failure = undefined;
+
+    // A decorator written before methods were described: it names the seven
+    // keys spec 455 had, and runs against the description spec 459 emits.
+    const unaware =
+        \\export type DecoratorUse = { name: string, args: string[] };
+        \\export type FieldDescription = { name: string, type: string, decorators: DecoratorUse[] };
+        \\export type Description = { protocol: int, kind: string, name: string, args: string[], file: string, line: int, fields: FieldDescription[] };
+        \\export function entity(d: Description): int { return 1; }
+        \\
+    ;
+    try std.testing.expectEqualStrings(
+        \\{"protocol":1,"kind":"class","name":"AgentApi","args":["/agents"],"file":"api.ts","line":2,"fields":[{"name":"base","type":"string","decorators":[]}]}
+    , (try signature(arena, unaware, "e.ts", "entity", app, &fail)).description);
+
+    // Narrowing reaches all the way down: a decorator that wants the methods
+    // but not their signatures is not handed the signatures.
+    const partial =
+        \\export type DecoratorUse = { name: string, args: string[] };
+        \\export type MethodDescription = { name: string, decorators: DecoratorUse[] };
+        \\export type Description = { name: string, methods: MethodDescription[] };
+        \\export function entity(d: Description): int { return 1; }
+        \\
+    ;
+    try std.testing.expectEqualStrings(
+        \\{"name":"AgentApi","methods":[{"name":"find","decorators":[{"name":"get","args":["/:id"]}]}]}
+    , (try signature(arena, partial, "e.ts", "entity", app, &fail)).description);
 }
 
 test "the generated entry point reads argv[1], calls, and prints (spec 455)" {
