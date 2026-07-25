@@ -72,7 +72,18 @@ pub fn parseDecorators(self: *Parser) CompileError![]ast.Decorator {
             try self.advance();
             while (!self.isOp(')')) {
                 try args.append(self.arena, try parseDecoratorArg(self));
-                if (self.isOp(',')) try self.advance() else break;
+                if (self.isOp(',')) {
+                    try self.advance();
+                    continue;
+                }
+                // A literal followed by neither a comma nor a close paren means
+                // an expression was written — `@entity(1 + 2)`. Saying so beats
+                // letting expectOp report a stray `+`, which describes the
+                // symptom and not the rule.
+                if (!self.isOp(')')) {
+                    self.last_err = "E_DECORATOR_ARG";
+                    return error.ParseError;
+                }
             }
             try self.expectOp(')');
         }

@@ -45,6 +45,27 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run compiler tests");
     test_step.dependOn(&run_exe_tests.step);
 
+    // Tests in a module the root does not pull into the test build are never
+    // run, and a suite that silently does not run is worse than none: sixteen
+    // of the compiler's twenty-two tests were in that state. Each file with
+    // tests of its own is compiled and run explicitly.
+    const test_roots = [_][]const u8{
+        "src/lumen_lexer.zig",
+        "src/lumen_describe.zig",
+        "src/lumen_decorator.zig",
+        "src/regex_rt.zig",
+    };
+    for (test_roots) |root| {
+        const unit = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(root),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+        test_step.dependOn(&b.addRunArtifact(unit).step);
+    }
+
     const fmt_targets = [_][]const u8{
         "build.zig",
         "src/lumen.zig",

@@ -103,9 +103,9 @@ collectStrConcat:35, collectDestPassable:111, markBuilderParts:147, markAccumula
 The parser -- stage 2 of the compiler.
 Parser:33
 
-## src/lumen_parser_decl.zig (895 lines)
+## src/lumen_parser_decl.zig (906 lines)
 Declaration parsing: `type`/`interface`/`enum`/`extern`/`function`/`class`,
-parseDecorators:57, parseTypeDecl:84, parseOptionalMember:252, parseExternDecl:273, parseInterfaceDecl:321, parseEnumDecl:405, parseFunctionDecl:445, parseParamList:505, parseTypeParams:555, parseTypeArgs:619, looksLikeTypeArgs:635, parseClassDecl:673
+parseDecorators:57, parseTypeDecl:95, parseOptionalMember:263, parseExternDecl:284, parseInterfaceDecl:332, parseEnumDecl:416, parseFunctionDecl:456, parseParamList:516, parseTypeParams:566, parseTypeArgs:630, looksLikeTypeArgs:646, parseClassDecl:684
 
 ## src/lumen_parser_expr.zig (991 lines)
 Type-annotation and expression parsing.
