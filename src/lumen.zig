@@ -1151,7 +1151,7 @@ fn collectWatchPaths(
     while (lines.next()) |line| {
         const import_spec = (parseImportSpec(arena, line) catch continue) orelse continue;
         if (std.mem.startsWith(u8, import_spec.spec, "https://")) continue;
-        const child = std.fs.path.join(arena, &.{ dir, import_spec.spec } ) catch continue;
+        const child = std.fs.path.join(arena, &.{ dir, import_spec.spec }) catch continue;
         collectWatchPaths(arena, io, child, set, depth + 1);
     }
 }
@@ -1533,6 +1533,392 @@ fn resolveLinkPath(arena: std.mem.Allocator, token: []const u8, line_no: u32) ![
     return try std.fs.path.join(arena, &.{ dir, token });
 }
 
+/// The path an `embed(...)` call names, as the compiler should open it.
+///
+/// Absolute paths pass through; a relative one is joined to the directory of
+/// the source file that wrote the call, exactly as `resolveLinkPath` does, so a
+/// package that ships a file beside its source embeds the same bytes however
+/// deep in the tree the program compiling it happens to sit.
+fn resolveEmbedPath(arena: std.mem.Allocator, path: []const u8, line_no: u32) ![]const u8 {
+    if (path.len == 0 or path[0] == '/') return path;
+    if (line_no == 0 or line_no - 1 >= g_line_map.len) return path;
+    const origin = g_line_map[line_no - 1].file;
+    // A module fetched over http has no directory on disk to resolve against.
+    if (std.mem.startsWith(u8, origin, "https://")) return path;
+    const dir = std.fs.path.dirname(origin) orelse return path;
+    if (dir.len == 0) return path;
+    return try std.fs.path.join(arena, &.{ dir, path });
+}
+
+/// Appends `bytes` to `out` as a double-quoted Lumen string literal.
+///
+/// Only what would not survive is escaped. A quote or a backslash would end or
+/// reinterpret the literal; a newline would push the rest of the source onto a
+/// line the line map does not describe, so every embedded file has to stay on
+/// the one line that wrote the call. Every other byte — including control bytes
+/// and UTF-8 continuation bytes — is copied through, because the lexer keeps a
+/// literal's bytes raw and `emitStrLit` escapes them again for the backend.
+fn appendLumenStrLit(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), bytes: []const u8) !void {
+    try out.append(arena, '"');
+    for (bytes) |b| switch (b) {
+        '"' => try out.appendSlice(arena, "\\\""),
+        '\\' => try out.appendSlice(arena, "\\\\"),
+        '\n' => try out.appendSlice(arena, "\\n"),
+        '\r' => try out.appendSlice(arena, "\\r"),
+        '\t' => try out.appendSlice(arena, "\\t"),
+        0 => try out.appendSlice(arena, "\\0"),
+        else => try out.append(arena, b),
+    };
+    try out.append(arena, '"');
+}
+
+/// Decodes the escapes in a string literal's raw source text. Paths rarely
+/// carry any, but a Windows-style `"..\\shim\\x.sql"` has to mean one backslash
+/// per pair before the path is opened.
+fn unescapeLiteral(arena: std.mem.Allocator, raw: []const u8) ![]const u8 {
+    if (std.mem.indexOfScalar(u8, raw, '\\') == null) return raw;
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var i: usize = 0;
+    while (i < raw.len) : (i += 1) {
+        if (raw[i] != '\\' or i + 1 >= raw.len) {
+            try out.append(arena, raw[i]);
+            continue;
+        }
+        i += 1;
+        try out.append(arena, switch (raw[i]) {
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
+            '0' => 0,
+            else => raw[i],
+        });
+    }
+    return out.items;
+}
+
+const EmbedError = error{EmbedFailed} || std.mem.Allocator.Error;
+
+/// One `embed`/`embedDir` call the scan has recognised, already located.
+const EmbedCall = struct {
+    /// Byte just past the closing `)`.
+    end: usize,
+    /// The literal path as written, escapes decoded.
+    path: []const u8,
+    line: u32,
+    col: u32,
+};
+
+/// Reads the argument of an `embed`-family call whose name ends at `after_name`,
+/// or fails with the "not a literal" diagnostic. The argument has to be a plain
+/// string literal: the file is read before anything runs, so an expression here
+/// would have nothing to evaluate it with.
+fn parseEmbedCall(
+    arena: std.mem.Allocator,
+    source: []const u8,
+    after_name: usize,
+    line: u32,
+    col: u32,
+    diag: *compiler.Diag,
+) EmbedError!EmbedCall {
+    const notLiteral = struct {
+        fn fail(d: *compiler.Diag, l: u32, c: u32) EmbedError {
+            d.* = .{ .line = l, .col = c, .msg = "the path must be a literal — the file is read while compiling, so there is nothing to evaluate [E_EMBED]" };
+            return error.EmbedFailed;
+        }
+    }.fail;
+
+    var i = skipBlanks(source, after_name);
+    if (i >= source.len or source[i] != '(') return notLiteral(diag, line, col);
+    i = skipBlanks(source, i + 1);
+    if (i >= source.len or (source[i] != '"' and source[i] != '\'')) return notLiteral(diag, line, col);
+
+    const quote = source[i];
+    const lit_start = i + 1;
+    i = lit_start;
+    while (i < source.len and source[i] != quote and source[i] != '\n') : (i += 1) {
+        if (source[i] == '\\' and i + 1 < source.len) i += 1;
+    }
+    if (i >= source.len or source[i] != quote) return notLiteral(diag, line, col);
+    const raw = source[lit_start..i];
+
+    i = skipBlanks(source, i + 1);
+    if (i >= source.len or source[i] != ')') return notLiteral(diag, line, col);
+    return .{ .end = i + 1, .path = try unescapeLiteral(arena, raw), .line = line, .col = col };
+}
+
+fn skipBlanks(source: []const u8, from: usize) usize {
+    var i = from;
+    while (i < source.len and (source[i] == ' ' or source[i] == '\t')) i += 1;
+    return i;
+}
+
+/// Replaces every `embed("path")` and `embedDir("path")` call in the merged
+/// source with the file contents themselves, before the parser runs.
+///
+/// The substitution is the whole feature: the checker sees a string literal and
+/// the emitter emits a string, so no later phase knows the call existed and the
+/// compiled binary never opens the file. Each replacement stays on the line
+/// that wrote it, so the line map — and every diagnostic that reads through it
+/// — still describes the text.
+///
+/// The scan tracks string, template, regex and comment state, because `embed(`
+/// written inside any of those is text and not a call. That is stricter than
+/// the `// @link` pragma scan, which gets away with matching whole lines.
+fn expandEmbeds(arena: std.mem.Allocator, io: std.Io, source: []const u8, diag: *compiler.Diag) ![]const u8 {
+    if (std.mem.indexOf(u8, source, "embed") == null) return source;
+
+    // `${...}` nesting: one brace counter per open interpolation, so a template
+    // inside an interpolation inside a template still closes in the right order.
+    const Frame = union(enum) { template, interp: u32 };
+    var frames: std.ArrayListUnmanaged(Frame) = .empty;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var i: usize = 0;
+    var line: u32 = 1;
+    var line_start: usize = 0;
+    // `/` is division after a value and starts a regex literal otherwise. A
+    // regex body may hold an unbalanced quote (`/'/`), so the scan resolves it
+    // the way the lexer does rather than opening a string state that never ends.
+    var after_value = false;
+    // Last significant byte, to tell a call from a member named `embed`.
+    var prev_sig: u8 = 0;
+    var prev_word: []const u8 = "";
+
+    while (i < source.len) {
+        const in_template = frames.items.len > 0 and frames.items[frames.items.len - 1] == .template;
+        const c = source[i];
+        if (c == '\n') {
+            try out.append(arena, c);
+            i += 1;
+            line += 1;
+            line_start = i;
+            continue;
+        }
+        if (in_template) {
+            if (c == '\\' and i + 1 < source.len) {
+                try out.appendSlice(arena, source[i .. i + 2]);
+                i += 2;
+                continue;
+            }
+            if (c == '`') {
+                try out.append(arena, c);
+                i += 1;
+                _ = frames.pop();
+                after_value = true;
+                prev_sig = '`';
+                continue;
+            }
+            if (c == '$' and i + 1 < source.len and source[i + 1] == '{') {
+                try out.appendSlice(arena, "${");
+                i += 2;
+                try frames.append(arena, .{ .interp = 1 });
+                after_value = false;
+                prev_sig = '{';
+                continue;
+            }
+            try out.append(arena, c);
+            i += 1;
+            continue;
+        }
+        if (c == ' ' or c == '\t' or c == '\r') {
+            try out.append(arena, c);
+            i += 1;
+            continue;
+        }
+        if (c == '/' and i + 1 < source.len and source[i + 1] == '/') {
+            while (i < source.len and source[i] != '\n') : (i += 1) try out.append(arena, source[i]);
+            continue;
+        }
+        if (c == '/' and i + 1 < source.len and source[i + 1] == '*') {
+            try out.appendSlice(arena, "/*");
+            i += 2;
+            while (i < source.len) {
+                if (source[i] == '*' and i + 1 < source.len and source[i + 1] == '/') {
+                    try out.appendSlice(arena, "*/");
+                    i += 2;
+                    break;
+                }
+                if (source[i] == '\n') {
+                    line += 1;
+                    line_start = i + 1;
+                }
+                try out.append(arena, source[i]);
+                i += 1;
+            }
+            continue;
+        }
+        if (c == '"' or c == '\'') {
+            const start = i;
+            i += 1;
+            while (i < source.len and source[i] != c and source[i] != '\n') : (i += 1) {
+                if (source[i] == '\\' and i + 1 < source.len) i += 1;
+            }
+            if (i < source.len and source[i] == c) i += 1;
+            try out.appendSlice(arena, source[start..i]);
+            after_value = true;
+            prev_sig = c;
+            continue;
+        }
+        if (c == '`') {
+            try out.append(arena, c);
+            i += 1;
+            try frames.append(arena, .template);
+            continue;
+        }
+        if (c == '/' and !after_value) {
+            const start = i;
+            i += 1;
+            var in_class = false;
+            while (i < source.len and source[i] != '\n') : (i += 1) {
+                if (source[i] == '\\' and i + 1 < source.len) {
+                    i += 1;
+                } else if (source[i] == '[') {
+                    in_class = true;
+                } else if (source[i] == ']') {
+                    in_class = false;
+                } else if (source[i] == '/' and !in_class) {
+                    break;
+                }
+            }
+            if (i < source.len and source[i] == '/') i += 1;
+            while (i < source.len and isIdentCh(source[i])) i += 1;
+            try out.appendSlice(arena, source[start..i]);
+            after_value = true;
+            prev_sig = '/';
+            continue;
+        }
+        if (isIdentStartCh(c)) {
+            var e = i + 1;
+            while (e < source.len and isIdentCh(source[e])) e += 1;
+            const word = source[i..e];
+            const is_embed = std.mem.eql(u8, word, "embed") or std.mem.eql(u8, word, "embedDir");
+            // `obj.embed(x)` is a method call and `function embed(...)` is a
+            // declaration; neither is the compile-time form.
+            const shadowed = prev_sig == '.' or std.mem.eql(u8, prev_word, "function");
+            if (is_embed and !shadowed) {
+                const col: u32 = @intCast(i - line_start + 1);
+                const call = try parseEmbedCall(arena, source, e, line, col, diag);
+                const resolved = try resolveEmbedPath(arena, call.path, line);
+                if (std.mem.eql(u8, word, "embed")) {
+                    const bytes = std.Io.Dir.cwd().readFileAlloc(io, resolved, arena, .limited(16 * 1024 * 1024)) catch {
+                        diag.* = .{ .line = line, .col = col, .msg = try std.fmt.allocPrint(arena, "cannot embed \"{s}\": no such file [E_EMBED]", .{call.path}) };
+                        return error.EmbedFailed;
+                    };
+                    try appendLumenStrLit(arena, &out, bytes);
+                } else {
+                    try appendEmbeddedDir(arena, io, &out, resolved, call, diag);
+                }
+                i = call.end;
+                after_value = true;
+                prev_sig = ')';
+                prev_word = "";
+                continue;
+            }
+            try out.appendSlice(arena, word);
+            i = e;
+            after_value = !isRegexKeyword(word);
+            prev_sig = word[word.len - 1];
+            prev_word = word;
+            continue;
+        }
+        if ((c >= '0' and c <= '9')) {
+            try out.append(arena, c);
+            i += 1;
+            after_value = true;
+            prev_sig = c;
+            prev_word = "";
+            continue;
+        }
+        if (c == '{' or c == '}') {
+            if (frames.items.len > 0) {
+                switch (frames.items[frames.items.len - 1]) {
+                    .interp => |depth| {
+                        if (c == '{') {
+                            frames.items[frames.items.len - 1] = .{ .interp = depth + 1 };
+                        } else if (depth == 1) {
+                            _ = frames.pop();
+                        } else {
+                            frames.items[frames.items.len - 1] = .{ .interp = depth - 1 };
+                        }
+                    },
+                    .template => unreachable, // handled above
+                }
+            }
+        }
+        try out.append(arena, c);
+        i += 1;
+        // `)`, `]` and a postfix `++`/`--` end a value; every other punctuator
+        // puts the scan back at an expression start, where `/` is a regex.
+        after_value = c == ')' or c == ']' or (c == '+' and prev_sig == '+') or (c == '-' and prev_sig == '-');
+        prev_sig = c;
+        prev_word = "";
+    }
+    return out.items;
+}
+
+fn isRegexKeyword(id: []const u8) bool {
+    const kws = [_][]const u8{ "return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await" };
+    for (kws) |kw| if (std.mem.eql(u8, kw, id)) return true;
+    return false;
+}
+
+/// Appends the array literal an `embedDir(...)` call stands for: one
+/// `{ name, text }` record per regular file directly in `dir`.
+///
+/// Entries are sorted by name so two builds of unchanged sources produce the
+/// same program — directory order is whatever the filesystem hands back, which
+/// is neither stable nor sorted. Subdirectories and anything that is not a
+/// regular file are skipped rather than reported: a directory is pointed at for
+/// what it holds. The compiler reads no meaning into a name; that a file is
+/// called `V1__create_agents.sql` is the caller's business.
+fn appendEmbeddedDir(
+    arena: std.mem.Allocator,
+    io: std.Io,
+    out: *std.ArrayListUnmanaged(u8),
+    dir_path: []const u8,
+    call: EmbedCall,
+    diag: *compiler.Diag,
+) !void {
+    const missing = struct {
+        fn fail(a: std.mem.Allocator, d: *compiler.Diag, c: EmbedCall) !noreturn {
+            d.* = .{ .line = c.line, .col = c.col, .msg = try std.fmt.allocPrint(a, "cannot embed \"{s}\": no such file [E_EMBED]", .{c.path}) };
+            return error.EmbedFailed;
+        }
+    }.fail;
+
+    var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch try missing(arena, diag, call);
+    defer dir.close(io);
+
+    var names: std.ArrayListUnmanaged([]const u8) = .empty;
+    var it = dir.iterate();
+    while (it.next(io) catch try missing(arena, diag, call)) |entry| {
+        if (entry.kind != .file) continue;
+        try names.append(arena, try arena.dupe(u8, entry.name));
+    }
+    if (names.items.len == 0) try missing(arena, diag, call);
+    std.mem.sort([]const u8, names.items, {}, struct {
+        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.lessThan(u8, a, b);
+        }
+    }.lessThan);
+
+    try out.appendSlice(arena, "[");
+    for (names.items, 0..) |name, n| {
+        if (n > 0) try out.appendSlice(arena, ", ");
+        const full = try std.fs.path.join(arena, &.{ dir_path, name });
+        const bytes = dir.readFileAlloc(io, name, arena, .limited(16 * 1024 * 1024)) catch {
+            diag.* = .{ .line = call.line, .col = call.col, .msg = try std.fmt.allocPrint(arena, "cannot embed \"{s}\": no such file [E_EMBED]", .{full}) };
+            return error.EmbedFailed;
+        };
+        try out.appendSlice(arena, "{ name: ");
+        try appendLumenStrLit(arena, out, name);
+        try out.appendSlice(arena, ", text: ");
+        try appendLumenStrLit(arena, out, bytes);
+        try out.appendSlice(arena, " }");
+    }
+    try out.appendSlice(arena, "]");
+}
+
 /// Writes the lowercase hex SHA-256 of `bytes` into `out`, returning the slice.
 fn sha256Hex(out: *[64]u8, bytes: []const u8) []const u8 {
     var digest: [32]u8 = undefined;
@@ -1683,11 +2069,23 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         }
         return 2;
     };
-    const source = expanded.text;
     g_line_map = expanded.line_map;
     defer g_line_map = &.{};
 
     var diag: compiler.Diag = .{};
+    // `embed`/`embedDir` are resolved here, on the merged text and before the
+    // parser. Diagnostics keep quoting `written`, the source as the user typed
+    // it, so an excerpt shows `embed("./schema.sql")` and not the file it stands
+    // for; the substitution never adds or removes a line, so both texts agree on
+    // where every line is.
+    const written = expanded.text;
+    const source = expandEmbeds(arena, io, written, &diag) catch |e| switch (e) {
+        error.EmbedFailed => {
+            try printDiag(err, written, path, diag);
+            return 1;
+        },
+        else => return e,
+    };
     var warnings: std.ArrayListUnmanaged(compiler.Diag) = .empty;
     var zig_src = compiler.compileToZigWithOptions(arena, source, path, &diag, .{
         .runtime_locations = mode.runtimeLocations(),
@@ -1696,11 +2094,11 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .line_map = expanded.line_map,
         .test_mode = action == .run_test,
     }) catch {
-        try printDiag(err, source, path, diag);
-        try printWarnings(err, source, path, warnings.items, diag);
+        try printDiag(err, written, path, diag);
+        try printWarnings(err, written, path, warnings.items, diag);
         return 1;
     };
-    try printWarnings(err, source, path, warnings.items, null);
+    try printWarnings(err, written, path, warnings.items, null);
 
     // `lumen check`: diagnostics only — stop before writing or building anything.
     if (action == .check_only) {
@@ -1823,7 +2221,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             ow.interface.writeAll(result.stdout) catch {};
             ow.interface.flush() catch {};
         }
-        return try renderTestResults(arena, err, source, path, zig_src, gen_path, result.stderr, result.term);
+        return try renderTestResults(arena, err, written, path, zig_src, gen_path, result.stderr, result.term);
     }
     const result = std.process.run(arena, io, .{ .argv = argv.items }) catch {
         try err.print("error: could not run the native backend\n", .{});
@@ -1844,7 +2242,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
                 }
                 return 0;
             }
-            try reportBackendFailure(err, source, path, zig_src, gen_path, result.stderr);
+            try reportBackendFailure(err, written, path, zig_src, gen_path, result.stderr);
             return 1;
         },
         else => {
@@ -2411,4 +2809,125 @@ test "exported declaration names stop at a generic parameter list (spec 451)" {
     try std.testing.expect(parseNamedExportDecl("export { a, b };") == null);
     try std.testing.expect(parseNamedExportDecl("export interface I {") == null);
     try std.testing.expect(parseNamedExportDecl("type Point = { x: int };") == null);
+}
+
+test "embed( inside a string, comment, template or regex is text, not a call (spec 458)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    // Each source names a file that does not exist: if the scan mistook the
+    // text for a call it would fail to read it, so passing through unchanged is
+    // the whole assertion.
+    const untouched = [_][]const u8{
+        "let s = \"embed(\\\"x\\\")\";",
+        "let s = 'embed(\"x\")';",
+        "// embed(\"x\")",
+        "/* embed(\"x\")\n   embedDir(\"y\") */",
+        "let s = `embed(\"x\")`;",
+        "let s = `a ${ b } embed(\"x\")`;",
+        // A regex body may hold an unbalanced quote; the scan must not read it
+        // as the start of a string and swallow the rest of the file.
+        "let t = s.replace(/'/g, \"\"); let u = \"embed(\\\"x\\\")\";",
+        // A member or a declaration of that name is not the compile-time form.
+        "let s = box.embed(\"x\");",
+        "function embed(p: string): string { return p; }",
+    };
+    for (untouched) |src| {
+        var diag: compiler.Diag = .{};
+        const out = try expandEmbeds(arena, std.testing.io, src, &diag);
+        try std.testing.expectEqualStrings(src, out);
+    }
+}
+
+test "embed rejects an argument that is not a literal (spec 458)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    var diag: compiler.Diag = .{};
+    const src = "const text: string = embed(p);";
+    try std.testing.expectError(error.EmbedFailed, expandEmbeds(arena, std.testing.io, src, &diag));
+    try std.testing.expectEqual(@as(u32, 1), diag.line);
+    try std.testing.expectEqual(@as(u32, 22), diag.col);
+    try std.testing.expect(std.mem.indexOf(u8, diag.msg, "[E_EMBED]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, diag.msg, "must be a literal") != null);
+}
+
+test "embedding escapes what would not survive as a literal (spec 458)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    try appendLumenStrLit(arena, &out, "a\"b\\c\nd\te\r\x00f\x1bg");
+    // A control byte the lexer has no escape for is copied raw: the literal's
+    // bytes stay raw until codegen escapes them again for the backend.
+    try std.testing.expectEqualStrings("\"a\\\"b\\\\c\\nd\\te\\r\\0f\x1bg\"", out.items);
+}
+
+/// Builds a temporary directory of `.sql` files, runs a one-line program
+/// through the substitution against it, and returns the rewritten source.
+fn embedTestSource(arena: std.mem.Allocator, tmp: *std.testing.TmpDir, src: []const u8, diag: *compiler.Diag) ![]const u8 {
+    const io = std.testing.io;
+    // Written out of order on purpose: readdir hands back creation order on
+    // most filesystems, which is exactly what the sort has to survive.
+    try tmp.dir.writeFile(io, .{ .sub_path = "c.sql", .data = "SELECT \"c\";\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "a.sql", .data = "CREATE a\\b;\n" });
+    try tmp.dir.writeFile(io, .{ .sub_path = "b.sql", .data = "" });
+    try tmp.dir.createDirPath(io, "nested");
+    try tmp.dir.writeFile(io, .{ .sub_path = "nested/z.sql", .data = "skipped\n" });
+
+    // The line map is how a path resolves against the file that wrote the call,
+    // so the fake origin puts the (single-line) program inside the temp dir.
+    const origin = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/main.ts", .{tmp.sub_path});
+    const map = [_]LineOrigin{.{ .file = origin, .line = 1 }};
+    g_line_map = &map;
+    defer g_line_map = &.{};
+    return expandEmbeds(arena, io, src, diag);
+}
+
+test "embedDir lists regular files sorted by name (spec 458)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var diag: compiler.Diag = .{};
+    const out = try embedTestSource(arena, &tmp, "let f: F[] = embedDir(\".\");", &diag);
+    // Sorted by name whatever order the filesystem reports; `nested/` is not a
+    // regular file so it is skipped; contents round-trip through the escaping.
+    try std.testing.expectEqualStrings(
+        "let f: F[] = [{ name: \"a.sql\", text: \"CREATE a\\\\b;\\n\" }, " ++
+            "{ name: \"b.sql\", text: \"\" }, " ++
+            "{ name: \"c.sql\", text: \"SELECT \\\"c\\\";\\n\" }];",
+        out,
+    );
+}
+
+test "embed resolves against the file that wrote it (spec 458)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var diag: compiler.Diag = .{};
+    const out = try embedTestSource(arena, &tmp, "let s = embed(\"./a.sql\");", &diag);
+    try std.testing.expectEqualStrings("let s = \"CREATE a\\\\b;\\n\";", out);
+}
+
+test "a missing embed target is a diagnostic naming the path (spec 458)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var diag: compiler.Diag = .{};
+    try std.testing.expectError(error.EmbedFailed, embedTestSource(arena, &tmp, "let s = embed(\"./gone.sql\");", &diag));
+    try std.testing.expectEqualStrings("cannot embed \"./gone.sql\": no such file [E_EMBED]", diag.msg);
+    try std.testing.expectEqual(@as(u32, 9), diag.col);
+
+    diag = .{};
+    try std.testing.expectError(error.EmbedFailed, embedTestSource(arena, &tmp, "let f = embedDir(\"./gone\");", &diag));
+    try std.testing.expectEqualStrings("cannot embed \"./gone\": no such file [E_EMBED]", diag.msg);
 }

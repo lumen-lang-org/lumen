@@ -43,6 +43,15 @@ interface Disposable {
 // when the enclosing scope exits.
 declare function defer(fn: () => void): Disposable;
 
+// Compile-time embedding (spec 458). `embed(path)` is replaced by the contents
+// of that file, and `embedDir(path)` by one `{ name, text }` entry per regular
+// file directly in that directory, sorted by name. The path is a literal — it is
+// read while compiling — and resolves against the source file that wrote it, so
+// nothing is opened at run time and nothing ships beside the binary. Declared as
+// functions here only so tsc can see a type; there is nothing to call.
+declare function embed(path: string): string;
+declare function embedDir(path: string): { name: string; text: string }[];
+
 // Testing. `test("name", () => { ... })` declares a test run by `lumen test`
 // (Jest/Vitest/node:test-style). Inside a test body, `expect` asserts either a
 // boolean condition or a matcher on a value:

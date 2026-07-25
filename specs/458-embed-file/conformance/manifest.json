@@ -1,0 +1,53 @@
+{
+  "feature": "458-embed-file",
+  "cases": [
+    {
+      "id": "embed.valid.file-contents",
+      "source": "../examples/valid/embed-file.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "[hello from a file\n]\n[]" }
+    },
+    {
+      "id": "embed.valid.verbatim-bytes",
+      "source": "../examples/valid/embed-verbatim.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "55\na \"quoted\" word, a \\backslash, a\ttab\nand a second line" }
+    },
+    {
+      "id": "embed.valid.directory-sorted",
+      "source": "../examples/valid/embed-dir.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "3\nV1__create_teams.sql -> 42\nV2__create_agents.sql -> 94\nV3__agent_name.sql -> 70\nALTER TABLE agents ADD COLUMN name text NOT NULL DEFAULT '\"unnamed\"';" }
+    },
+    {
+      "id": "embed.valid.not-a-call-in-string-or-comment",
+      "source": "../examples/valid/embed-not-a-call.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "embed(\"./nowhere.txt\")|embedDir(\"./nowhere\")|embed(\"./nowhere.txt\")" }
+    },
+    {
+      "id": "embed.valid.resolves-against-the-importing-module",
+      "source": "../examples/valid/embed-from-import.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "[shipped beside the module\n]" }
+    },
+    {
+      "id": "embed.invalid.missing-file",
+      "source": "../examples/invalid/embed-missing.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "E_EMBED" }
+    },
+    {
+      "id": "embed.invalid.path-not-a-literal",
+      "source": "../examples/invalid/embed-not-literal.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "E_EMBED" }
+    },
+    {
+      "id": "embed.invalid.missing-directory",
+      "source": "../examples/invalid/embed-dir-missing.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "E_EMBED" }
+    }
+  ]
+}
