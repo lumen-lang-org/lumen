@@ -1120,6 +1120,15 @@ fn appendExpandedSource(
         if (demanded and exp.claimed(d.name)) {
             name = try exp.freshName(d.name);
             try renames.append(arena, .{ .name = d.name, .alias = name });
+        } else if (d.kind == .value and !d.exported and !d.is_default and exp.claimed(d.name)) {
+            // A declaration that is not exported cannot be named from outside
+            // its module, so a clash with a name some other module claimed is
+            // the compiler's to absorb, not the author's to avoid: two files'
+            // private helpers sharing a spelling is ordinary, and neither
+            // author has seen the other's code (spec 473). Same mechanism as
+            // the importer-forced rename above — only the default changes.
+            name = try exp.freshName(d.name);
+            try renames.append(arena, .{ .name = d.name, .alias = name });
         } else if (d.kind == .type_name) {
             // Two modules declaring the same type name is a real conflict, and
             // the flat program cannot hold both. Name them (spec 451 D3).
