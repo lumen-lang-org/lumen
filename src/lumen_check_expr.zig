@@ -2051,13 +2051,17 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 program.needs_args = true;
                 return .string;
             }
-            if (std.mem.eql(u8, call.name, "httpGet")) {
+            if (std.mem.eql(u8, call.name, "httpGet") and self.funcs.get("httpGet") == null and self.generic_funcs.get("httpGet") == null) {
                 for (call.args) |arg| _ = self.exprType(program, arg, line, col) orelse return null;
                 program.uses_io = true;
                 program.needs_httpget = true;
                 return .i64;
             }
-            if (std.mem.eql(u8, call.name, "serve")) {
+            // `serve` and `httpGet` are undocumented builtins from an earlier
+            // runtime, and both are names a program is likely to want. A user
+            // declaration wins: being silently retyped to the builtin's
+            // signature is worse than a name clash, because nothing says so.
+            if (std.mem.eql(u8, call.name, "serve") and self.funcs.get("serve") == null and self.generic_funcs.get("serve") == null) {
                 for (call.args) |arg| _ = self.exprType(program, arg, line, col) orelse return null;
                 program.uses_io = true;
                 program.needs_serve = true;
