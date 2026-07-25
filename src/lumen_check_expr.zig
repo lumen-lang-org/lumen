@@ -597,8 +597,12 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             self.pushScope() catch return null;
             self.arrow_base = self.scopes.items.len - 1;
             self.current_captures = &caps;
-            for (arrow.params) |p| {
-                self.currentScope().put(self.arena, p.name, .{ .ty = p.checked_type.?, .mutable = true, .emit_name = p.name }) catch return null;
+            for (arrow.params) |*p| {
+                // An arrow's parameter lives in the same flat generated
+                // namespace as a function's, so it is renamed on the same rule
+                // (spec 461).
+                const pen = self.paramEmitName(p) catch return null;
+                self.currentScope().put(self.arena, p.name, .{ .ty = p.checked_type.?, .mutable = true, .emit_name = pen }) catch return null;
             }
             // Arrow functions are not async in this subset, so `await` inside an
             // arrow body is rejected (it is not on an awaiting code path).

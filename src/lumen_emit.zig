@@ -1042,7 +1042,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     for (ar.params) |p| {
                         if (std.mem.eql(u8, p.name, "_")) continue;
                         if (analysis.bodyReassignsBinding(abody, p.name)) continue;
-                        try ww.print(a, "_ = &{s}; ", .{p.name});
+                        try ww.print(a, "_ = &{s}; ", .{analysis.paramName(p)});
                     }
                     // Stack-trace frame: named after the binding when known
                     // (`const g = ... => ...` traces as `g`), else <anonymous>.

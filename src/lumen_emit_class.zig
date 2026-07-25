@@ -227,7 +227,7 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
         const h_throws = analysis.g_method_arena != null and analysis.ctorThrows(analysis.g_method_arena.?, cc.name);
         try decls.print(arena, "    fn __superctor_{s}(self: *{s}", .{ cc.name, c.name });
         for (cc.ctor_params) |param| {
-            try decls.print(arena, ", {s}: {s}", .{ param.name, try types.zigName(arena, param.checked_type orelse return error.ParseError) });
+            try decls.print(arena, ", {s}: {s}", .{ analysis.paramName(param), try types.zigName(arena, param.checked_type orelse return error.ParseError) });
         }
         try decls.appendSlice(arena, if (h_throws) ") error{LumenThrow}!void {\n" else ") void {\n");
         if (!bodyUsesThis(cc.ctor_body)) try decls.appendSlice(arena, "    _ = self;\n");

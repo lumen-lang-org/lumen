@@ -344,19 +344,28 @@ pub fn bodyUsesThis(body: []const Stmt) bool {
 pub fn emitUnusedParamDiscards(params: []const ast.FunctionParam, body: []const Stmt, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
     for (params) |param| {
         if (!bodyUsesName(body, param.name)) {
-            try w.print(arena, "    _ = {s};\n", .{param.name});
+            try w.print(arena, "    _ = {s};\n", .{paramName(param)});
         }
     }
 }
 
+/// The identifier a parameter is emitted under. Usually its own name; a
+/// parameter spelled like a top-level declaration is renamed by the checker,
+/// because the generated code shares one namespace and forbids the shadowing
+/// (spec 461). Body references carry the same rename, so the two agree.
+pub fn paramName(param: ast.FunctionParam) []const u8 {
+    return param.emit_name orelse param.name;
+}
+
 /// The signature-level identifier for a parameter: when the body reassigns it,
 /// the incoming value is named `<name>__mp` and a mutable local `<name>` is
-/// bound to it (Zig params are const). Otherwise the parameter keeps its name.
+/// bound to it (Zig params are const). Otherwise the parameter keeps its
+/// emitted name.
 pub fn paramSigName(arena: std.mem.Allocator, param: ast.FunctionParam, body: []const Stmt) CompileError![]const u8 {
     if (!param.is_ref and bodyReassignsBinding(body, param.name)) {
-        return std.fmt.allocPrint(arena, "{s}__mp", .{param.name});
+        return std.fmt.allocPrint(arena, "{s}__mp", .{paramName(param)});
     }
-    return param.name;
+    return paramName(param);
 }
 
 /// Emit `var <name> = <name>__mp;` for each non-ref parameter the body
@@ -364,7 +373,7 @@ pub fn paramSigName(arena: std.mem.Allocator, param: ast.FunctionParam, body: []
 pub fn emitReassignedParamCopies(params: []const ast.FunctionParam, body: []const Stmt, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
     for (params) |param| {
         if (!param.is_ref and bodyReassignsBinding(body, param.name)) {
-            try w.print(arena, "    var {s} = {s}__mp;\n", .{ param.name, param.name });
+            try w.print(arena, "    var {s} = {s}__mp;\n", .{ paramName(param), paramName(param) });
         }
     }
 }

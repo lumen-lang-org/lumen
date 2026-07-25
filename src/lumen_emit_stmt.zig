@@ -429,7 +429,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             try decls.print(arena, "extern fn {s}(", .{decl.name});
             for (decl.params, 0..) |param, i| {
                 if (i > 0) try decls.appendSlice(arena, ", ");
-                try decls.print(arena, "{s}: {s}", .{ param.name, emit_mod.externZigName(param.checked_type orelse return error.ParseError, arena) });
+                try decls.print(arena, "{s}: {s}", .{ analysis.paramName(param), emit_mod.externZigName(param.checked_type orelse return error.ParseError, arena) });
             }
             try decls.print(arena, ") {s};\n", .{emit_mod.externZigName(decl.checked_return_type orelse return error.ParseError, arena)});
         },
@@ -567,7 +567,7 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 for (decl.params) |param| {
                     const param_type = param.checked_type orelse types.fromAnnotation(param.annotation);
                     const ztype = if (param.is_ref) try types.refZigName(arena, param_type) else try types.zigName(arena, param_type);
-                    try decls.print(arena, ", {s}: {s}", .{ param.name, ztype });
+                    try decls.print(arena, ", {s}: {s}", .{ analysis.paramName(param), ztype });
                 }
                 try decls.appendSlice(arena, ") void {\n");
                 const prev = emit_mod.g_cur_into_acc;

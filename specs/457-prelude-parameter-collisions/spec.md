@@ -76,9 +76,13 @@ In scope:
 
 - A top-level declaration may use any name the language allows, whatever the
   prelude happens to call its parameters.
-- The existing shadowing diagnostic (`E_PARAM_SHADOWS`) stays: a *user's*
+- ~~The existing shadowing diagnostic (`E_PARAM_SHADOWS`) stays: a *user's*
   parameter shadowing a *user's* top-level name is still an error, since that
-  one is about the language's flat namespace and is worth stating.
+  one is about the language's flat namespace and is worth stating.~~
+  Superseded by spec 461: that is not an error either. A parameter is local
+  scope, and two packages cannot be asked to agree on which ordinary words are
+  free. The user-to-user case is now renamed at emission and
+  `E_PARAM_SHADOWS` is gone; success criterion 3 below no longer holds.
 
 Out of scope:
 
