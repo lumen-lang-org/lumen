@@ -401,7 +401,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\    // and the `@max` below are runtime values, not comptime-known.
                 \\    const __http_cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
                 \\    __http_pool = xev.ThreadPool.init(.{
-                \\        .max_threads = @max(256, __http_cpus * 32),
+                \\        .max_threads = @max(4, __http_cpus * 2),
                 \\        .stack_size = 512 * 1024,
                 \\    });
                 \\    const Handler = @TypeOf(handler);
@@ -512,7 +512,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
                     \\    const __http_cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
                     \\    __http_stream_pool = xev.ThreadPool.init(.{
-                    \\        .max_threads = @max(256, __http_cpus * 32),
+                    \\        .max_threads = @max(4, __http_cpus * 2),
                     \\        .stack_size = 512 * 1024,
                     \\    });
                     \\    const Handler = @TypeOf(handler);
