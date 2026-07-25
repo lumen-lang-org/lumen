@@ -6,11 +6,11 @@ feature is only useful after the third.
 ## Slice 1 — syntax and description
 
 - [ ] Lex `@` as a token where a declaration may begin.
-- [ ] Parse `@name` and `@name(literal, ...)` before a type declaration, a
-      field, a function declaration, and a parameter.
+- [ ] Parse `@name` and `@name(literal, ...)` before a class declaration, a
+      class member, a function declaration, and a parameter.
 - [ ] Reject a non-literal argument with a message saying a decorator argument
       is metadata, not an expression.
-- [ ] Carry `decorators: []Decorator` on the type, field, function and param
+- [ ] Carry `decorators: []Decorator` on the class, member, function and param
       AST nodes.
 - [ ] Emit the description JSON for a decorated declaration, behind a hidden
       flag (`lumen describe <file>`), so the format can be exercised before
@@ -22,40 +22,45 @@ feature is only useful after the third.
 
 - [ ] Resolve `@name` to an imported binding; a name that is not imported is an
       error saying so at the decorator's line.
-- [ ] Check the bound function's signature is `(Description) => string`, and
-      name the expected shape when it is not.
+- [ ] Check the bound function takes one `Description` and returns a type JSON
+      can carry; name the expected shape when it does not, and name the
+      offending field when the return type cannot be serialised.
 - [ ] Compile the decorator's module standalone, with a generated entry point
-      that reads the description, calls the function and prints the result.
+      that reads the description, calls the function, and prints its return
+      value as JSON.
 - [ ] Detect a cycle — a decorator module reaching the file it decorates — and
       report both files rather than recursing.
-- [ ] Run the built binary, capture stdout as source and stderr as diagnostics.
+- [ ] Run the built binary, capture stdout as the value and stderr as
+      diagnostics.
 - [ ] A decorator whose own module fails to compile reports as a failure of the
       decorator, naming it, not as a failure of the file being compiled.
-- [ ] Append the output to the declaring file's source before parsing, in
-      source order across several decorators.
+- [ ] Emit a constant named `<decorator><Declaration>`, of the decorator's
+      declared return type, initialised to the returned value as a literal —
+      not as a runtime parse. Declared at the end of the file that carried the
+      decorator, in source order across several decorators.
 - [ ] Run decorators for `check`, `compile`, `test` and `watch` alike.
 
 ## Slice 3 — errors and caching
 
-- [ ] Retain generated source as an addressable unit, so a diagnostic inside it
-      can name the decorator that produced it and show the offending line.
-- [ ] Extend `g_line_map`, or the origin machinery beside it, to carry a
-      generated origin distinct from a user file.
-- [ ] A parse error in generated source names the decorator and shows the line.
-- [ ] A check error in generated source does the same.
+- [ ] A returned value that does not fit the declared return type is reported
+      at the decorator's line, naming the decorator, the field and both types.
+- [ ] A generated constant whose name is already taken reports the collision
+      naming the decorator that produced it, not just the duplicate binding.
 - [ ] Cache by hash of the description plus the binary's mtime; a rebuild with
       neither changed spawns nothing.
 - [ ] `--no-decorator-cache` for debugging a decorator.
 
 ## Tests
 
-- [ ] A decorator that echoes a fixed function makes it callable.
+- [ ] A decorator returning a record produces a usable constant of that type.
 - [ ] Field decorators arrive with their arguments, in order.
 - [ ] A function decorator receives parameters and return type.
 - [ ] Two decorators on one declaration run in source order.
 - [ ] A decorator that exits non-zero fails with its stderr, at its own line.
-- [ ] Output that does not parse fails, attributed to the decorator.
-- [ ] Output that does not check fails, attributed to the decorator.
+- [ ] A return type that JSON cannot carry fails at the decorator's signature,
+      naming the field.
+- [ ] A generated constant colliding with a hand-written name names the
+      decorator.
 - [ ] An unimported decorator name reports at its own line.
 - [ ] A decorator function with the wrong signature names the expected one.
 - [ ] A decorator module that imports the decorated file reports a cycle.
@@ -77,9 +82,10 @@ feature is only useful after the third.
 
 ## Proving it
 
-- [ ] std-contrib: an `entity` decorator generating a `plume` mapping from a
-      decorated record, replacing the hand-written `repository(...)` list, with
-      plume's existing tests passing against the generated one.
+- [ ] std-contrib: an `entity` decorator returning a `DbRepository` from a
+      decorated class, replacing the hand-written `repository(...)` list, with
+      plume's existing tests passing against the generated one on all three
+      databases.
 - [ ] std-contrib: a `tool` decorator generating an ai-package tool definition
       and its parameter schema from a decorated function — the second case that
       motivated this, and the check that the design is not shaped around one
@@ -92,6 +98,8 @@ feature is only useful after the third.
 - [ ] Hygiene. Generated names live in the flat namespace and collide through
       the ordinary duplicate diagnostic.
 - [ ] Decorators that build other decorators, or any staging beyond one level.
-- [ ] Decorators with side effects. The signature is a pure
-      `(Description) => string`; anything wanting the filesystem or the network
-      is a build step, not a decorator.
+- [ ] Decorators with side effects. The signature is a pure function of a
+      description; anything wanting the filesystem or the network is a build
+      step, not a decorator.
+- [ ] Decorators returning source text. The return is a value with a declared
+      type, so the whole path stays checked.

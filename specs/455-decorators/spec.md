@@ -33,9 +33,17 @@ runtime hook. It has to be **code generation at compile time**.
 
 ## What a decorator is
 
-A decorator is a Lumen program the compiler runs while compiling. It receives a
-description of the declaration it was attached to, and returns Lumen source
-that is spliced into the program.
+A decorator is a Lumen function the compiler runs while compiling. It receives
+a description of the declaration it was attached to, and returns **a value**.
+The compiler emits that value as a constant beside the declaration.
+
+It does not return source text. A decorator that emits a string of Lumen is
+untyped at the point it matters most — the compiler cannot check what it
+returns until after it has been parsed, its errors point at lines nobody
+wrote, and every decorator reimplements string-building for the same handful
+of shapes. Returning a value keeps the whole path typed: the decorator's
+return type is declared, the checker verifies it, and the constant the
+compiler emits has that type.
 
 ```ts
 @entity("agents")
@@ -72,11 +80,36 @@ receives:
 }
 ```
 
-and writes:
+and returns a `DbRepository` — plume's own type, which the decorator module
+imports like any other:
 
 ```ts
-export function agentRepository(): DbRepository { ... }
-export function findAgent(id: string): Agent { ... }
+import { DbRepository, field, repository } from "plume";
+
+export function entity(d: Description): DbRepository {
+  let fields: DbField[] = [];
+  let i: int = 0;
+  while (i < d.fields.length) {
+    let col = argOf(d.fields[i], "column", 0);
+    let sqlType = argOf(d.fields[i], "column", 1);
+    fields.push(field(d.fields[i].name, col, sqlType));
+    i = i + 1;
+  }
+  return repository(d.args[0], keyField(d), keyColumn(d), fields);
+}
+```
+
+The compiler emits the returned value as a constant named for the decorator
+and the declaration it was attached to:
+
+```ts
+let entityAgent: DbRepository = { table: "agents", idField: "id", ... };
+```
+
+so the program uses it directly:
+
+```ts
+persist(database, entityAgent, JSON.stringify(a));
 ```
 
 Anyone can write one. The compiler knows the syntax and the protocol, never the
@@ -184,14 +217,18 @@ There is no manifest and no separate build step. The compiler resolves `@entity`
 to the imported binding, finds the module it came from, compiles that module,
 and runs it.
 
-The exported function has a fixed shape, which the checker enforces:
+The exported function takes one `Description` and returns anything JSON can
+carry — a record, a class instance, an array of either, or a scalar. The
+checker enforces the parameter and rejects a return type it cannot serialise,
+naming the offending field:
 
 ```ts
-export function entity(d: Description): string
+export function entity(d: Description): DbRepository
 ```
 
 `Description` is a type the compiler provides. A function in decorator position
-with any other signature is an error naming the expected one.
+taking anything else is an error naming the expected signature. The return type
+is the decorator's own choice — that is what makes the vocabulary open.
 
 This makes a decorator a pure function of its description, which has three
 consequences worth the design:
@@ -215,29 +252,45 @@ decorator cannot be compiled until the file is.
 
 ### D4 — splicing
 
-Output is appended to the program as though written at the end of the file that
-declared the decorator, so imports in scope there are in scope for it. It is
-then parsed and checked with everything else — a decorator cannot emit
-something that skips the checker.
+The compiler runs the decorator, captures its return value as JSON, and emits
+a constant of the decorator's declared return type, initialised to that value.
+The name is `<decorator><Declaration>` — `@entity` on `Agent` gives
+`entityAgent` — which is deterministic, needs no hygiene rules, and collides
+through the ordinary duplicate-binding diagnostic if a hand-written binding
+already has that name.
 
-Ordering: decorators run in source order, and all output is appended in that
-order. A decorator cannot see another's output; they receive declarations, not
-the program.
+The constant is emitted as a literal, not as a parse at startup: the compiler
+has the JSON and the type, and turning the two into a record literal is the
+same walk the JSON runtime already does. A program pays nothing at runtime for
+a decorator.
+
+The constant is declared at the end of the file that carried the decorator, so
+the return type's own import is in scope. It is then checked with everything
+else — a decorator's output cannot skip the checker.
+
+Ordering: decorators run in source order, each producing its own constant. A
+decorator cannot see another's output; they receive declarations, not the
+program.
 
 ### D5 — failure
 
 Three ways to fail, all reported at the decorator's line, all naming the
 decorator:
 
-- the program exits non-zero — its stderr is the message;
-- its output does not parse — the parse error, with the generated source
-  attributed to the decorator rather than to a file the user wrote;
-- its output parses but does not check — likewise.
+- the decorator module does not compile — reported as an error in that module,
+  since it is the user's own code and has its own file and lines;
+- the decorator exits non-zero when run — its stderr is the message, at the
+  decorator's line;
+- the value it returns does not fit its declared return type — which the
+  checker catches at the constant, naming the field.
 
-The third is the one that decides whether this is usable. An error inside
-generated code that points at a line the user cannot see is the failure mode
-that makes code generation hated, and specs 451 through 453 each hit a version
-of it in this compiler already.
+Returning a value rather than source is what makes the third case ordinary. A
+decorator that emitted text could produce something that parses into anything,
+and an error inside it would point at a line the user cannot see — the failure
+mode that makes code generation hated, and one specs 451 through 453 each hit
+a version of in this compiler already. Here the generated constant has a
+declared type and a known shape, so a mismatch is reported against the
+decorator's own signature.
 
 ### D6 — caching
 
@@ -247,19 +300,21 @@ decorators cost nothing on an unchanged rebuild.
 
 ## Success Criteria
 
-1. `@entity("agents")` on a type, resolving to a program that echoes a
-   function, produces a program in which that function is callable.
+1. `@entity("agents")` on a class, resolving to a decorator that returns a
+   record, produces a program in which the generated constant holds that
+   record and is usable.
 2. Field decorators reach the description, with their arguments, in order.
 3. A decorator on a function receives its parameters and return type.
 4. Two decorators on one declaration both run, in source order.
 5. A decorator that exits non-zero fails the compile with its stderr, at the
    decorator's line.
-6. A decorator whose output does not compile fails with the error attributed
-   to the decorator, not to a phantom line of the user's file.
+6. A decorator whose return type cannot be serialised fails at its own
+   signature, naming the field, not at a phantom line of the user's file.
 7. An unknown decorator name names the manifest and the missing key.
 8. A second compile with nothing changed runs no decorator.
 9. The std-contrib `plume` package's mapping is generated from a decorated
-   type, and its tests pass against the generated repository.
+   class, and its tests pass against the generated repository — on all three
+   databases.
 10. `zig build test` passes; `zig build conformance` adds no new failures
     against the 193-passed / 50-failed baseline.
 
@@ -280,7 +335,7 @@ decorators cost nothing on an unchanged rebuild.
   lines back to user files through `g_line_map`, and generated code has no user
   file to map to.
 - **A decorator runs at compile time, with whatever the language allows.**
-  Constraining it to a pure `(Description) => string` keeps it from reading
+  Constraining it to a pure function of a description keeps it from reading
   files or making requests by construction, rather than by policy — the
   signature has nowhere to put a side effect. That is a stronger guarantee than
   most macro systems offer, and it is free.
