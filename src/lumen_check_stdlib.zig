@@ -850,6 +850,11 @@ fn jsonSerializable(t: types.Type) bool {
     return switch (t) {
         .string, .i32, .i64, .f64, .bool => true,
         .named => true,
+        // A class instance is a pointer to its struct in the generated code,
+        // and the JSON runtime follows a single-item pointer in both
+        // directions — so a class serialises exactly as a record of the same
+        // fields does (spec 456).
+        .class_type => true,
         .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array => true,
         else => false,
     };

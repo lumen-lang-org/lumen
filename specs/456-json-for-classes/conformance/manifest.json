@@ -1,0 +1,29 @@
+{
+  "feature": "456-json-for-classes",
+  "cases": [
+    {
+      "id": "json.valid.class-round-trip",
+      "source": "../examples/valid/class-round-trip.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "{\"id\":\"a1\",\"maxSteps\":5}|a1:5" }
+    },
+    {
+      "id": "json.valid.class-inherits-parent-fields-first",
+      "source": "../examples/valid/class-inherits.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "{\"kind\":\"animal\",\"name\":\"rex\"}" }
+    },
+    {
+      "id": "json.valid.private-field-excluded",
+      "source": "../examples/valid/class-private-excluded.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "{\"id\":\"a1\"}|sk-SECRET|b2|[]" }
+    },
+    {
+      "id": "json.valid.parse-does-not-construct",
+      "source": "../examples/valid/class-no-constructor-on-parse.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "parsed a1" }
+    }
+  ]
+}

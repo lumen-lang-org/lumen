@@ -66,13 +66,44 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     try decls.print(arena, "const {s} = struct {{\n", .{c.name});
 
     // Instance fields, ancestors first (flattened layout).
+    //
+    // A `#private` field carries a zero default so JSON.parse can build an
+    // instance from a document that does not mention it — the document never
+    // mentions it, because `jsonStringify` below leaves it out (spec 456).
+    var has_private_field = false;
     for (chain) |cc| {
         for (cc.fields) |field| {
             if (field.is_static) continue;
             try decls.appendSlice(arena, "    ");
             try emit_mod.emitFieldName(decls, arena, field.name);
-            try decls.print(arena, ": {s},\n", .{try types.zigName(arena, field.checked_type orelse return error.ParseError)});
+            const fty = field.checked_type orelse return error.ParseError;
+            try decls.print(arena, ": {s}", .{try types.zigName(arena, fty)});
+            if (field.visibility == .private) {
+                has_private_field = true;
+                try decls.print(arena, " = {s}", .{zeroValue(fty)});
+            }
+            try decls.appendSlice(arena, ",\n");
         }
+    }
+
+    // A class holding private state serialises as a record of its public
+    // fields alone. Without this hook std.json walks every struct field and
+    // puts the private ones on the wire, which is the opposite of what the
+    // marker means — a secret crossing a process boundary because the mapper
+    // could reach it.
+    if (has_private_field) {
+        try decls.appendSlice(arena, "    pub fn jsonStringify(self: @This(), jws: anytype) !void {\n");
+        try decls.appendSlice(arena, "        try jws.beginObject();\n");
+        for (chain) |cc| {
+            for (cc.fields) |field| {
+                if (field.is_static or field.visibility == .private) continue;
+                try decls.print(arena, "        try jws.objectField(\"{s}\");\n", .{field.name});
+                try decls.appendSlice(arena, "        try jws.write(self.");
+                try emit_mod.emitFieldName(decls, arena, field.name);
+                try decls.appendSlice(arena, ");\n");
+            }
+        }
+        try decls.appendSlice(arena, "        try jws.endObject();\n    }\n");
     }
 
     // Static fields -> struct-scoped vars with a zero default. Declared only on
