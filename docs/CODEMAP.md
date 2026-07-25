@@ -24,9 +24,9 @@ ensureAssignable:19, castAllowed:370
 Class member resolution: field/method/accessor lookup across the
 classField:27, resolveField:34, resolveStaticField:46, resolveMethod:60, resolveStaticMethod:72, resolveAccessor:84, isSubclassOf:97, checkVisibility:109, visibilityOk:125
 
-## src/lumen_check_expr.zig (2403 lines)
+## src/lumen_check_expr.zig (2407 lines)
 Expression type-checking -- `exprType` is the heart of the checker: given
-checkCbArg:30, wrapStringify:40, wrapFloat:87, exprType:95, fieldType:2382
+checkCbArg:30, wrapStringify:40, wrapFloat:87, exprType:95, fieldType:2386
 
 ## src/lumen_check_generics.zig (740 lines)
 Generic function/class/type-alias specialization (monomorphization).
@@ -63,23 +63,23 @@ protocol:18, Application:24, collect:34, parseAlone:76, describeSource:85
 ## src/lumen_diag.zig (11 lines)
 CompileError:1, Diag:7, LineOrigin:11
 
-## src/lumen_emit.zig (1622 lines)
+## src/lumen_emit.zig (1763 lines)
 Code generation -- the final stage: typed AST -> Zig source text.
-emitStmt:46, emitStmtWithThrow:47, SourceLoc:55, externZigName:57, emitFieldName:100, emitStrLit:108, emitExpr:135, CompileOptions:1311, g_program:1337, g_options:1342, g_from_char_code_seq:1346, g_number_tostring_seq:1349, g_number_toexp_seq:1352, g_global_pred_seq:1355, g_async_inner:1365, g_dest_acc:1371, g_cur_into_acc:1372, g_throw_target:1378, g_fn_can_error:1379, emitThrowingCallPrefix:1384, emitThrowingCallSuffix:1394, safeGlobalName:1408, findClass:1426, MODULE_INIT_FN:1474, emitProgram:1517
+emitStmt:46, emitStmtWithThrow:47, SourceLoc:55, externZigName:57, emitFieldName:100, emitStrLit:108, suffixGeneratedLocals:176, TempScope:224, emitExpr:240, CompileOptions:1447, g_program:1473, g_options:1490, g_temp_seq:1496, g_async_inner:1506, g_dest_acc:1512, g_cur_into_acc:1513, g_throw_target:1519, g_fn_can_error:1520, emitThrowingCallPrefix:1525, emitThrowingCallSuffix:1535, safeGlobalName:1549, findClass:1567, MODULE_INIT_FN:1615, emitProgram:1658
 
 ## src/lumen_emit_analysis.zig (443 lines)
 Small static-analysis helpers used while emitting statements and class
 zigZeroValue:24, g_throwing_fns:42, g_method_arena:46, fnThrows:49, ctorThrows:56, methodThrows:66, exprCanThrow:75, stmtCanThrow:146, bodyCanThrow:201, stmtAlwaysThrows:209, bodyAlwaysThrows:217, stmtAlwaysReturns:225, bodyAlwaysReturns:233, exprUsesThis:239, stmtUsesThis:302, bodyUsesThis:336, emitUnusedParamDiscards:344, paramName:356, paramSigName:364, emitReassignedParamCopies:373, bodyReassignsBinding:384, printFormat:431
 
-## src/lumen_emit_array_string.zig (845 lines)
+## src/lumen_emit_array_string.zig (790 lines)
 Codegen for array and string instance methods (`.filter`, `.map`,
-emitElemEq:26, emitArrayMethod:131, emitStringMethod:515, emitTemplateText:817
+emitElemEq:26, emitArrayMethod:75, emitStringMethod:455, emitTemplateText:762
 
 ## src/lumen_emit_class.zig (514 lines)
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:317, emitSuperCopies:383, collectSuperInStmt:387, collectSuperInExpr:407, ifaceMethodThrows:461, emitIfaceDecl:474, emitClassVtables:492
 
-## src/lumen_emit_static.zig (1107 lines)
+## src/lumen_emit_static.zig (1118 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
 emitStaticCall:12
 
@@ -270,3 +270,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 450-persistent-subprocess 451-exported-types-and-module-scoped-imports 452-streaming-http 
 453-ref-for-value-types 455-decorators 456-json-for-classes 457-prelude-parameter-collisions 
 458-embed-file 459-http-request-headers 459-method-descriptions 461-parameter-shadowing 
+464-generated-temporaries 465-builtin-name-collisions 

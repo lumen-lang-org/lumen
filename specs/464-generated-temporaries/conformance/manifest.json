@@ -1,0 +1,59 @@
+{
+  "feature": "464-generated-temporaries",
+  "cases": [
+    {
+      "id": "temporaries.valid.nested-string-receiver",
+      "source": "../examples/valid/nested-string-receiver.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "abc" }
+    },
+    {
+      "id": "temporaries.valid.three-levels",
+      "source": "../examples/valid/three-levels.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "he" }
+    },
+    {
+      "id": "temporaries.valid.independent-temporaries",
+      "source": "../examples/valid/independent-temporaries.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "alpha|beta|alpha" }
+    },
+    {
+      "id": "temporaries.valid.nested-array-methods",
+      "source": "../examples/valid/nested-array-methods.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "10\n2" }
+    },
+    {
+      "id": "temporaries.valid.array-and-string-mixed",
+      "source": "../examples/valid/array-and-string-mixed.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "a,b\n1" }
+    },
+    {
+      "id": "temporaries.valid.nested-optional-chain",
+      "source": "../examples/valid/nested-optional-chain.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "8" }
+    },
+    {
+      "id": "temporaries.valid.nested-array-from",
+      "source": "../examples/valid/nested-array-from.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "3\n15" }
+    },
+    {
+      "id": "temporaries.valid.string-methods-nested-receiver",
+      "source": "../examples/valid/string-methods-nested-receiver.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "HELLO, WORLD!\nhello, world!\nHello, World!\nW\nW\n87\n87\n0\n1\n0\ntrue\ntrue\ntrue\nHello\nHello\nHello, World!H\nHello, World!Hello, World!\n.....Hello, World!\nHello, World!.....\nHeHlo, World!\nHeHHo, WorHd!\n2" }
+    },
+    {
+      "id": "temporaries.valid.array-methods-nested-receiver",
+      "source": "../examples/valid/array-methods-nested-receiver.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "3\n2\n8\n8\n3\n4\n0\n2\ntrue\ntrue\n1\n1\ntrue\n1\n4\n5\n1\n4\n4\n4\n3\n9\n1\n3-1-4\n3,1,4\n3\n2" }
+    }
+  ]
+}

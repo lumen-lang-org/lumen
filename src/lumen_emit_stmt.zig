@@ -82,13 +82,12 @@ fn emitOneVarDecl(decl: ast.VarDecl, body: *std.ArrayListUnmanaged(u8), arena: s
     }
 }
 
-var g_log_seq: usize = 0;
-
 /// Emit a `[]const u8` expression that renders an array `console.log`-style,
 /// e.g. `[1, 2, 3]` or `['a', 'b']`.
 fn emitArrayLogString(value: *ast.Expr, elem: types.Type, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
-    g_log_seq += 1;
-    const n = g_log_seq;
+    const ts = emit_mod.TempScope.open(body, arena);
+    defer ts.close();
+    const n = ts.seq;
     try body.print(arena, "(__la{d}: {{ const __arr = ", .{n});
     // A bare array literal emits as a tuple; wrap it in a real slice so it is
     // iterable with a runtime index.
@@ -146,8 +145,9 @@ fn emitLogArg(value: *ast.Expr, t: types.Type, body: *std.ArrayListUnmanaged(u8)
 /// `console.log` of an optional array (`T[] | null`): render "null" when the
 /// value is null, otherwise the same bracketed form as a plain array.
 fn emitOptionalArrayLogString(value: *ast.Expr, elem: types.Type, body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
-    g_log_seq += 1;
-    const n = g_log_seq;
+    const ts = emit_mod.TempScope.open(body, arena);
+    defer ts.close();
+    const n = ts.seq;
     try body.print(arena, "(__lo{d}: {{ const __opt = ", .{n});
     try emitExpr(value, body, arena);
     try body.print(arena, "; if (__opt) |__arr| {{ break :__lo{d} (__la{d}: {{ ", .{ n, n });

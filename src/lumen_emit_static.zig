@@ -76,8 +76,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.appendSlice(arena, ")))");
     } else if (std.mem.eql(u8, cl.namespace, "Math") and (std.mem.eql(u8, cl.name, "max") or std.mem.eql(u8, cl.name, "min")) and cl.args.len == 1 and cl.args[0].* == .spread) {
         // `Math.min(...arr)` -> a runtime fold over the array.
-        em.g_global_pred_seq += 1;
-        const s = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const s = ts.seq;
         try w.print(arena, "(__mm{d}: {{ const __arr = ", .{s});
         try em.emitExpr(cl.args[0].spread, w, arena);
         try w.print(arena, "; var __r = __arr[0]; for (__arr[1..]) |__e| {{ __r = @{s}(__r, __e); }} break :__mm{d} __r; }})", .{ cl.name, s });
@@ -300,8 +301,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try em.emitExpr(cl.args[1], w, arena);
         try w.appendSlice(arena, ")) { .lt => -1, .eq => 0, .gt => 1 })");
     } else if (std.mem.eql(u8, cl.namespace, "String") and (std.mem.eql(u8, cl.name, "fromCharCode") or std.mem.eql(u8, cl.name, "fromCodePoint"))) {
-        em.g_from_char_code_seq += 1;
-        const fcc_lbl = try std.fmt.allocPrint(arena, "__fcc{d}", .{em.g_from_char_code_seq});
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const fcc_lbl = try std.fmt.allocPrint(arena, "__fcc{d}", .{ts.seq});
         try w.print(arena, "({s}: {{ const __b = __sa().alloc(u8, {d}) catch unreachable; ", .{ fcc_lbl, cl.args.len });
         for (cl.args, 0..) |arg, i| {
             try w.print(arena, "__b[{d}] = @intCast((", .{i});
@@ -315,8 +317,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         const rt = cl.checked_type orelse return error.ParseError;
         const rz = try types.zigName(arena, types.arrayElem(rt) orelse return error.ParseError);
         const idx_arg = if (cl.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
-        em.g_global_pred_seq += 1;
-        const s = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const s = ts.seq;
         try w.print(arena, "(__afl{d}: {{ const __n: usize = @intCast(", .{s});
         try em.emitExpr(cl.from_length.?, w, arena);
         try w.appendSlice(arena, "); const __cb = ");
@@ -329,8 +332,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         const rt = cl.checked_type orelse return error.ParseError;
         const rz = try types.zigName(arena, types.arrayElem(rt) orelse return error.ParseError);
         const idx_arg = if (cl.cb_wants_index) ", @as(i32, @intCast(__i))" else "";
-        em.g_global_pred_seq += 1;
-        const s = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const s = ts.seq;
         try w.print(arena, "(__afm{d}: {{ const __src: ", .{s});
         if (types.isStringLike(src)) {
             // Source elements are single-character strings.
@@ -352,8 +356,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.print(arena, "; const __r = __sa().alloc({s}, __src.len) catch unreachable; for (__src, 0..) |__e, __i| {{ __r[__i] = __cb.call(__cb.ctx, __e{s}); }} break :__afm{d} @as([]const {s}, __r); }})", .{ rz, idx_arg, s, rz });
     } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "from")) {
         const src = cl.checked_arg_type orelse return error.ParseError;
-        em.g_global_pred_seq += 1;
-        const s = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const s = ts.seq;
         if (types.isStringLike(src)) {
             // String -> array of single-character strings.
             try w.print(arena, "(__afr{d}: {{ const __s = ", .{s});
@@ -377,8 +382,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         // pointer to an anonymous tuple literal).
         const et = cl.checked_arg_type orelse return error.ParseError;
         const ez = try types.zigName(arena, et);
-        em.g_global_pred_seq += 1;
-        const s = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const s = ts.seq;
         try w.print(arena, "(__aof{d}: {{ const __r = __sa().alloc({s}, {d}) catch unreachable; ", .{ s, ez, cl.args.len });
         for (cl.args, 0..) |arg, i| {
             try w.print(arena, "__r[{d}] = ", .{i});
@@ -765,16 +771,18 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "Array") and std.mem.eql(u8, cl.name, "isArray")) {
         // Compile-time verdict; evaluate (and discard) the argument.
-        em.g_global_pred_seq += 1;
-        const seq = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const seq = ts.seq;
         try w.print(arena, "(__ia{d}: {{ _ = &(", .{seq});
         try em.emitExpr(cl.args[0], w, arena);
         try w.print(arena, "); break :__ia{d} {s}; }})", .{ seq, if ((cl.checked_arg_type orelse .void) == .bool) "true" else "false" });
     } else if (std.mem.eql(u8, cl.namespace, "Object") and cl.object_entries) {
         // Object.entries(record): [key, value] tuples. Bind the receiver once,
         // then build an array of positional tuple structs.
-        em.g_global_pred_seq += 1;
-        const seq = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const seq = ts.seq;
         const tup_zig = try types.zigName(arena, types.arrayElem(cl.checked_type.?).?);
         try w.print(arena, "(__oe{d}: {{ const __rec = ", .{seq});
         try em.emitExpr(cl.args[0], w, arena);
@@ -791,8 +799,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
     } else if (std.mem.eql(u8, cl.namespace, "Object") and cl.object_values) {
         // Object.values(record): read each field into a homogeneous array,
         // binding the receiver once so a complex expression isn't re-evaluated.
-        em.g_global_pred_seq += 1;
-        const seq = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const seq = ts.seq;
         const elem_zig = try types.zigName(arena, types.arrayElem(cl.checked_type.?).?);
         try w.print(arena, "(__ov{d}: {{ const __rec = ", .{seq});
         try em.emitExpr(cl.args[0], w, arena);
@@ -806,8 +815,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
     } else if (std.mem.eql(u8, cl.namespace, "Object") and std.mem.eql(u8, cl.name, "keys")) {
         // Static key list; evaluate (and discard) the receiver so an
         // otherwise-unused local still counts as referenced.
-        em.g_global_pred_seq += 1;
-        const seq = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const seq = ts.seq;
         try w.print(arena, "(__ok{d}: {{ _ = &(", .{seq});
         try em.emitExpr(cl.args[0], w, arena);
         try w.print(arena, "); break :__ok{d} @as([]const []const u8, &.{{ ", .{seq});
@@ -1087,8 +1097,9 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         const elem = cl.checked_arg_type orelse return error.ParseError;
         const elem_zig = try types.zigName(arena, elem);
         const items = cl.args[0].array.items;
-        em.g_global_pred_seq += 1;
-        const seq = em.g_global_pred_seq;
+        const ts = em.TempScope.open(w, arena);
+        defer ts.close();
+        const seq = ts.seq;
         try w.print(arena, "(__pa{d}: {{ const __r = __sa().alloc({s}, {d}) catch unreachable; ", .{ seq, elem_zig, items.len });
         for (items, 0..) |it, i| {
             try w.print(arena, "__r[{d}] = (", .{i});

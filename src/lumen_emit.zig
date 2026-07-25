@@ -132,6 +132,111 @@ pub fn emitStrLit(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, s: [
     try w.append(arena, '"');
 }
 
+/// Every block-scoped local name an emitter binds inside a labelled expression
+/// block, in any of the `lumen_emit*` files.
+///
+/// A lowered expression is a labelled block that opens with `const __x = ...`,
+/// and any of them can turn up inside another's argument, receiver or callback
+/// (`rest.substring(0, rest.indexOf("!"))`). Zig forbids a local shadowing an
+/// enclosing-scope local, so a fixed name is a collision waiting for the first
+/// program that nests two of the same shape. Each block therefore suffixes its
+/// own locals with its unique sequence number after emission.
+///
+/// A name belongs here only if a block *binds* it. Names bound outside any
+/// block — the prelude's `__io`/`__alloc`/`__sa`, the runtime helpers, class
+/// members like `__vt`/`__ptr`/`__init`, and anything already carrying a
+/// sequence number (`__env7`, `__p0`) — must not, since renaming a use whose
+/// declaration lies outside the block would break the reference.
+const GENERATED_LOCALS = [_][]const u8{
+    "__a",      "__acc",  "__arr",    "__b",     "__blk",   "__buf", "__c",
+    "__c0",     "__c1",   "__cap",    "__cb",    "__ce",    "__ce0", "__ci",
+    "__cnt",    "__cnt0", "__cnt1",   "__count", "__cp",    "__cs",  "__cs0",
+    "__ct",     "__e",    "__e0",     "__end",   "__ep",    "__f",   "__found",
+    "__from",   "__fv",   "__goal",   "__hi",    "__i",     "__i0",  "__idx",
+    "__it",     "__ix",   "__j",      "__k",     "__kend",  "__lb",  "__le",
+    "__len",    "__li",   "__lim",    "__lo",    "__lt",    "__n",   "__need",
+    "__needle", "__o",    "__ob",     "__opt",   "__other", "__p",   "__pad",
+    "__parts",  "__r",    "__raw",    "__rec",   "__rest",  "__ri",  "__s",
+    "__s0",     "__seg",  "__sep",    "__src",   "__start", "__str", "__t",
+    "__t0",     "__take", "__target", "__to",    "__ub",    "__v",
+};
+
+fn isIdentByte(c: u8) bool {
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_';
+}
+
+/// Suffix the generated locals in `w.items[start..]` with `seq`.
+///
+/// Identifiers are matched whole, so a prelude name that merely starts with a
+/// listed one (`__sa`, `__io`, `__start_time`) never matches, and neither does
+/// an inner block's already-suffixed local (`__s_t3`) — an inner block runs
+/// this pass before its enclosing one does, so by the time the outer pass sees
+/// the inner's names they are out of reach. Zig string and character literals
+/// are stepped over, so a user's `"__len"` is text, not an identifier.
+pub fn suffixGeneratedLocals(w: *std.ArrayListUnmanaged(u8), start: usize, seq: usize, arena: std.mem.Allocator) void {
+    const body = w.items[start..];
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    var i: usize = 0;
+    while (i < body.len) {
+        if (body[i] == '"' or body[i] == '\'') {
+            const quote = body[i];
+            var j = i + 1;
+            while (j < body.len and body[j] != quote) : (j += 1) {
+                if (body[j] == '\\') j += 1;
+            }
+            if (j < body.len) j += 1;
+            out.appendSlice(arena, body[i..j]) catch return;
+            i = j;
+            continue;
+        }
+        // An identifier starts at `__` preceded by a non-identifier byte.
+        if (body[i] == '_' and i + 1 < body.len and body[i + 1] == '_' and (i == 0 or !isIdentByte(body[i - 1]))) {
+            var j = i + 2;
+            while (j < body.len and isIdentByte(body[j])) j += 1;
+            const tok = body[i..j];
+            var matched = false;
+            for (GENERATED_LOCALS) |n| {
+                if (std.mem.eql(u8, tok, n)) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (matched) {
+                out.print(arena, "{s}_t{d}", .{ tok, seq }) catch return;
+            } else {
+                out.appendSlice(arena, tok) catch return;
+            }
+            i = j;
+            continue;
+        }
+        out.append(arena, body[i]) catch return;
+        i += 1;
+    }
+    w.items.len = start;
+    w.appendSlice(arena, out.items) catch return;
+}
+
+/// A labelled block being emitted: its sequence number (unique across the whole
+/// compilation unit) and where its text starts, so `close` can rename the
+/// locals it declared. Open one before writing the label, close it with `defer`
+/// so nested blocks — which open and close entirely within this one's span —
+/// have already renamed their own locals when this one's pass runs.
+pub const TempScope = struct {
+    w: *std.ArrayListUnmanaged(u8),
+    arena: std.mem.Allocator,
+    start: usize,
+    seq: usize,
+
+    pub fn open(w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) TempScope {
+        g_temp_seq += 1;
+        return .{ .w = w, .arena = arena, .start = w.items.len, .seq = g_temp_seq };
+    }
+
+    pub fn close(self: TempScope) void {
+        suffixGeneratedLocals(self.w, self.start, self.seq, self.arena);
+    }
+};
+
 pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
     switch (e.*) {
         .num => |v| try w.print(arena, "{d}", .{v}),
@@ -177,8 +282,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // `return` or be stored, rather than pointing at a stack tuple
                 // (`&.{...}`) that dangles once the enclosing frame returns.
                 const ez = try types.zigName(arena, het);
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 // The temp is seq-suffixed so a nested array literal (`[[1],[2]]`)
                 // doesn't shadow the outer one's `__r` (spec 289).
                 try w.print(arena, "(__arl{d}: {{ const __r{d} = __sa().alloc({s}, {d}) catch unreachable; ", .{ s, s, ez, arr.items.len });
@@ -240,15 +346,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try w.appendSlice(arena, ")");
             } else if (std.mem.eql(u8, cl.name, "String") and cl.is_global_parse) {
                 // Convert number/bool/string to string with a comptime type branch.
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__sc{d}: {{ const __v = ", .{s});
                 try emitExpr(cl.args[0], w, arena);
                 try w.print(arena, "; break :__sc{d} switch (@typeInfo(@TypeOf(__v))) {{ .bool => std.fmt.allocPrint(__sa(), \"{{}}\", .{{__v}}) catch unreachable, .int, .comptime_int, .float, .comptime_float => std.fmt.allocPrint(__sa(), \"{{d}}\", .{{__v}}) catch unreachable, else => @as([]const u8, __v) }}; }})", .{s});
             } else if (std.mem.eql(u8, cl.name, "Number") and cl.is_global_parse) {
                 // number/bool/string -> f64; a string that doesn't parse is NaN.
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__nc{d}: {{ const __v = ", .{s});
                 try emitExpr(cl.args[0], w, arena);
                 // A string is trimmed of surrounding whitespace first (JS
@@ -258,15 +366,17 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             } else if (std.mem.eql(u8, cl.name, "BigInt") and cl.is_global_parse) {
                 // number/bool/string -> i64; a float truncates toward zero, an
                 // unparseable string traps (JS BigInt throws on bad input).
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__bi{d}: {{ const __v = ", .{s});
                 try emitExpr(cl.args[0], w, arena);
                 try w.print(arena, "; break :__bi{d} switch (@typeInfo(@TypeOf(__v))) {{ .bool => @as(i64, if (__v) 1 else 0), .int, .comptime_int => @as(i64, @intCast(__v)), .float, .comptime_float => @as(i64, @intFromFloat(@trunc(__v))), else => (std.fmt.parseInt(i64, std.mem.trim(u8, __v, \" \\t\\n\\r\"), 10) catch @panic(\"BigInt: invalid string\")) }}; }})", .{s});
             } else if (std.mem.eql(u8, cl.name, "Boolean") and cl.is_global_parse) {
                 // Truthiness: nonzero number, nonempty string, or the bool itself.
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__bc{d}: {{ const __v = ", .{s});
                 try emitExpr(cl.args[0], w, arena);
                 try w.print(arena, "; break :__bc{d} switch (@typeInfo(@TypeOf(__v))) {{ .bool => __v, .int, .comptime_int, .float, .comptime_float => __v != 0, else => __v.len != 0 }}; }})", .{s});
@@ -274,8 +384,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // Coerce the argument to f64 with a comptime type branch so the
                 // same emit works for int and float inputs.
                 const fn_name = if (std.mem.eql(u8, cl.name, "isNaN")) "isNan" else "isFinite";
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__gp{d}: {{ const __v = ", .{s});
                 try emitExpr(cl.args[0], w, arena);
                 try w.print(arena, "; break :__gp{d} std.math.{s}(switch (@typeInfo(@TypeOf(__v))) {{ .float, .comptime_float => @as(f64, __v), else => @as(f64, @floatFromInt(__v)) }}); }})", .{ s, fn_name });
@@ -423,8 +534,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
         },
         .inc_dec => |id| {
             const op = if (id.is_inc) "+= 1" else "-= 1";
-            g_global_pred_seq += 1;
-            const s = g_global_pred_seq;
+            const ts = TempScope.open(w, arena);
+            defer ts.close();
+            const s = ts.seq;
             if (id.is_prefix) {
                 // ++x: increment, then yield the new value.
                 try w.print(arena, "(__id{d}: {{ ", .{s});
@@ -455,8 +567,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // A compile-time constant string (the operand's static type name).
                 // The operand is still evaluated and discarded so its side effects
                 // run and its binding counts as used.
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__tof{d}: {{ _ = ", .{s});
                 try emitExpr(to.operand, w, arena);
                 try w.print(arena, "; break :__tof{d} @as([]const u8, ", .{s});
@@ -466,8 +579,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
         },
         .instanceof_expr => |io| {
             // Compile-time verdict; evaluate (discard) the operand.
-            g_global_pred_seq += 1;
-            const s = g_global_pred_seq;
+            const ts = TempScope.open(w, arena);
+            defer ts.close();
+            const s = ts.seq;
             try w.print(arena, "(__iof{d}: {{ _ = &(", .{s});
             try emitExpr(io.value, w, arena);
             try w.print(arena, "); break :__iof{d} {s}; }})", .{ s, if (io.result orelse false) "true" else "false" });
@@ -658,8 +772,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             // `l ?? r` as `if (l) |__cv| __cv else r`. Unlike `l orelse r`, this
             // keeps the result optional when `r` is itself optional (a chained
             // `a ?? b ?? d`), via Zig peer-type resolution of the two branches.
-            g_global_pred_seq += 1;
-            const s = g_global_pred_seq;
+            const ts = TempScope.open(w, arena);
+            defer ts.close();
+            const s = ts.seq;
             // Pin BOTH branches to the result type. Casting only the then-branch
             // left the else (a bare string literal like `"x"`) to peer-resolve
             // against `[]const u8`, which fails in a context with no coercion
@@ -695,8 +810,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 if (ct == .set_type and ne.args.len == 1) {
                     const elem = ct.set_type.*;
                     const ez = try types.zigName(arena, elem);
-                    g_global_pred_seq += 1;
-                    const s = g_global_pred_seq;
+                    const ts = TempScope.open(w, arena);
+                    defer ts.close();
+                    const s = ts.seq;
                     try w.print(arena, "(__seti{d}: {{ const __c = {s}.__init(); const __src = ", .{ s, tname });
                     if (ne.args[0].* == .array and ne.args[0].array.elem_type == null) {
                         try w.print(arena, "@as([]const {s}, ", .{ez});
@@ -711,8 +827,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // `new Map(otherMap)`: init then copy each key/value pair from
                 // the source map's parallel keys/values slices.
                 if (ct == .map_type and ne.copy_container) {
-                    g_global_pred_seq += 1;
-                    const s = g_global_pred_seq;
+                    const ts = TempScope.open(w, arena);
+                    defer ts.close();
+                    const s = ts.seq;
                     try w.print(arena, "(__mapc{d}: {{ const __c = {s}.__init(); const __src = ", .{ s, tname });
                     try emitExpr(ne.args[0], w, arena);
                     try w.print(arena, "; for (__src.keys(), __src.values()) |__k, __v| {{ __c.set(__k, __v); }} break :__mapc{d} __c; }})", .{s});
@@ -720,8 +837,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 }
                 // `new Map([[k, v], ...])`: init then set each entry.
                 if (ct == .map_type and ne.args.len == 1 and ne.args[0].* == .array) {
-                    g_global_pred_seq += 1;
-                    const s = g_global_pred_seq;
+                    const ts = TempScope.open(w, arena);
+                    defer ts.close();
+                    const s = ts.seq;
                     try w.print(arena, "(__mapi{d}: {{ const __c = {s}.__init(); ", .{ s, tname });
                     for (ne.args[0].array.items) |entry| {
                         try w.appendSlice(arena, "__c.set(");
@@ -736,8 +854,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // `new Map(entries)` from a non-literal `[K, V][]` expression:
                 // init, then set each tuple pair via its `@"0"`/`@"1"` fields.
                 if (ct == .map_type and ne.args.len == 1) {
-                    g_global_pred_seq += 1;
-                    const s = g_global_pred_seq;
+                    const ts = TempScope.open(w, arena);
+                    defer ts.close();
+                    const s = ts.seq;
                     try w.print(arena, "(__mape{d}: {{ const __c = {s}.__init(); const __src = ", .{ s, tname });
                     try emitExpr(ne.args[0], w, arena);
                     try w.print(arena, "; for (__src) |__e| {{ __c.set(__e.@\"0\", __e.@\"1\"); }} break :__mape{d} __c; }})", .{s});
@@ -760,8 +879,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             // Interface method dispatch (spec 428): bind the fat pointer once,
             // then call through its vtable with the erased instance pointer.
             if (mc.iface_name) |_| {
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__id{d}: {{ const __rcv = ", .{s});
                 try emitExpr(mc.obj, w, arena);
                 try w.appendSlice(arena, "; break :__id");
@@ -793,8 +913,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                     .call => |c| c.args[0],
                     else => return error.ParseError,
                 };
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__sf{d}: {{ const __n: usize = @intCast(", .{s});
                 try emitExpr(n_expr, w, arena);
                 try w.print(arena, "); const __r = __sa().alloc({s}, __n) catch unreachable; @memset(__r, ", .{ez});
@@ -806,8 +927,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // console.log/... as a void expression: print, then yield {}.
                 // Every argument was wrapped to a string by the checker, so each
                 // formats with "{s}", space-separated (JS semantics).
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__cl{d}: {{ ", .{s});
                 const prefix = if (std.mem.eql(u8, mc.name, "log") or std.mem.eql(u8, mc.name, "info") or std.mem.eql(u8, mc.name, "debug"))
                     "__consoleOut(\""
@@ -886,8 +1008,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 } else if (std.mem.eql(u8, mc.name, "toExponential")) {
                     // Format as f64 exponential, then insert the '+' that Zig
                     // omits before a positive exponent, to match JavaScript.
-                    g_number_toexp_seq += 1;
-                    const s = g_number_toexp_seq;
+                    const ts = TempScope.open(w, arena);
+                    defer ts.close();
+                    const s = ts.seq;
                     try w.print(arena, "(__nte{d}: {{ const __raw = std.fmt.allocPrint(__sa(), ", .{s});
                     if (mc.args.len == 1) {
                         try w.appendSlice(arena, "\"{e:.[1]}\", .{ ");
@@ -942,12 +1065,13 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 } else { // toString
                     if (mc.args.len == 1) {
                         // Integer receiver, arbitrary radix, via std.fmt.printInt.
-                        g_number_tostring_seq += 1;
-                        try w.print(arena, "(__nts{d}: {{ var __b: [72]u8 = undefined; const __n = std.fmt.printInt(&__b, @as(i64, @intCast(", .{g_number_tostring_seq});
+                        const ts = TempScope.open(w, arena);
+                        defer ts.close();
+                        try w.print(arena, "(__nts{d}: {{ var __b: [72]u8 = undefined; const __n = std.fmt.printInt(&__b, @as(i64, @intCast(", .{ts.seq});
                         try emitExpr(mc.obj, w, arena);
                         try w.appendSlice(arena, ")), @as(u8, @intCast(");
                         try emitExpr(mc.args[0], w, arena);
-                        try w.print(arena, ")), .lower, .{{}}); break :__nts{d} @as([]const u8, __sa().dupe(u8, __b[0..__n]) catch unreachable); }})", .{g_number_tostring_seq});
+                        try w.print(arena, ")), .lower, .{{}}); break :__nts{d} @as([]const u8, __sa().dupe(u8, __b[0..__n]) catch unreachable); }})", .{ts.seq});
                     } else {
                         // Base-10 decimal for any number.
                         try w.appendSlice(arena, "(std.fmt.allocPrint(__sa(), \"{d}\", .{ ");
@@ -1129,19 +1253,23 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             }
             if (fa.optional_chain) {
                 // a?.field  ->  (if (a) |__oc| @as(?T, __oc.field) else null)
-                // The @as keeps both branches of the same optional type.
+                // The @as keeps both branches of the same optional type. The
+                // capture is numbered because a chain nested in the unwrapped
+                // branch (`a?.[b?.c]`) would otherwise shadow it (spec 464).
                 const ft = try types.zigName(arena, fa.chain_field_type orelse .none);
+                g_temp_seq += 1;
+                const oc_name = try std.fmt.allocPrint(arena, "__oc{d}", .{g_temp_seq});
                 try w.appendSlice(arena, "(if (");
                 try emitExpr(fa.obj, w, arena);
-                try w.print(arena, ") |__oc| @as(?{s}, ", .{ft});
+                try w.print(arena, ") |{s}| @as(?{s}, ", .{ oc_name, ft });
                 // A builtin field (`?.length`/`?.size`) lowers to its Zig form on
                 // the unwrapped value, not a literal `.length` member.
                 if (fa.builtin == .length or fa.builtin == .buffer_length) {
-                    try w.appendSlice(arena, "@as(i32, @intCast(__oc.len))");
+                    try w.print(arena, "@as(i32, @intCast({s}.len))", .{oc_name});
                 } else if (fa.builtin == .container_size) {
-                    try w.appendSlice(arena, "__oc.size()");
+                    try w.print(arena, "{s}.size()", .{oc_name});
                 } else {
-                    try w.appendSlice(arena, "__oc.");
+                    try w.print(arena, "{s}.", .{oc_name});
                     try emitFieldName(w, arena, fa.name);
                 }
                 try w.appendSlice(arena, ") else null)");
@@ -1171,10 +1299,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 try emitExpr(fa.obj, w, arena);
             } else if (fa.builtin == .error_name) {
                 // Always "Error"; evaluate (discard) the receiver for any side effect.
-                g_global_pred_seq += 1;
-                try w.print(arena, "(__en{d}: {{ _ = &(", .{g_global_pred_seq});
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                try w.print(arena, "(__en{d}: {{ _ = &(", .{ts.seq});
                 try emitExpr(fa.obj, w, arena);
-                try w.print(arena, "); break :__en{d} @as([]const u8, \"Error\"); }})", .{g_global_pred_seq});
+                try w.print(arena, "); break :__en{d} @as([]const u8, \"Error\"); }})", .{ts.seq});
             } else if (fa.is_static) {
                 // Class.staticField -> Owner.__static_Owner_field
                 const owner = fa.class_name orelse "";
@@ -1196,14 +1325,16 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // index runs against the unwrapped capture, so re-emit this
                 // node with obj swapped to `__oc` and the flag cleared.
                 const et = try types.zigName(arena, idx.chain_result_type orelse .none);
-                var oc_ref: Expr = .{ .var_ref = .{ .name = "__oc", .emit_name = "__oc" } };
+                g_temp_seq += 1;
+                const oc_name = try std.fmt.allocPrint(arena, "__oc{d}", .{g_temp_seq});
+                var oc_ref: Expr = .{ .var_ref = .{ .name = oc_name, .emit_name = oc_name } };
                 var inner = idx;
                 inner.optional_chain = false;
                 inner.obj = &oc_ref;
                 var inner_expr: Expr = .{ .index = inner };
                 try w.appendSlice(arena, "(if (");
                 try emitExpr(idx.obj, w, arena);
-                try w.print(arena, ") |__oc| @as(?{s}, ", .{et});
+                try w.print(arena, ") |{s}| @as(?{s}, ", .{ oc_name, et });
                 try emitExpr(&inner_expr, w, arena);
                 try w.appendSlice(arena, ") else null)");
                 return;
@@ -1216,8 +1347,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             }
             if (idx.string_char) {
                 // `s[i]` on a string -> the one-byte substring (a string).
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__si{d}: {{ const __str = ", .{s});
                 try emitExpr(idx.obj, w, arena);
                 try w.appendSlice(arena, "; const __ix = @as(usize, @intCast(");
@@ -1243,8 +1375,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             // evaluate the callee once, then call through its `{ ctx, call }`
             // fat pointer.
             if (!oc.optional_chain) {
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__vc{d}: {{ const __f = ", .{s});
                 try emitExpr(oc.callee, w, arena);
                 try w.print(arena, "; break :__vc{d} __f.call(__f.ctx", .{s});
@@ -1261,9 +1394,11 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             // via `.call(.ctx, ...)`, matching the non-optional closure `call`
             // case's `f.call(f.ctx, ...)` emission (~line 233).
             const rt = try types.zigName(arena, oc.chain_result_type orelse .none);
+            g_temp_seq += 1;
+            const oc_name = try std.fmt.allocPrint(arena, "__oc{d}", .{g_temp_seq});
             try w.appendSlice(arena, "(if (");
             try emitExpr(oc.callee, w, arena);
-            try w.print(arena, ") |__oc| @as(?{s}, __oc.call(__oc.ctx", .{rt});
+            try w.print(arena, ") |{s}| @as(?{s}, {s}.call({s}.ctx", .{ oc_name, rt, oc_name, oc_name });
             for (oc.args) |arg| {
                 try w.appendSlice(arena, ", ");
                 try emitExpr(arg, w, arena);
@@ -1292,8 +1427,9 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
             // through @floatFromInt into a fresh f64 slice (arrays are immutable,
             // so the copy is safe). Spec 415.
             if (c.int_array_to_float) {
-                g_global_pred_seq += 1;
-                const s = g_global_pred_seq;
+                const ts = TempScope.open(w, arena);
+                defer ts.close();
+                const s = ts.seq;
                 try w.print(arena, "(__i2f{d}: {{ const __src = ", .{s});
                 try emitExpr(c.inner, w, arena);
                 try w.print(arena, "; const __r = __sa().alloc(f64, __src.len) catch unreachable; for (__src, 0..) |__e, __i| {{ __r[__i] = @floatFromInt(__e); }} break :__i2f{d} @as([]const f64, __r); }})", .{s});
@@ -1353,18 +1489,11 @@ fn userDeclares(name: []const u8) bool {
 /// `emitExpr` call.
 pub var g_options: ?CompileOptions = null;
 
-// Gives each emitted `String.fromCharCode(...)` block a unique label so nested
-// calls don't collide.
-pub var g_from_char_code_seq: usize = 0;
-
-// Unique labels for `number.toString(radix)` blocks.
-pub var g_number_tostring_seq: usize = 0;
-
-// Unique labels for `number.toExponential(...)` blocks.
-pub var g_number_toexp_seq: usize = 0;
-
-// Unique labels for global isNaN/isFinite predicate blocks.
-pub var g_global_pred_seq: usize = 0;
+// The one counter behind every generated label and temporary name. It is
+// shared rather than per-kind on purpose: two blocks drawing from separate
+// counters can be handed the same number, and if those two blocks nest, the
+// locals they suffix with it collide again (spec 464).
+pub var g_temp_seq: usize = 0;
 // Per-arrow unique id, so nested arrows don't collide on the fixed helper names
 // (`__ctx`/`__env`/`Env`/`__e`/`blk`). g_cur_arrow_env is the id of the arrow
 // whose body is currently being emitted, used when reading a captured binding.
