@@ -301,6 +301,14 @@ cp .env.example .env      # set LUMEN_MASTER_KEY (openssl rand -hex 16)
 docker compose up --build</code></pre>
   <p class="sub">Console on <code>http://localhost:8080</code>, the API behind it on <code>/api</code>, PostgreSQL with pgvector underneath so documents and retrieval work.</p>
   <p class="sub">The console has a chat surface per conversation, a workspace panel over the thread's files, a <strong>Knowledge</strong> page — folder rail, the folder's sources, and upload, where typing a new path <em>is</em> how a folder is created, since a scope exists by carrying documents — and a settings overlay reached from the account block: agents (an edit form per agent), models, prompt versions, MCP servers, provider keys and tracing.</p>
+  <h4>Indexing is a queue</h4>
+  <p class="sub">Uploading a document writes a job and answers <code>202</code> — the work is taken, not done. A worker drains the queue: <code>agents-indexer</code>, its own process in the compose file, because embedding a corpus is one model call per chunk and must not compete with serving requests. Two workers can run against one database; the claim is a single <code>UPDATE … FOR UPDATE SKIP LOCKED</code>, so they never take the same job.</p>
+  <p class="sub">The queue is a table rather than a broker. PostgreSQL is already required for documents, so a job table adds no service — and the rows are the journal the console renders, which a broker would not keep. <code>GET /jobs</code> is that journal; <code>GET /documents?scope=</code> puts queued and failed rows above the indexed ones, so a file you just dropped is visible instead of looking lost.</p>
+  <h4>End-to-end tests</h4>
+  <p class="sub"><code>app/e2e</code> drives the console with Playwright against a live API — it starts no fake, because a suite checking its own fake is checking its own fake:</p>
+<pre><code>cd packages/agents/app
+npx playwright test              # needs the API and vite dev running</code></pre>
+  <p class="sub">The knowledge specs skip themselves when the API is on sqlite: it answers "documents need PostgreSQL (pgvector)", and reporting correct behaviour as a failure teaches people to ignore the suite.</p>
   <p class="sub">For development against a locally running API:</p>
 <pre><code>cd packages/agents/app
 npm install
