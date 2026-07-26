@@ -225,7 +225,7 @@ lumen compile packages/ai/examples/mistral-chat.ts
     <tr><td><code>toolNames(tools)</code></td><td>Registered tool names, in order</td></tr>
     <tr><td><code>toolDescriptions(tools)</code></td><td>Render the registry as one <code>- name(params): description</code> line per tool</td></tr>
     <tr><td><code>runTool(tools, name, input)</code></td><td>Dispatch one tool and return a result record</td></tr>
-    <tr><td><code>runToolGuarded(tools, allow, deny, name, input)</code></td><td>Dispatch only when the allow/deny policy permits it</td></tr>
+    <tr><td><code>runToolGuarded(tools, policy, name, input)</code></td><td>Dispatch only when the policy permits it; <code>policy</code> is <code>{ allow, deny }</code></td></tr>
     <tr><td><code>toolMessage(result)</code></td><td>Turn a tool result into a <code>role: "tool"</code> message</td></tr>
     <tr><td><code>toolCall(id, name, args)</code></td><td>Build a provider-neutral tool call record</td></tr>
     <tr><td><code>toolCalls(raw)</code></td><td>Parse tool calls out of an OpenAI-compatible response body</td></tr>
@@ -238,7 +238,7 @@ lumen compile packages/ai/examples/mistral-chat.ts
     <tr><td><code>serializeToolDefsMistral(tools)</code></td><td>Serialize the registry as a Mistral <code>tools</code> array</td></tr>
     <tr><td><code>agentSystemPrompt(tools, instruction)</code></td><td>Build the agent system prompt that lists the tools and how to stop</td></tr>
     <tr><td><code>runAgent(model, tools, history, maxSteps)</code></td><td>Run the model/tool loop and return answer, steps, and stop reason</td></tr>
-    <tr><td><code>runAgentWithPolicy(model, tools, allow, deny, history, maxSteps)</code></td><td>Run the loop with a tool allow/deny policy</td></tr>
+    <tr><td><code>runAgentWithPolicy(model, tools, policy, history, maxSteps)</code></td><td>Run the loop under a <code>{ allow, deny }</code> tool policy</td></tr>
     <tr><td><code>agentStep(index, name, input, output, ok)</code></td><td>Build one agent step record</td></tr>
     <tr><td><code>agentTrace(result)</code></td><td>Render every tool call in order and why the run stopped</td></tr>
     <tr><td><code>fakeModel(responses)</code></td><td>Deterministic offline model driver replaying canned response bodies</td></tr>
@@ -426,7 +426,7 @@ console.log(agentTrace(result));
 // stopped: final after 2 model calls, 1 tool call</code></pre>
   <p class="sub"><code>stopReason</code> is one of exactly three values: <code>final</code> when the model answered without asking for another tool, <code>max_steps</code> when the budget ran out first, and <code>error</code> when the provider returned a body with no usable message in it. <code>stepCount</code> counts model calls; <code>steps</code> holds one record per tool call, so a turn that asked for two tools contributes one to <code>stepCount</code> and two to <code>steps</code>. <code>answer</code> is the best answer seen so far, so a run that stops early still returns whatever prose the model had already written.</p>
   <p class="sub">A tool body must not throw, and must not call anything that throws: the compiler rejects a throwing function in the registry's <code>run</code> field. Report trouble by returning text. A failed dispatch — an unknown name, a denied name — is not a crash either; it comes back as a step whose output is <code>error: ...</code> and goes to the model in the same message shape as a success, so the model can read it and try something else.</p>
-  <p class="sub"><code>runToolGuarded</code> and <code>runAgentWithPolicy</code> take an allow list and a deny list. Deny wins over allow, an empty allow list means everything not denied, and policy is checked before the registry is consulted, so a denied name never reveals whether such a tool exists.</p>
+  <p class="sub"><code>runToolGuarded</code> and <code>runAgentWithPolicy</code> take a <code>ToolPolicy</code> — <code>{ allow, deny }</code> as one record rather than two adjacent lists, because swapping two lists of strings compiles and inverts the policy, permitting exactly what was meant to be blocked. Deny wins over allow, an empty allow list means everything not denied, and policy is checked before the registry is consulted, so a denied name never reveals whether such a tool exists.</p>
   <p class="sub"><code>maxSteps</code> bounds model calls, so the loop terminates even against a model that asks for a tool forever. The tool calls of the last permitted turn are still dispatched, so the trace shows what the agent was doing when it ran out of budget; if a side effect must never run unobserved, deny that tool or raise the budget.</p>
   <h4>Live tool-calling agents</h4>
   <p class="sub"><code>openAIAgent</code> and <code>mistralAgent</code> return a <code>AiModel</code> you hand straight to <code>runAgent</code>. The closure carries the serialized tool definitions in every request and performs the native tool round trip, so the loop and its public signature are unchanged — only the model source differs from the offline <code>fakeModel</code>.</p>

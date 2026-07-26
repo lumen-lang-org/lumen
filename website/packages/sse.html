@@ -86,7 +86,7 @@
 <pre><code class="lumen">serveEvents(9010, (stream: EventStream) =&gt; {
   pushEvent(stream, "token", "Hel");
   pushEvent(stream, "token", "lo ");
-  pushEventWithId(stream, "7", "done", "complete");
+  pushEventWithId(stream, { id: "7", name: "done", data: "complete" });
 });</code></pre>
   <p class="sub">A real browser's <code>EventSource</code>, subscribed to exactly that:</p>
 <pre><code class="lumen">browser: token|"Hel"|id=

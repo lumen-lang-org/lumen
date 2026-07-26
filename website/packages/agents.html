@@ -130,7 +130,7 @@ disabled  Mistral Small is disabled</code></pre>
   <p class="sub"><strong>MCP is HTTP-transport only.</strong> The other transport is stdio, which needs to spawn a process, and Lumen has no subprocess API — so a stdio server has to be fronted by something speaking HTTP. The client says exactly that rather than failing obscurely.</p>
   <h3>Credentials</h3>
   <p class="sub">A provider's API key is a row, encrypted:</p>
-<pre><code class="lumen">storeCredential(db, "mistral", "sk-...", masterKey(), now);
+<pre><code class="lumen">storeCredential(db, { provider: "mistral", apiKey: "sk-...", masterKey: masterKey(), now: now });
 complete(model, config, prompt, text, credentialFor(db, "mistral", masterKey()));</code></pre>
 <pre><code class="lumen">stored for  mistral
 envelope    yV23Bn0vGDrN3+lEt04PhvRyL4jYo1JVWajaKcaW7m3J…
@@ -202,7 +202,14 @@ lead      We cannot ship 40 units today, as only 37 are in stock; the bill for
   <p class="sub"><strong>What went wrong below surfaces above.</strong> A child's own notes are re-reported under its name, and a child that answered <em>after</em> its tool calls failed is recorded as such — in the notes, never in the result, because the result goes to the model and a warning it can quote is a warning that reaches the user as an answer.</p>
   <h3>Evaluations</h3>
   <p class="sub">Cases live in a Langfuse dataset, so the people who write them do not need a programmer. Running them is a request, not a deployment — the agent, its sub-agents, its tools and the judge are all rows.</p>
-<pre><code class="lumen">let out = runEvals(db, "a1", "judge1", "parts-desk-evals", "nightly", tracerFor(db, master), master, 50);</code></pre>
+<pre><code class="lumen">let out = runEvals(db, {
+  agentId: "a1",
+  judgeAgentId: "judge1",
+  dataset: "parts-desk-evals",
+  runName: "nightly",
+  master: master,
+  maxItems: 50,
+}, tracerFor(db, master));</code></pre>
   <p class="sub">A case says what to ask, what a good answer looks like, and — when it cares — the route the run should take:</p>
 <pre><code>{"input":  {"question": "Can we ship 40 units of A-114 from Rotterdam today?"},
  "expectedOutput": {"answer": "No — only 37 units are in stock in Rotterdam.",
@@ -246,9 +253,12 @@ people   granted /hr
   <p class="sub">pgvector, so PostgreSQL only — SQLite and MySQL have no vector type. An agent runs anywhere; it retrieves against Postgres.</p>
 <pre><code class="lumen">let width = embedText(embedModel, "probe", key).dimensions;   // ask the model
 createDocuments(db, width);
-indexDocument(db, embedModel, "d1", "plume", "Plume maps records to tables…", key);
+indexDocument(db, embedModel, {
+  id: "d1", source: "plume", scope: "/specs/plume",
+  body: "Plume maps records to tables…",
+}, key);
 
-let found = retrieve(db, embedModel, "Why is an unordered page refused?", 2, key);
+let found = retrieve(db, embedModel, ["/specs/plume"], "Why is an unordered page refused?", 2, key);
 runAgent(db, "a1", asContext(found.found) + "\nQuestion: " + question, masterKey());</code></pre>
 <pre><code class="lumen">embedding width 1024
 indexed 3 documents
