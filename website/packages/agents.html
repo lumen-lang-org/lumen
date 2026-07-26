@@ -300,6 +300,7 @@ lumen test knowledge.test.ts  # 11, what retrieval refuses before embedding</cod
 cp .env.example .env      # set LUMEN_MASTER_KEY (openssl rand -hex 16)
 docker compose up --build</code></pre>
   <p class="sub">Console on <code>http://localhost:8080</code>, the API behind it on <code>/api</code>, PostgreSQL with pgvector underneath so documents and retrieval work.</p>
+  <p class="sub">The console has a chat surface per conversation, a workspace panel over the thread's files, a <strong>Knowledge</strong> page — folder rail, the folder's sources, and upload, where typing a new path <em>is</em> how a folder is created, since a scope exists by carrying documents — and a settings overlay reached from the account block: agents (an edit form per agent), models, prompt versions, MCP servers, provider keys and tracing.</p>
   <p class="sub">For development against a locally running API:</p>
 <pre><code>cd packages/agents/app
 npm install
