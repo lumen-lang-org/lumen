@@ -769,7 +769,20 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\    fn read(self: *LumenSocket) []const u8 {
             \\        if (self.stream == null or self.closed) return "";
             \\        var scratch: [65536]u8 = undefined;
-            \\        const n = self.reader.interface.readSliceShort(&scratch) catch return "";
+            \\        var data: [1][]u8 = .{&scratch};
+            \\        // One underlying read, returning what arrived -- recv's
+            \\        // semantics, which is what a socket has.
+            \\        //
+            \\        // NOT readSliceShort: that loops until the buffer is full and
+            \\        // returns short only at end of stream, so a 150-byte request
+            \\        // into a 64 KB buffer either blocks forever or is mistaken for
+            \\        // a closed peer. Worse than either, the false end-of-stream
+            \\        // left the connection in a state where every later write was
+            \\        // silently dropped: the first write on a socket arrived and the
+            \\        // first one after a read did not. Any protocol that answers a
+            \\        // request on a connection it keeps -- WebSocket, or a plain
+            \\        // request/response over net -- could not work.
+            \\        const n = self.reader.interface.readVec(&data) catch return "";
             \\        if (n == 0) return "";
             \\        return __sa().dupe(u8, scratch[0..n]) catch "";
             \\    }
