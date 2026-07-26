@@ -934,6 +934,10 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.appendSlice(arena, "__processChdir(__io, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "sleep")) {
+        try w.appendSlice(arena, "__processSleep(__io, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "process") and std.mem.eql(u8, cl.name, "exit")) {
         try w.appendSlice(arena, "std.process.exit(@intCast(");
         try em.emitExpr(cl.args[0], w, arena);

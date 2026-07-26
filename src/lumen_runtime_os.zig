@@ -481,6 +481,10 @@ pub fn emitOsCryptoRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanage
             \\    const n = std.process.currentPath(io, &buf) catch return "";
             \\    return alloc.dupe(u8, buf[0..n]) catch "";
             \\}
+            \\fn __processSleep(io: std.Io, ms: i64) void {
+            \\    if (ms <= 0) return;
+            \\    io.sleep(std.Io.Duration.fromMilliseconds(ms), .awake) catch {};
+            \\}
             \\fn __processChdir(io: std.Io, path: []const u8) void {
             \\    std.process.setCurrentPath(io, path) catch {};
             \\}

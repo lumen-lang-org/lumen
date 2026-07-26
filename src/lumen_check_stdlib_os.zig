@@ -1033,6 +1033,21 @@ pub fn processCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
         call.checked_type = .void;
         return .void;
     }
+    if (std.mem.eql(u8, call.name, "sleep")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const t = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.isInteger(t)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_process_api = true;
+        call.checked_type = .void;
+        return .void;
+    }
     if (std.mem.eql(u8, call.name, "exit")) {
         if (call.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};

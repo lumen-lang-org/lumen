@@ -1,0 +1,11 @@
+{
+  "feature": "475-process-sleep",
+  "cases": [
+    {
+      "id": "sleep.valid.pauses",
+      "source": "../examples/valid/sleep.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "slept\nno-op\n3" }
+    }
+  ]
+}

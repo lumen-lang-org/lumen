@@ -21,6 +21,11 @@ first thing that makes the error go away is usually not it.
   package has to rename a parameter, restructure a type, or avoid a name
   because the compiler cannot cope, that is a compiler bug. Fix the compiler.
   A library author cannot know which names a future package will export.
+- **A missing stdlib function is a thing to write, not a thing to route
+  around.** When a program needs `process.sleep` and the checker says
+  `E_UNSUPPORTED_STD`, add it — checker, emitter, runtime, spec, conformance
+  case — rather than reshaping the program around the hole. The reshaping
+  outlives the gap and teaches the next reader that the hole is permanent.
 - **A better error message for a wrong rule is still the wrong rule.** Ask
   whether the thing being reported should be an error at all before improving
   how it is reported.
