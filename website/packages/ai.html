@@ -86,13 +86,11 @@
   <p class="sub">This package starts with the practical core of AI applications: messages, prompt templates, model calls, a small response parser, retrieval over local documents, conversation memory, tools, and an agent loop that runs a model and its tools until the task is done. It stays intentionally lean for V1 because Lumen is statically typed and does not expose dynamic JSON, streaming HTTP responses, or provider SDKs yet.</p>
   <p class="sub">Everything is immutable: nothing in this package mutates an argument. Helpers that look like they update a store, a document, or a history take a value and return a new one.</p>
   <h3>Use</h3>
-<pre><code class="lumen">import { chatMistral, system, user, renderTemplate } from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
+<pre><code class="lumen">import { chatMistral, system, user, renderTemplate, templateVar } from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
 
-let prompt = renderTemplate(
-  "Explain {{topic}} in one sentence.",
-  ["topic"],
-  ["native compilation"],
-);
+let prompt = renderTemplate("Explain {{topic}} in one sentence.", [
+  templateVar("topic", "native compilation"),
+]);
 
 let messages = [
   system("You are concise."),
@@ -111,14 +109,16 @@ lumen compile packages/ai/examples/mistral-chat.ts
     <tr><td><code>system(content)</code></td><td>Create a system message</td></tr>
     <tr><td><code>user(content)</code></td><td>Create a user message</td></tr>
     <tr><td><code>assistant(content)</code></td><td>Create an assistant message</td></tr>
-    <tr><td><code>renderTemplate(template, keys, values)</code></td><td>Replace <code>{{key}}</code> placeholders</td></tr>
-    <tr><td><code>partialTemplate(template, keys, values)</code></td><td>Replace known placeholders and leave unknown ones intact</td></tr>
+    <tr><td><code>templateVar(name, value)</code></td><td>One <code>{{name}}</code> binding — the name beside its value</td></tr>
+    <tr><td><code>renderTemplate(template, vars)</code></td><td>Replace <code>{{name}}</code> placeholders</td></tr>
+    <tr><td><code>partialTemplate(template, vars)</code></td><td>Replace known placeholders and leave unknown ones intact</td></tr>
     <tr><td><code>missingVariables(template, keys)</code></td><td>Return placeholder names not present in <code>keys</code></td></tr>
     <tr><td><code>unusedVariables(template, keys)</code></td><td>Return provided keys not used by the template</td></tr>
-    <tr><td><code>systemTemplate(template, keys, values)</code></td><td>Render a system message template</td></tr>
-    <tr><td><code>userTemplate(template, keys, values)</code></td><td>Render a user message template</td></tr>
-    <tr><td><code>assistantTemplate(template, keys, values)</code></td><td>Render an assistant message template</td></tr>
-    <tr><td><code>renderChatPrompt(roles, templates, keys, values)</code></td><td>Render flat <code>role/content</code> chat prompt entries</td></tr>
+    <tr><td><code>systemTemplate(template, vars)</code></td><td>Render a system message template</td></tr>
+    <tr><td><code>userTemplate(template, vars)</code></td><td>Render a user message template</td></tr>
+    <tr><td><code>assistantTemplate(template, vars)</code></td><td>Render an assistant message template</td></tr>
+    <tr><td><code>promptPart(role, template)</code></td><td>One chat prompt entry — a role and its template</td></tr>
+    <tr><td><code>renderChatPrompt(parts, vars)</code></td><td>Render flat <code>role/content</code> chat prompt entries</td></tr>
     <tr><td><code>chatPromptRole(entry)</code></td><td>Read the role from a rendered chat prompt entry</td></tr>
     <tr><td><code>chatPromptContent(entry)</code></td><td>Read the content from a rendered chat prompt entry</td></tr>
     <tr><td><code>chatRequest(provider, model, messages, temperature, maxTokens)</code></td><td>Build a provider-neutral chat request</td></tr>
