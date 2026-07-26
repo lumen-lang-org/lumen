@@ -97,7 +97,12 @@ let messages = [
   user(prompt),
 ];
 
-let result = chatMistral("mistral-key", "mistral-large-latest", messages);
+let result = chatMistral({
+  apiKey: "mistral-key",
+  model: "mistral-large-latest",
+  baseUrl: "",
+  messages: messages,
+});
 console.log(result.content);</code></pre>
   <p class="sub">For a local live smoke test, use the checked-in Mistral example:</p>
 <pre><code>export MISTRAL_API_KEY="..."
@@ -140,8 +145,7 @@ lumen compile packages/ai/examples/mistral-chat.ts
     <tr><td><code>parseOpenAIResult(status, ok, raw)</code></td><td>Build a normalized result record</td></tr>
     <tr><td><code>parseOpenAIError(status, raw)</code></td><td>Parse an OpenAI-compatible error JSON body</td></tr>
     <tr><td><code>parseOpenAITokenUsage(raw)</code></td><td>Parse OpenAI-compatible token usage</td></tr>
-    <tr><td><code>chatOpenAI(apiKey, model, messages)</code></td><td>POST to <code>https://api.openai.com/v1/chat/completions</code></td></tr>
-    <tr><td><code>chatOpenAIWithBaseUrl(baseUrl, apiKey, model, messages)</code></td><td>POST to another OpenAI-compatible base URL</td></tr>
+    <tr><td><code>chatOpenAI(call)</code></td><td>POST an OpenAI chat; <code>call</code> is <code>{ apiKey, model, baseUrl, messages }</code>, empty <code>baseUrl</code> meaning OpenAI itself</td></tr>
     <tr><td><code>mistralChatBody(model, messages, temperature, maxTokens)</code></td><td>Build Mistral request JSON</td></tr>
     <tr><td><code>mistralChatBodyWithStops(model, messages, temperature, maxTokens, stop)</code></td><td>Build Mistral request JSON with stop sequences</td></tr>
     <tr><td><code>mistralAuthHeaders(apiKey)</code></td><td>Build Mistral HTTP headers</td></tr>
@@ -149,8 +153,7 @@ lumen compile packages/ai/examples/mistral-chat.ts
     <tr><td><code>parseMistralResult(status, ok, raw)</code></td><td>Build a normalized Mistral result record</td></tr>
     <tr><td><code>parseMistralError(status, raw)</code></td><td>Parse a Mistral error JSON body</td></tr>
     <tr><td><code>parseMistralTokenUsage(raw)</code></td><td>Parse Mistral token usage</td></tr>
-    <tr><td><code>chatMistral(apiKey, model, messages)</code></td><td>POST to <code>https://api.mistral.ai/v1/chat/completions</code></td></tr>
-    <tr><td><code>chatMistralWithBaseUrl(baseUrl, apiKey, model, messages)</code></td><td>POST to another Mistral-compatible base URL</td></tr>
+    <tr><td><code>chatMistral(call)</code></td><td>POST a Mistral chat; same <code>ChatCall</code> record, empty <code>baseUrl</code> meaning Mistral itself</td></tr>
     <tr><td><code>document(id, text, source, metadata)</code></td><td>Build a document record</td></tr>
     <tr><td><code>docMetadata(doc, key)</code></td><td>Read one metadata value, or <code>""</code> when absent</td></tr>
     <tr><td><code>withDocMetadata(doc, key, value)</code></td><td>Return a copy of the document with one metadata entry set</td></tr>
@@ -204,8 +207,7 @@ lumen compile packages/ai/examples/mistral-chat.ts
     <tr><td><code>needsCompression(history, maxChars)</code></td><td>Whether the conversation has outgrown its character budget</td></tr>
     <tr><td><code>compressHistory(summarize, history, keepRecent)</code></td><td>Fold older turns into a running summary, keeping the system prompt and the last <code>keepRecent</code> messages</td></tr>
     <tr><td><code>compressIfNeeded(summarize, history, maxChars, keepRecent)</code></td><td>Compress only when over budget</td></tr>
-    <tr><td><code>openAISummarizer(apiKey, model)</code></td><td>A summarizer backed by an OpenAI-compatible model</td></tr>
-    <tr><td><code>mistralSummarizer(apiKey, model)</code></td><td>A summarizer backed by Mistral</td></tr>
+    <tr><td><code>summarizer(cfg)</code></td><td>A summarizer backed by any configured model — the provider is a field of <code>cfg</code>, so there is one of these, not one per vendor</td></tr>
     <tr><td><code>schemaField(name, type, description, required)</code></td><td>Describe one property of an object schema</td></tr>
     <tr><td><code>objectSchema(fields)</code></td><td>Build a strict JSON Schema object from fields</td></tr>
     <tr><td><code>schemaRequired(fields)</code></td><td>The required field names, for validation</td></tr>
@@ -323,15 +325,16 @@ let hits = retrieve(store, docs, question, 128, 3);
 
 console.log(formatContext(hits));
 
-let result = chatMistral(
-  "mistral-key",
-  "mistral-large-latest",
-  ragMessages(question, hits),
-);
+let result = chatMistral({
+  apiKey: "mistral-key",
+  model: "mistral-large-latest",
+  baseUrl: "",
+  messages: ragMessages(question, hits),
+});
 console.log(result.content);</code></pre>
   <p class="sub">The grounded system message tells the model to cite each claim with the bracket number of its context block and to reply exactly <code>The context does not contain the answer.</code> when the context does not answer the question.</p>
   <p class="sub">Use at least 128 dimensions. <code>hashEmbedding</code> is a hashing bag of words, so distinct terms collide into the same bucket at low dimension counts. When "no match" must mean no results, use <code>keywordRetrieve</code>: it drops documents that share no term with the query, while the vector path always returns some collision noise. For real semantic search, embed with a provider model instead. <code>embedBatchWithConfig</code> takes every chunk in one request, and the returned vectors go into the store with <code>addVector</code>:</p>
-<pre><code class="lumen">let cfg = modelConfig("mistral", "mistral-embed", apiKey);
+<pre><code class="lumen">let cfg = modelConfig({ provider: "mistral", model: "mistral-embed", apiKey: apiKey });
 let vectors = embedBatchWithConfig(cfg, texts);</code></pre>
   <p class="sub">A response with fewer rows than inputs yields none rather than a partial list — a partial one would pair vectors with the wrong chunks, and the misalignment would show up later as retrieval that is merely bad rather than broken. <code>examples/embed-search.ts</code> is a runnable version; against mistral-embed it ranks a passage that shares no words with the question above one that does not, which is the whole difference from the hashing embedder.</p>
   <h3>Conversation memory</h3>
@@ -352,11 +355,12 @@ let vectors = embedBatchWithConfig(cfg, texts);</code></pre>
 let history = [system("You are concise.")];
 history = appendMessage(history, user("What compiles to a native binary?"));
 
-let reply = chatMistral(
-  "mistral-key",
-  "mistral-large-latest",
-  windowMemory(history, 8),
-);
+let reply = chatMistral({
+  apiKey: "mistral-key",
+  model: "mistral-large-latest",
+  baseUrl: "",
+  messages: windowMemory(history, 8),
+});
 history = appendMessage(history, assistant(reply.content));
 
 saveHistory("chat.json", history);
@@ -525,7 +529,9 @@ mcpStdioClose(session);</code></pre>
   <p class="sub">See <code>examples/support-agent/</code> for runnable HTTP, stdio, and SSE examples.</p>
   <h3>Context compression</h3>
   <p class="sub">A long conversation eventually costs more to resend than it is worth. Compression folds the older turns into a running summary <strong>on demand</strong> — the app checks a budget and compresses only when it is exceeded:</p>
-<pre><code class="lumen">let summarize = mistralSummarizer(apiKey, "mistral-large-latest");
+<pre><code class="lumen">let summarize = summarizer(modelConfig({
+  provider: "mistral", model: "mistral-large-latest", apiKey: apiKey,
+}));
 
 if (needsCompression(history, 8000)) {
   history = compressHistory(summarize, history, 4);   // keep the last 4 turns
@@ -538,7 +544,7 @@ history = compressIfNeeded(summarize, history, 8000, 4);</code></pre>
     <li><strong>A failed summarizer never destroys the conversation.</strong> If the model call fails or is rate-limited and returns nothing, the history is returned unchanged.</li>
     <li><strong>Your system prompt survives.</strong> Only the conversation turns are folded.</li>
   </ul>
-  <p class="sub">The summarizer is an injected <code>(prompt: string) =&gt; string</code>, so the memory module does no I/O and is testable with a deterministic fake; the provider-backed <code>openAISummarizer</code> / <code>mistralSummarizer</code> are conveniences.</p>
+  <p class="sub">The summarizer is an injected <code>(prompt: string) =&gt; string</code>, so the memory module does no I/O and is testable with a deterministic fake; the provider-backed <code>summarizer(cfg)</code> is the convenience — one function, since which provider to call is already a field of the config.</p>
   <h3>Structured output</h3>
   <p class="sub">Ask a provider for JSON that conforms to a schema and get a validated result instead of free text. Lumen has no runtime reflection, so a schema is described with explicit fields:</p>
 <pre><code class="lumen">let fields = [
