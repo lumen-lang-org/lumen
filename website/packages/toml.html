@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>toml · Packages · Lumen</title>
+<meta name="description" content="A practical TOML config reader written entirely in Lumen.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/toml">
+<meta property="og:url" content="https://lumen-lang.org/packages/toml">
+<meta property="og:title" content="toml · Packages · Lumen">
+<meta property="og:description" content="A practical TOML config reader written entirely in Lumen.">
+<meta name="twitter:title" content="toml · Packages · Lumen">
+<meta name="twitter:description" content="A practical TOML config reader written entirely in Lumen.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">toml</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml" class="active">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>toml</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/toml">source</a></p>
+  <h2>toml</h2>
+  <p class="sub">A practical TOML config reader written entirely in Lumen.</p>
+  <p class="sub">V1 is intentionally focused on common read-only config use cases. It does not read files, mutate process state, or attempt the whole TOML 1.0 surface.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { getString, getInt, getBool, getArray, stringify } from "https://lumen-lang.org/package/std-contrib/toml/toml.ts";
+
+let src = "[package]\nname = \"demo\"\nversion = 1\n";
+
+let name = getString(src, "package.name", "");
+let version = getInt(src, "package.version", 0);
+
+let out = stringify(["package.name=demo", "package.version=1"]);</code></pre>
+  <h3>API</h3>
+  <table>
+    <tr><th>API</th><th>Meaning</th></tr>
+    <tr><td><code>parse(src: string): string[]</code></td><td>Parse into normalized <code>path=value</code> entries</td></tr>
+    <tr><td><code>keys(src: string): string[]</code></td><td>Return normalized keys in document order</td></tr>
+    <tr><td><code>has(src: string, key: string): bool</code></td><td>Return whether <code>key</code> exists</td></tr>
+    <tr><td><code>get(src, key, fallback): string</code></td><td>Return the last raw value for <code>key</code></td></tr>
+    <tr><td><code>getString(src, key, fallback): string</code></td><td>Return a string value</td></tr>
+    <tr><td><code>getInt(src, key, fallback): int</code></td><td>Return an integer value</td></tr>
+    <tr><td><code>getBool(src, key, fallback): bool</code></td><td>Return a boolean value</td></tr>
+    <tr><td><code>getArray(src, key): string[]</code></td><td>Return simple array items as strings</td></tr>
+    <tr><td><code>stringify(entries: string[]): string</code></td><td>Serialize normalized <code>path=value</code> entries</td></tr>
+  </table>
+  <p class="sub">The npm TOML ecosystem usually exposes <code>parse</code> and <code>stringify</code> over JavaScript objects. Lumen does not yet have the same dynamic object shape, so this package uses normalized <code>path=value</code> entries as the stable interchange format for now.</p>
+  <h3>Supported V1 syntax</h3>
+  <ul>
+    <li>comments beginning with <code>#</code> outside quotes</li>
+    <li>bare keys and dotted keys</li>
+    <li>tables like <code>[package]</code></li>
+    <li>nested tables like <code>[database.primary]</code></li>
+    <li>strings with <code>"basic"</code> and <code>'literal'</code> quotes</li>
+    <li>integers, including <code>_</code> separators and negative values</li>
+    <li>booleans: <code>true</code>, <code>false</code></li>
+    <li>simple arrays: <code>["a", "b"]</code>, <code>[1, 2]</code></li>
+    <li>duplicate keys, with <code>get*</code> returning the last value</li>
+    <li>serialization from normalized entries with strings, ints, bools, and arrays</li>
+  </ul>
+  <h3>Out of scope for V1</h3>
+  <ul>
+    <li>arrays of tables</li>
+    <li>inline tables</li>
+    <li>date/time values</li>
+    <li>floats</li>
+    <li>multiline strings</li>
+    <li>quoted keys</li>
+    <li>strict diagnostics for every malformed line</li>
+    <li>full object-style serialization</li>
+  </ul>
+  <p class="sub">Test:</p>
+<pre><code>lumen test packages/toml/toml.ts</code></pre>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

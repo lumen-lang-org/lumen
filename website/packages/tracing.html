@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>tracing · Packages · Lumen</title>
+<meta name="description" content="OpenTelemetry traces for AI runs, over OTLP/HTTP. Tested against Langfuse&#x27;s attribute conventions and verified against the OpenTelemetry Collector.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/tracing">
+<meta property="og:url" content="https://lumen-lang.org/packages/tracing">
+<meta property="og:title" content="tracing · Packages · Lumen">
+<meta property="og:description" content="OpenTelemetry traces for AI runs, over OTLP/HTTP. Tested against Langfuse&#x27;s attribute conventions and verified against the OpenTelemetry Collector.">
+<meta name="twitter:title" content="tracing · Packages · Lumen">
+<meta name="twitter:description" content="OpenTelemetry traces for AI runs, over OTLP/HTTP. Tested against Langfuse&#x27;s attribute conventions and verified against the OpenTelemetry Collector.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">tracing</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing" class="active">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>tracing</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/tracing">source</a></p>
+  <h2>tracing</h2>
+  <p class="sub">OpenTelemetry traces for AI runs, over OTLP/HTTP. Tested against Langfuse's attribute conventions and verified against the OpenTelemetry Collector.</p>
+  <h3>Why</h3>
+  <p class="sub">An agent run is a tree: a chain calls a model, the model asks for a tool, the tool answers, the model is called again. Without tracing you see the final answer and a bill. With it you see which step was slow, which tool failed, and where the tokens went.</p>
+  <h3>Why OTLP rather than Langfuse's own endpoint</h3>
+  <p class="sub">Langfuse has a flat-JSON ingestion endpoint at <code>/api/public/ingestion</code> that is easier to hand-build against. It is <strong>deprecated in Langfuse's own API specification</strong>, which says to use the OpenTelemetry endpoint instead, and their Python SDK already exports that way.</p>
+  <p class="sub">OTLP costs one extra layer of nesting and a typed attribute union. In exchange the same exporter works against Langfuse, Phoenix, Braintrust, Honeycomb, and any OpenTelemetry collector — and nanosecond timestamps are <em>easier</em> to produce than ISO-8601, since there is no date arithmetic.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { makeTracer, startSpan, endSpan, endGeneration, endTool, flush,
+         TRACE_CHAIN, TRACE_GENERATION, TRACE_TOOL } from "./tracing.ts";
+
+let t = makeTracer(
+  "https://cloud.langfuse.com/api/public/otel/v1/traces",
+  publicKey, secretKey, "my-agent");
+
+let run = startSpan("support-agent", TRACE_CHAIN, "");
+
+let call = startSpan("mistral-large", TRACE_GENERATION, run.id);
+let reply = chat(cfg, messages);
+t = endGeneration(t, call, "mistral-large-latest", 0.2, 512,
+                  question, reply.content, inputTokens, outputTokens);
+
+let tool = startSpan("weather", TRACE_TOOL, run.id);
+t = endTool(t, tool, "Paris", "18C, clear", true);
+
+t = endSpan(t, run, question, answer);
+
+let sent = flush(t);
+if (!sent.ok) { console.error(sent.error); }</code></pre>
+  <p class="sub"><code>startSpan</code>'s third argument is the parent's id, or <code>""</code> for the root. Records are immutable, so each <code>end*</code> returns a new tracer — thread it through the run and flush the last one.</p>
+  <h3>API</h3>
+  <table>
+    <tr><th>function</th><th>does</th></tr>
+    <tr><td><code>makeTracer(endpoint, publicKey, secretKey, serviceName)</code></td><td>open a trace</td></tr>
+    <tr><td><code>tracerWithEnvironment(t, name)</code> / <code>tracerWithSession(t, sessionId, userId)</code></td><td>attribution</td></tr>
+    <tr><td><code>startSpan(name, kind, parentId)</code></td><td>begin a span</td></tr>
+    <tr><td><code>endSpan(t, span, input, output)</code></td><td>close it</td></tr>
+    <tr><td><code>endSpanFailed(t, span, input, message)</code></td><td>close it as an error</td></tr>
+    <tr><td><code>endGeneration(t, span, model, temperature, maxTokens, input, output, inTokens, outTokens)</code></td><td>close a model call</td></tr>
+    <tr><td><code>endTool(t, span, input, output, ok)</code></td><td>close a tool dispatch</td></tr>
+    <tr><td><code>traceBody(t)</code></td><td>the OTLP document, for inspection</td></tr>
+    <tr><td><code>flush(t)</code></td><td>send it</td></tr>
+    <tr><td><code>resetTracer(t)</code></td><td>keep the settings, start a new trace</td></tr>
+  </table>
+  <p class="sub">Kinds: <code>TRACE_SPAN</code>, <code>TRACE_GENERATION</code>, <code>TRACE_TOOL</code>, <code>TRACE_CHAIN</code>, <code>TRACE_AGENT</code>, <code>TRACE_RETRIEVER</code> — the observation types Langfuse renders.</p>
+  <h3>What LangChain-equivalent means here</h3>
+  <p class="sub">LangChain's Langfuse handler maps <code>on_chain_start</code> to a chain span, <code>on_llm_start</code> to a <strong>generation</strong> carrying model and parameters, <code>on_tool_start</code> to a tool span, and errors to <code>level: ERROR</code> with a status message. This package emits the same vocabulary — the difference is that you call it rather than a callback doing it for you, which is the honest trade in a language with no framework to hook into.</p>
+  <p class="sub">Every span also carries the standard <code>gen_ai.*</code> attributes (<code>gen_ai.operation.name</code>, <code>gen_ai.request.model</code>, <code>gen_ai.usage.input_tokens</code>), so a collector that knows nothing of Langfuse still classifies it correctly.</p>
+  <h3>Flushing</h3>
+  <p class="sub">Spans are buffered for the run and sent in one request. That is not a compromise: the Python and JS SDKs batch on a background thread to avoid blocking, and with synchronous execution there is nothing to block. It also removes the failure they need process-exit hooks to guard — the flush is a statement in your program rather than a race with shutdown.</p>
+  <p class="sub">A failed flush returns <code>ok: false</code> with the collector's own response. It cannot raise, so tracing never takes down the run it was watching.</p>
+  <h3>Verified</h3>
+  <p class="sub"><code>lumen test packages/tracing/tracing.test.ts</code> covers the wire format offline — 29 tests over escaping, base64 vectors, id widths, span nesting, usage, and error status.</p>
+  <p class="sub">The document was also posted to a real OpenTelemetry Collector (<code>otel/opentelemetry-collector-contrib</code>), which accepted it with <code>HTTP 200 {"partialSuccess":{}}</code> and decoded a five-span tree with correct parents, <code>Status code: Error</code> on the failing span, and its message intact:</p>
+<pre><code class="lumen">Trace ID       : 7d4faadda3774b92a728e1558d932fd1
+Parent ID      : d62b5ea99c4df281
+Name           : mistral-large
+ -&gt; langfuse.observation.type: Str(generation)
+ -&gt; langfuse.observation.usage_details: Str({"input":120,"output":18,"total":138})
+ -&gt; gen_ai.operation.name: Str(chat)
+...
+Status code    : Error
+Status message : the provider returned 429 "rate limited"</code></pre>
+  <p class="sub">Reproduce with:</p>
+<pre><code>docker run -d --name otelcol -p 4318:4318 \
+  -v $PWD/otelcol.yaml:/etc/otelcol-contrib/config.yaml \
+  otel/opentelemetry-collector-contrib:latest
+curl -X POST http://127.0.0.1:4318/v1/traces \
+  -H 'Content-Type: application/json' --data-binary @trace.json</code></pre>
+  <h4>Against Langfuse itself</h4>
+  <p class="sub">Verified end to end against a self-hosted Langfuse 3.224.1. The binary posted a trace, and reading it back through <code>GET /api/public/traces/{id}</code> returned:</p>
+<pre><code class="lumen">name             type        parent           level    tokens
+----------------------------------------------------------------------
+mistral-large    GENERATION  support-agent    DEFAULT  in=160 out=12
+weather          TOOL        support-agent    DEFAULT
+support-agent    CHAIN       (root)           DEFAULT
+mistral-large    GENERATION  support-agent    DEFAULT  in=120 out=18
+flaky-tool       TOOL        support-agent    ERROR
+
+model      : mistral-large -&gt; mistral-large-latest {temperature: 0.2, max_tokens: 512}
+error span : flaky-tool
+  message  : the provider returned 429 "rate limited"</code></pre>
+  <p class="sub">Session and user attribution arrived (<code>sessionId: sess-live-1</code>, <code>userId: user-live-1</code>), inputs and outputs round-tripped — including a JSON object that came back parsed as an object, and a reply with an embedded newline — and the trace's own input and output were taken from the root span.</p>
+  <p class="sub">To reproduce: <code>docker compose up</code> in the Langfuse repository with <code>LANGFUSE_INIT_PROJECT_PUBLIC_KEY</code> and <code>LANGFUSE_INIT_PROJECT_SECRET_KEY</code> set, so keys exist without touching the UI. On a host already running PostgreSQL, remap their Postgres to 5433 and drop ClickHouse's host port mappings — nothing outside the compose network needs either.</p>
+  <h3>Limits</h3>
+  <ul>
+    <li><strong>No sampling.</strong> Every span is recorded and sent. At high volume that is bandwidth and storage you may not want.</li>
+    <li><strong>No retry.</strong> A failed flush loses the trace; it reports the failure rather than queuing.</li>
+    <li><strong>Millisecond clock.</strong> <code>Date.now()</code> is the source, so nanosecond timestamps end in six zeros. Ordering within a millisecond is not preserved.</li>
+    <li><strong>No score events.</strong> Langfuse scores use a separate ingestion path this does not implement.</li>
+    <li><strong>No trace-level input and output.</strong> Those ride on the root span, which Langfuse renders, but a dedicated trace object would carry them better.</li>
+    <li><strong>Nesting is manual</strong>: you pass the parent id. There is no implicit span stack, because a closure here cannot call a function it was handed, which is what an automatic context manager would need.</li>
+  </ul>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

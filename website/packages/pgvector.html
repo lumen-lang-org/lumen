@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>pgvector · Packages · Lumen</title>
+<meta name="description" content="A persistent vector store: PostgreSQL with the pgvector extension, reached through the C FFI.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/pgvector">
+<meta property="og:url" content="https://lumen-lang.org/packages/pgvector">
+<meta property="og:title" content="pgvector · Packages · Lumen">
+<meta property="og:description" content="A persistent vector store: PostgreSQL with the pgvector extension, reached through the C FFI.">
+<meta name="twitter:title" content="pgvector · Packages · Lumen">
+<meta name="twitter:description" content="A persistent vector store: PostgreSQL with the pgvector extension, reached through the C FFI.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">pgvector</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector" class="active">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>pgvector</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/pgvector">source</a></p>
+  <h2>pgvector</h2>
+  <p class="sub">A persistent vector store: PostgreSQL with the <a href="https://github.com/pgvector/pgvector">pgvector</a> extension, reached through the C FFI.</p>
+  <h3>Why</h3>
+  <p class="sub">The <code>ai</code> package's built-in store is a slice held in memory. It is rebuilt on every start, so a service re-embeds its whole corpus each time it boots and pays a provider for text that has not changed. It also scans every vector on every query.</p>
+  <p class="sub">This keeps the vectors in a table. An index survives a restart, grows a document at a time, and is searched by the database with a real index rather than by a loop in your program.</p>
+  <h3>Install</h3>
+<pre><code>apt install postgresql-17 postgresql-17-pgvector libpq-dev   # Debian, Ubuntu
+brew install postgresql@17 pgvector                          # macOS
+
+createdb lumenvec
+psql lumenvec -c 'CREATE EXTENSION vector'
+
+sh packages/pgvector/build.sh</code></pre>
+  <p class="sub"><code>build.sh</code> finds libpq's headers through <code>pg_config</code> and produces <code>pgvector_shim.o</code>. Because <code>// @link</code> paths resolve against the working directory, compile programs that import this from <code>packages/pgvector</code>.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { pgConnect, pgCreateStore, pgUpsert, pgSearch, pgClose } from "./pgvector.ts";
+
+pgConnect("host=127.0.0.1 user=lumen password=lumen dbname=lumenvec");
+
+// The width must match the embedding model: mistral-embed is 1024,
+// text-embedding-3-small is 1536.
+pgCreateStore("docs", 1024);
+
+pgUpsert("docs", "notes.txt#0", chunkText, "notes.txt", "chunk=0", vector);
+
+let hits = pgSearch("docs", queryVector, 5);
+for (const h of hits) {
+  console.log(`${h.score}  ${h.source}  ${h.text}`);
+}
+
+pgClose();</code></pre>
+  <h3>API</h3>
+  <table>
+    <tr><th>function</th><th>does</th></tr>
+    <tr><td><code>pgConnect(conninfo)</code></td><td>open a connection from a libpq conninfo string</td></tr>
+    <tr><td><code>pgConnected()</code> / <code>pgServerVersion()</code> / <code>pgClose()</code></td><td>connection state</td></tr>
+    <tr><td><code>pgCreateStore(table, dims)</code></td><td>create the extension and table if absent</td></tr>
+    <tr><td><code>pgCreateIndex(table, lists)</code></td><td>build an ivfflat cosine index</td></tr>
+    <tr><td><code>pgDropStore(table)</code></td><td>drop the table</td></tr>
+    <tr><td><code>pgUpsert(table, id, text, source, metadata, embedding)</code></td><td>insert or replace</td></tr>
+    <tr><td><code>pgDeleteById(table, id)</code> / <code>pgDeleteBySource(table, source)</code></td><td>remove</td></tr>
+    <tr><td><code>pgCount(table)</code> / <code>pgHas(table, id)</code> / <code>pgGet(table, id)</code></td><td>inspect</td></tr>
+    <tr><td><code>pgSearch(table, query, k)</code></td><td>the k nearest chunks</td></tr>
+    <tr><td><code>pgSearchInSource(table, query, source, k)</code></td><td>the same, within one document</td></tr>
+    <tr><td><code>pgSearchWithin(table, query, k, maxDistance)</code></td><td>nearest, no further than a bound</td></tr>
+    <tr><td><code>pgVectorLiteral(v)</code> / <code>pgParseVector(s)</code></td><td>pgvector's text form</td></tr>
+    <tr><td><code>pgSafeIdentifier(name)</code></td><td>whether a name is usable as a table</td></tr>
+  </table>
+  <p class="sub">A <code>PgHit</code> carries <code>id</code>, <code>text</code>, <code>source</code>, <code>metadata</code>, <code>distance</code> and <code>score</code>. <code>distance</code> is what the database returned, so smaller is nearer; <code>score</code> is <code>1 - distance</code>, the cosine similarity that reads the familiar way.</p>
+  <p class="sub">Calls that change something return a <code>PgResult</code> — <code>{ ok, rows, error }</code> — with the database's own message rather than one this package invented.</p>
+  <h4>Why the names are prefixed</h4>
+  <p class="sub">Every module is inlined into one flat namespace, so two packages that both define <code>search</code> or <code>count</code> cannot be used together — and import aliasing does not help, since it renames references rather than definitions. The prefix is what lets this and the <code>ai</code> package appear in one program.</p>
+  <h3>Skipping work you have already paid for</h3>
+  <p class="sub">The point of persisting vectors is not to embed the same text twice:</p>
+<pre><code class="lumen">let pending: string[] = [];
+for (const part of parts) {
+  if (!pgHas("docs", part.id)) { pending = [...pending, part.text]; }
+}
+if (pending.length &gt; 0) {
+  let vectors = embedBatchWithConfig(cfg, pending);
+  // ... upsert them
+}</code></pre>
+  <p class="sub"><code>examples/index-and-search.ts</code> is a runnable version. Run it twice: the second run reports <code>all 3 chunks already stored — no embedding calls</code>.</p>
+  <h3>Choosing a search</h3>
+  <p class="sub"><code>pgSearch</code> always returns <code>k</code> rows, however unrelated they are — cosine similarity has no notion of "no match". When "nothing matched" must be a possible answer, use <code>pgSearchWithin</code> with a distance ceiling.</p>
+  <p class="sub">Build an index once a table holds enough rows that a scan is slow. Below a few thousand, a sequential scan is faster than an ivfflat index and exact besides; an approximate index trades recall for speed, which is a bad trade on a small table.</p>
+  <h3>Safety</h3>
+  <p class="sub">Every value is sent as a bound parameter through <code>PQexecParams</code>, never pasted into statement text, so a document containing a quote is data rather than syntax. A test stores the string <code>it's a test'); DROP TABLE lumen_test_vectors; --</code> and then checks the table is still there.</p>
+  <p class="sub">Table names cannot be bound — SQL has no placeholder for an identifier — so they are checked against <code>pgSafeIdentifier</code> (letters, digits, underscores, not starting with a digit) and refused otherwise.</p>
+  <h3>Tests</h3>
+<pre><code>cd packages/pgvector &amp;&amp; lumen test pgvector.test.ts</code></pre>
+  <p class="sub">They need a live database, which is the point: the distance operators, the vector literal round-trip, and the width check are the parts worth knowing are real, and none of them can be tested against a mock. Override the connection with <code>PGVECTOR_TEST_CONNINFO</code>.</p>
+  <h3>Limits</h3>
+  <ul>
+    <li>One connection and one live result at a time, held behind globals in the shim, as the FFI has no handle type to pass back and forth.</li>
+    <li>No transactions, no prepared statements, no connection pooling.</li>
+    <li>No <code>COPY</code> bulk load: rows go in one at a time, which is fine for thousands and slow for millions.</li>
+    <li>Only cosine distance is exposed. pgvector also has L2 and inner product; they would be a flag on the search functions.</li>
+    <li>Vectors are sent as text rather than binary, so a large batch spends time in formatting that a binary path would not.</li>
+    <li>Both shims must sit in the compile working directory when one program links two FFI packages, because <code>// @link</code> paths resolve against it rather than against the source file. <code>examples/rag-pdf.ts</code> links this and <code>pdf</code>, and says so in its header.</li>
+  </ul>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

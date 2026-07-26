@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>ai · Packages · Lumen</title>
+<meta name="description" content="Typed AI helpers for OpenAI-compatible chat APIs, written in Lumen.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/ai">
+<meta property="og:url" content="https://lumen-lang.org/packages/ai">
+<meta property="og:title" content="ai · Packages · Lumen">
+<meta property="og:description" content="Typed AI helpers for OpenAI-compatible chat APIs, written in Lumen.">
+<meta name="twitter:title" content="ai · Packages · Lumen">
+<meta name="twitter:description" content="Typed AI helpers for OpenAI-compatible chat APIs, written in Lumen.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">ai</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai" class="active">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>ai</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/ai">source</a></p>
+  <h2>ai</h2>
+  <p class="sub">Typed AI helpers for OpenAI-compatible chat APIs, written in Lumen.</p>
+  <p class="sub">This package starts with the practical core of AI applications: messages, prompt templates, model calls, a small response parser, retrieval over local documents, conversation memory, tools, and an agent loop that runs a model and its tools until the task is done. It stays intentionally lean for V1 because Lumen is statically typed and does not expose dynamic JSON, streaming HTTP responses, or provider SDKs yet.</p>
+  <p class="sub">Everything is immutable: nothing in this package mutates an argument. Helpers that look like they update a store, a document, or a history take a value and return a new one.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { chatMistral, system, user, renderTemplate } from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
+
+let prompt = renderTemplate(
+  "Explain {{topic}} in one sentence.",
+  ["topic"],
+  ["native compilation"],
+);
+
+let messages = [
+  system("You are concise."),
+  user(prompt),
+];
+
+let result = chatMistral("mistral-key", "mistral-large-latest", messages);
+console.log(result.content);</code></pre>
+  <p class="sub">For a local live smoke test, use the checked-in Mistral example:</p>
+<pre><code>export MISTRAL_API_KEY="..."
+lumen compile packages/ai/examples/mistral-chat.ts
+./mistral-chat</code></pre>
+  <h3>API</h3>
+  <table>
+    <tr><th>API</th><th>Meaning</th></tr>
+    <tr><td><code>system(content)</code></td><td>Create a system message</td></tr>
+    <tr><td><code>user(content)</code></td><td>Create a user message</td></tr>
+    <tr><td><code>assistant(content)</code></td><td>Create an assistant message</td></tr>
+    <tr><td><code>renderTemplate(template, keys, values)</code></td><td>Replace <code>{{key}}</code> placeholders</td></tr>
+    <tr><td><code>partialTemplate(template, keys, values)</code></td><td>Replace known placeholders and leave unknown ones intact</td></tr>
+    <tr><td><code>missingVariables(template, keys)</code></td><td>Return placeholder names not present in <code>keys</code></td></tr>
+    <tr><td><code>unusedVariables(template, keys)</code></td><td>Return provided keys not used by the template</td></tr>
+    <tr><td><code>systemTemplate(template, keys, values)</code></td><td>Render a system message template</td></tr>
+    <tr><td><code>userTemplate(template, keys, values)</code></td><td>Render a user message template</td></tr>
+    <tr><td><code>assistantTemplate(template, keys, values)</code></td><td>Render an assistant message template</td></tr>
+    <tr><td><code>renderChatPrompt(roles, templates, keys, values)</code></td><td>Render flat <code>role/content</code> chat prompt entries</td></tr>
+    <tr><td><code>chatPromptRole(entry)</code></td><td>Read the role from a rendered chat prompt entry</td></tr>
+    <tr><td><code>chatPromptContent(entry)</code></td><td>Read the content from a rendered chat prompt entry</td></tr>
+    <tr><td><code>chatRequest(provider, model, messages, temperature, maxTokens)</code></td><td>Build a provider-neutral chat request</td></tr>
+    <tr><td><code>aiResult(status, ok, content, raw)</code></td><td>Build a provider-neutral result</td></tr>
+    <tr><td><code>providerError(provider, status, message, raw)</code></td><td>Build a provider-neutral error</td></tr>
+    <tr><td><code>modelOptions(temperature, maxTokens)</code></td><td>Build provider-neutral model options</td></tr>
+    <tr><td><code>defaultModelOptions()</code></td><td>Build default model options</td></tr>
+    <tr><td><code>providerChatBody(provider, model, messages, temperature, maxTokens)</code></td><td>Build provider-specific chat JSON by provider name</td></tr>
+    <tr><td><code>parseText(raw)</code></td><td>Return raw model output as text</td></tr>
+    <tr><td><code>parseLines(raw)</code></td><td>Split model output into lines</td></tr>
+    <tr><td><code>parseStringList(raw)</code></td><td>Parse common bullet/number/plain line lists</td></tr>
+    <tr><td><code>parseChoice(raw, choices, fallback)</code></td><td>Parse one allowed string choice</td></tr>
+    <tr><td><code>firstFencedBlock(raw)</code></td><td>Extract the first triple-backtick block</td></tr>
+    <tr><td><code>firstJsonObject(raw)</code></td><td>Extract the first balanced JSON object</td></tr>
+    <tr><td><code>typedJsonInput(raw)</code></td><td>Extract the best JSON string to pass to <code>JSON.parse&lt;T&gt;</code></td></tr>
+    <tr><td><code>retryPrompt(instruction, invalidOutput, errorMessage)</code></td><td>Build a correction prompt after invalid output</td></tr>
+    <tr><td><code>openAIChatBody(model, messages, temperature, maxTokens)</code></td><td>Build request JSON</td></tr>
+    <tr><td><code>openAIChatBodyWithStops(model, messages, temperature, maxTokens, stop)</code></td><td>Build request JSON with stop sequences</td></tr>
+    <tr><td><code>authHeaders(apiKey)</code></td><td>Build OpenAI-compatible HTTP headers</td></tr>
+    <tr><td><code>parseOpenAIContent(raw)</code></td><td>Extract the first assistant message from response JSON</td></tr>
+    <tr><td><code>parseOpenAIResult(status, ok, raw)</code></td><td>Build a normalized result record</td></tr>
+    <tr><td><code>parseOpenAIError(status, raw)</code></td><td>Parse an OpenAI-compatible error JSON body</td></tr>
+    <tr><td><code>parseOpenAITokenUsage(raw)</code></td><td>Parse OpenAI-compatible token usage</td></tr>
+    <tr><td><code>chatOpenAI(apiKey, model, messages)</code></td><td>POST to <code>https://api.openai.com/v1/chat/completions</code></td></tr>
+    <tr><td><code>chatOpenAIWithBaseUrl(baseUrl, apiKey, model, messages)</code></td><td>POST to another OpenAI-compatible base URL</td></tr>
+    <tr><td><code>mistralChatBody(model, messages, temperature, maxTokens)</code></td><td>Build Mistral request JSON</td></tr>
+    <tr><td><code>mistralChatBodyWithStops(model, messages, temperature, maxTokens, stop)</code></td><td>Build Mistral request JSON with stop sequences</td></tr>
+    <tr><td><code>mistralAuthHeaders(apiKey)</code></td><td>Build Mistral HTTP headers</td></tr>
+    <tr><td><code>parseMistralContent(raw)</code></td><td>Extract the first assistant message from Mistral response JSON</td></tr>
+    <tr><td><code>parseMistralResult(status, ok, raw)</code></td><td>Build a normalized Mistral result record</td></tr>
+    <tr><td><code>parseMistralError(status, raw)</code></td><td>Parse a Mistral error JSON body</td></tr>
+    <tr><td><code>parseMistralTokenUsage(raw)</code></td><td>Parse Mistral token usage</td></tr>
+    <tr><td><code>chatMistral(apiKey, model, messages)</code></td><td>POST to <code>https://api.mistral.ai/v1/chat/completions</code></td></tr>
+    <tr><td><code>chatMistralWithBaseUrl(baseUrl, apiKey, model, messages)</code></td><td>POST to another Mistral-compatible base URL</td></tr>
+    <tr><td><code>document(id, text, source, metadata)</code></td><td>Build a document record</td></tr>
+    <tr><td><code>docMetadata(doc, key)</code></td><td>Read one metadata value, or <code>""</code> when absent</td></tr>
+    <tr><td><code>withDocMetadata(doc, key, value)</code></td><td>Return a copy of the document with one metadata entry set</td></tr>
+    <tr><td><code>splitText(text, size, overlap)</code></td><td>Split text into fixed-size overlapping chunks</td></tr>
+    <tr><td><code>splitTextRecursive(text, size, overlap)</code></td><td>Split on paragraph, line, then word boundaries</td></tr>
+    <tr><td><code>splitParagraphs(text)</code></td><td>Split text on blank lines</td></tr>
+    <tr><td><code>splitDocuments(text, source, size, overlap)</code></td><td>Split text straight into document records</td></tr>
+    <tr><td><code>dot(a, b)</code></td><td>Dot product of two vectors</td></tr>
+    <tr><td><code>norm(v)</code></td><td>Euclidean length of a vector</td></tr>
+    <tr><td><code>normalize(v)</code></td><td>Scale a vector to unit length</td></tr>
+    <tr><td><code>cosine(a, b)</code></td><td>Cosine similarity in <code>[-1, 1]</code></td></tr>
+    <tr><td><code>distance(a, b)</code></td><td>Euclidean distance between two vectors</td></tr>
+    <tr><td><code>hashEmbedding(text, dims)</code></td><td>Deterministic offline embedding, no API key</td></tr>
+    <tr><td><code>embeddingBody(model, input)</code></td><td>Build embeddings request JSON</td></tr>
+    <tr><td><code>embeddingBodyBatch(model, inputs)</code></td><td>Build batch embeddings request JSON</td></tr>
+    <tr><td><code>parseEmbedding(raw)</code></td><td>Parse one vector from an embeddings response</td></tr>
+    <tr><td><code>parseEmbeddingBatch(raw)</code></td><td>Parse every vector from an embeddings response</td></tr>
+    <tr><td><code>embedText(apiKey, model, input)</code></td><td>POST to <code>https://api.openai.com/v1/embeddings</code></td></tr>
+    <tr><td><code>embedTextWithBaseUrl(baseUrl, apiKey, model, input)</code></td><td>POST to another OpenAI-compatible base URL</td></tr>
+    <tr><td><code>embedMistral(apiKey, model, input)</code></td><td>POST to <code>https://api.mistral.ai/v1/embeddings</code></td></tr>
+    <tr><td><code>vectorStore()</code></td><td>Build an empty in-memory vector store</td></tr>
+    <tr><td><code>storeSize(store)</code></td><td>Count the documents in a store</td></tr>
+    <tr><td><code>addVector(store, doc, vector)</code></td><td>Return a new store with one document and its vector</td></tr>
+    <tr><td><code>addDocs(store, docs, dims)</code></td><td>Return a new store with documents embedded offline</td></tr>
+    <tr><td><code>deleteDoc(store, id)</code></td><td>Return a new store without the document with that ID</td></tr>
+    <tr><td><code>filterDocs(store, key, value)</code></td><td>Return a new store keeping only matching metadata</td></tr>
+    <tr><td><code>searchVector(store, query, k)</code></td><td>Top-k search with a vector you already have</td></tr>
+    <tr><td><code>search(store, query, dims, k)</code></td><td>Top-k search from query text</td></tr>
+    <tr><td><code>queryTerms(text)</code></td><td>Lowercase, punctuation-free query tokens</td></tr>
+    <tr><td><code>keywordScore(doc, terms)</code></td><td>Term-overlap score in <code>[0, 1]</code></td></tr>
+    <tr><td><code>keywordRetrieve(docs, query, k)</code></td><td>Retrieve by term overlap, dropping non-matches</td></tr>
+    <tr><td><code>vectorRetrieve(store, query, dims, k)</code></td><td>Retrieve by cosine similarity, dropping zero scores</td></tr>
+    <tr><td><code>retrieve(store, docs, query, dims, k)</code></td><td>Hybrid retrieval: 0.6 keyword plus 0.4 vector</td></tr>
+    <tr><td><code>formatContext(hits)</code></td><td>Render hits as numbered, cited context blocks</td></tr>
+    <tr><td><code>ragPrompt(question, hits)</code></td><td>Build a grounded single-string answer prompt</td></tr>
+    <tr><td><code>ragMessages(question, hits)</code></td><td>Build grounded system and user messages</td></tr>
+    <tr><td><code>appendMessage(history, msg)</code></td><td>Return a new history with one message appended</td></tr>
+    <tr><td><code>windowMemory(history, turns)</code></td><td>Keep the last N messages plus any leading system message</td></tr>
+    <tr><td><code>budgetMemory(history, maxChars)</code></td><td>Drop the oldest turns until the history fits a character budget</td></tr>
+    <tr><td><code>estimateTokens(text)</code></td><td>Rough chars/4 token estimate</td></tr>
+    <tr><td><code>historyChars(history)</code></td><td>Total character count of a history</td></tr>
+    <tr><td><code>transcript(history)</code></td><td>Render a history as <code>role: content</code> lines</td></tr>
+    <tr><td><code>summaryPrompt(history, priorSummary)</code></td><td>Build a prompt that folds turns into a running summary</td></tr>
+    <tr><td><code>applySummary(summary, recent)</code></td><td>Replace old turns with a summary system message</td></tr>
+    <tr><td><code>remember(store, key, value)</code></td><td>Return a new key/value memory store with one entry set</td></tr>
+    <tr><td><code>recall(store, key)</code></td><td>Read one key/value memory entry, or <code>""</code> when absent</td></tr>
+    <tr><td><code>serializeHistory(history)</code></td><td>Serialize a history to JSON</td></tr>
+    <tr><td><code>parseHistory(raw)</code></td><td>Parse a history from JSON</td></tr>
+    <tr><td><code>saveHistory(path, history)</code></td><td>Write a history to a file</td></tr>
+    <tr><td><code>loadHistory(path)</code></td><td>Read a history from a file</td></tr>
+    <tr><td><code>needsCompression(history, maxChars)</code></td><td>Whether the conversation has outgrown its character budget</td></tr>
+    <tr><td><code>compressHistory(summarize, history, keepRecent)</code></td><td>Fold older turns into a running summary, keeping the system prompt and the last <code>keepRecent</code> messages</td></tr>
+    <tr><td><code>compressIfNeeded(summarize, history, maxChars, keepRecent)</code></td><td>Compress only when over budget</td></tr>
+    <tr><td><code>openAISummarizer(apiKey, model)</code></td><td>A summarizer backed by an OpenAI-compatible model</td></tr>
+    <tr><td><code>mistralSummarizer(apiKey, model)</code></td><td>A summarizer backed by Mistral</td></tr>
+    <tr><td><code>schemaField(name, type, description, required)</code></td><td>Describe one property of an object schema</td></tr>
+    <tr><td><code>objectSchema(fields)</code></td><td>Build a strict JSON Schema object from fields</td></tr>
+    <tr><td><code>schemaRequired(fields)</code></td><td>The required field names, for validation</td></tr>
+    <tr><td><code>structuredChat(provider, apiKey, model, messages, name, schema, required)</code></td><td>Native schema-mode request by provider name</td></tr>
+    <tr><td><code>structuredOpenAI(...)</code> / <code>structuredMistral(...)</code></td><td>Native schema mode for a specific provider</td></tr>
+    <tr><td><code>structuredWithBaseUrl(baseUrl, ...)</code></td><td>Schema mode against any OpenAI-compatible endpoint</td></tr>
+    <tr><td><code>structuredJsonMode(baseUrl, ...)</code></td><td>JSON-mode fallback for endpoints without schema mode</td></tr>
+    <tr><td><code>validateStructured(json, required)</code></td><td>Check a reply is an object carrying every required field</td></tr>
+    <tr><td><code>structuredRetryPrompt(schema, invalid, reason)</code></td><td>Correction prompt after an invalid structured reply</td></tr>
+    <tr><td><code>defineTool(name, description, params, run)</code></td><td>Build a tool from a <code>(string) =&gt; string</code> function</td></tr>
+    <tr><td><code>toolRegistry()</code></td><td>Build an empty tool registry</td></tr>
+    <tr><td><code>registerTool(tools, entry)</code></td><td>Return a new registry with a tool added, or replaced by name</td></tr>
+    <tr><td><code>findTool(tools, name)</code></td><td>Index of a registered tool, or <code>-1</code></td></tr>
+    <tr><td><code>hasTool(tools, name)</code></td><td>Whether a name is registered</td></tr>
+    <tr><td><code>toolNames(tools)</code></td><td>Registered tool names, in order</td></tr>
+    <tr><td><code>toolDescriptions(tools)</code></td><td>Render the registry as one <code>- name(params): description</code> line per tool</td></tr>
+    <tr><td><code>runTool(tools, name, input)</code></td><td>Dispatch one tool and return a result record</td></tr>
+    <tr><td><code>runToolGuarded(tools, allow, deny, name, input)</code></td><td>Dispatch only when the allow/deny policy permits it</td></tr>
+    <tr><td><code>toolMessage(result)</code></td><td>Turn a tool result into a <code>role: "tool"</code> message</td></tr>
+    <tr><td><code>toolCall(id, name, args)</code></td><td>Build a provider-neutral tool call record</td></tr>
+    <tr><td><code>toolCalls(raw)</code></td><td>Parse tool calls out of an OpenAI-compatible response body</td></tr>
+    <tr><td><code>parseMistralToolCalls(raw)</code></td><td>Parse tool calls out of a Mistral response body</td></tr>
+    <tr><td><code>toolCallArg(call, key)</code></td><td>Read one argument out of a tool call payload</td></tr>
+    <tr><td><code>toolInput(call)</code></td><td>Read the V1 <code>input</code> argument of a tool call</td></tr>
+    <tr><td><code>hasToolCalls(raw)</code></td><td>Whether a response body asks for any tool</td></tr>
+    <tr><td><code>finishReason(raw)</code></td><td>Read <code>finish_reason</code> from a response body</td></tr>
+    <tr><td><code>serializeToolDefs(tools)</code></td><td>Serialize the registry as an OpenAI-compatible <code>tools</code> array</td></tr>
+    <tr><td><code>serializeToolDefsMistral(tools)</code></td><td>Serialize the registry as a Mistral <code>tools</code> array</td></tr>
+    <tr><td><code>agentSystemPrompt(tools, instruction)</code></td><td>Build the agent system prompt that lists the tools and how to stop</td></tr>
+    <tr><td><code>runAgent(model, tools, history, maxSteps)</code></td><td>Run the model/tool loop and return answer, steps, and stop reason</td></tr>
+    <tr><td><code>runAgentWithPolicy(model, tools, allow, deny, history, maxSteps)</code></td><td>Run the loop with a tool allow/deny policy</td></tr>
+    <tr><td><code>agentStep(index, name, input, output, ok)</code></td><td>Build one agent step record</td></tr>
+    <tr><td><code>agentTrace(result)</code></td><td>Render every tool call in order and why the run stopped</td></tr>
+    <tr><td><code>fakeModel(responses)</code></td><td>Deterministic offline model driver replaying canned response bodies</td></tr>
+    <tr><td><code>fakeAnswer(text)</code></td><td>Build a canned provider body carrying a final answer</td></tr>
+    <tr><td><code>fakeToolCall(name, input)</code></td><td>Build a canned provider body carrying one tool call</td></tr>
+    <tr><td><code>openAIAgent(apiKey, model, tools)</code></td><td>Live OpenAI-compatible <code>AiModel</code> for <code>runAgent</code>, tool definitions and round trip included</td></tr>
+    <tr><td><code>mistralAgent(apiKey, model, tools)</code></td><td>Live Mistral <code>AiModel</code> for <code>runAgent</code>, tool definitions and round trip included</td></tr>
+    <tr><td><code>agentChatTurns(messages)</code></td><td>Rebuild native <code>tool_calls</code> / <code>tool_call_id</code> turns from the loop's neutral history</td></tr>
+    <tr><td><code>openAIToolBody(model, turns, tools, temperature, maxTokens)</code></td><td>Build a tool-enabled OpenAI-compatible chat body from native turns</td></tr>
+    <tr><td><code>mistralToolBody(model, turns, tools, temperature, maxTokens)</code></td><td>Build a tool-enabled Mistral chat body from native turns</td></tr>
+    <tr><td><code>toolChatOpenAI(apiKey, model, turns, tools)</code></td><td>One tool-enabled OpenAI-compatible round trip, returning the raw body</td></tr>
+    <tr><td><code>toolChatMistral(apiKey, model, turns, tools)</code></td><td>One tool-enabled Mistral round trip, returning the raw body</td></tr>
+    <tr><td><code>mcpRequestBody(id, method, params)</code></td><td>Build a JSON-RPC 2.0 request with raw JSON <code>params</code> embedded verbatim</td></tr>
+    <tr><td><code>mcpConnectBody()</code></td><td>Build the MCP <code>initialize</code> request body</td></tr>
+    <tr><td><code>mcpListToolsBody(id)</code></td><td>Build a <code>tools/list</code> request body</td></tr>
+    <tr><td><code>mcpCallBody(id, name, argumentsJson)</code></td><td>Build a <code>tools/call</code> request body with raw JSON arguments</td></tr>
+    <tr><td><code>mcpParseTools(raw)</code></td><td>Parse tool descriptors (name, description, raw schema) from a <code>tools/list</code> reply</td></tr>
+    <tr><td><code>parseMcpResult(raw)</code></td><td>Parse a <code>tools/call</code> reply into an <code>ok</code>/<code>content</code>/<code>error</code> record</td></tr>
+    <tr><td><code>mcpReplyId(raw)</code></td><td>Read the JSON-RPC <code>id</code> from a reply</td></tr>
+    <tr><td><code>mcpIsError(raw)</code></td><td>Whether a reply carries a JSON-RPC error</td></tr>
+    <tr><td><code>mcpErrorMessage(raw)</code></td><td>Read the JSON-RPC error message, or <code>""</code></td></tr>
+    <tr><td><code>mcpResultField(raw)</code></td><td>Source text of the top-level <code>result</code>, or <code>""</code></td></tr>
+    <tr><td><code>mcpConnect(url, headers)</code></td><td>POST an <code>initialize</code> handshake and return the raw reply body</td></tr>
+    <tr><td><code>mcpTools(url, headers)</code></td><td>List an MCP server's tools over HTTP</td></tr>
+    <tr><td><code>mcpCall(url, headers, name, argumentsJson)</code></td><td>Call one MCP tool over HTTP</td></tr>
+    <tr><td><code>mcpAsTool(url, headers, tool)</code></td><td>Adapt one MCP tool descriptor into a runnable <code>AiTool</code></td></tr>
+    <tr><td><code>mcpAsTools(url, headers, tools)</code></td><td>Adapt every MCP tool descriptor into a <code>AiTool[]</code> for <code>runAgent</code></td></tr>
+    <tr><td><code>mcpStdioConnect(command, args)</code></td><td>Spawn a local MCP server as a subprocess and return a live stdio session</td></tr>
+    <tr><td><code>mcpStdioTools(session)</code></td><td>List an MCP server's tools over stdio</td></tr>
+    <tr><td><code>mcpStdioCall(session, name, argumentsJson)</code></td><td>Call one MCP tool over stdio</td></tr>
+    <tr><td><code>mcpStdioAsTools(session, tools)</code></td><td>Adapt stdio MCP tools into a <code>AiTool[]</code> for <code>runAgent</code></td></tr>
+    <tr><td><code>mcpStdioClose(session)</code></td><td>Close the server's stdin and wait for it to exit</td></tr>
+    <tr><td><code>mcpSseTools(url, headers)</code></td><td>List tools from an SSE/streamable-HTTP MCP server (<code>http://</code> only)</td></tr>
+    <tr><td><code>mcpSseCall(url, headers, name, argumentsJson)</code></td><td>Call one MCP tool over SSE</td></tr>
+    <tr><td><code>mcpSseAsTools(url, headers, tools)</code></td><td>Adapt SSE MCP tools into a <code>AiTool[]</code> for <code>runAgent</code></td></tr>
+  </table>
+  <h3>Documents, splitting and loading</h3>
+  <p class="sub">Retrieval starts by cutting a document into pieces small enough to embed. The splitter follows the document's own structure rather than a byte count: it splits on the widest separator present — a blank line, then a line, then a sentence, then a word — and recurses into only the pieces that are still too long. Three short paragraphs stay three chunks; one long paragraph among them is the only one broken down further.</p>
+<pre><code class="lumen">let cs = chunks(text, 1000, 200);
+for (const c of cs) {
+  console.log(`${c.start}..${c.end} ${c.text}`);
+}</code></pre>
+  <p class="sub"><strong>Sizes and overlaps are byte counts</strong>, like everything else about a Lumen string. For English that reads as characters; for CJK a byte budget of 1000 holds about 333 characters, since each is three bytes. Chunks never split a character regardless — the budget is a ceiling the splitter stays under, backing off to a character boundary.</p>
+  <p class="sub">Every chunk carries the byte range it came from, so <code>text.substring(c.start, c.end)</code> is exactly <code>c.text</code>, and the chunks cover the document contiguously — with no overlap, each begins where the last ended, so concatenating them reproduces the text. That is what lets a retrieved chunk point back at its place in the source, which is most of what a citation is. <code>c.forced</code> marks a chunk whose boundary fell inside a word because the text offered no separator to break on — a long URL, or a run of CJK.</p>
+  <p class="sub">Splitting a document carries its metadata into every chunk, and adds the chunk's index, byte range, and parent id:</p>
+<pre><code class="lumen">let doc = loadText(notes, "notes.md");
+let parts = splitDocument(doc, 1000, 200);
+documentMetadata(parts[3], "chunk");   // "3"
+documentMetadata(parts[3], "parent");  // "notes.md"</code></pre>
+  <p class="sub"><code>markdownChunks</code> breaks at headings before prose boundaries and <code>codeChunks</code> at declarations; <code>chunksWith</code> takes an explicit separator list. A separator that opens a section heads its chunk, while one that closes a sentence tails the piece it ended — so a heading starts a chunk and a full stop finishes one.</p>
+  <p class="sub">Loading reads from the filesystem and reports what it could not read, rather than leaving a hole in an index that later just looks incomplete:</p>
+<pre><code class="lumen">let r = loadDirectory("./docs", [".md", ".txt"], true);
+if (!r.ok) { console.error(r.error); }
+for (const d of r.docs) { /* d.source is the path */ }</code></pre>
+  <p class="sub">A failure is reported, never raised: a directory passed where a file belongs, or a file the process may not read, comes back as <code>ok: false</code> rather than ending the run. One gap is the runtime's own — a directory that cannot be read comes back as an empty listing, indistinguishable from an empty one, so such a subtree is skipped silently.</p>
+  <p class="sub"><code>loadFile</code> reads one file, <code>loadText</code> wraps text already in hand, and <code>loadDirectory</code> takes an extension filter (including the dot; an empty list takes everything) and an optional recursive descent. Matching is by extension only — there is no globbing.</p>
+  <h4>Differences from LangChain</h4>
+  <p class="sub">The algorithm is LangChain's <code>RecursiveCharacterTextSplitter</code>, with two of its behaviours deliberately changed:</p>
+  <ul>
+    <li><strong>Overlap always applies.</strong> LangChain runs its overlap logic only while resolving a chunk-size overflow, so a document whose pieces all fit gets no overlap at all despite asking for it (langchain#34804). Here overlap applies whenever a chunk has a predecessor.</li>
+    <li><strong>Overlap is the number you asked for.</strong> LangChain's overlap is whatever whole pieces survive eviction, so it depends on split granularity and is never exactly the configured figure. Here it is a byte count taken off the chunk's own start.</li>
+  </ul>
+  <p class="sub">Not carried over: the class hierarchy (a markdown splitter is this splitter with a different separator list — a default argument, not a subclass), async (there is no tokenizer to await), and the lookahead-regex separator split, which attaches every separator to the <em>following</em> piece and is why Chinese chunks there begin with a full stop (langchain#18770).</p>
+  <p class="sub">Tool-call-aware and token-based splitting are not implemented: token counts need a tokenizer, and this package has none.</p>
+  <h3>RAG</h3>
+  <p class="sub">Retrieval runs entirely offline: split local text into documents, index them with the built-in hashing embedder, retrieve, then send grounded messages to a model.</p>
+<pre><code class="lumen">import {
+  splitDocuments,
+  vectorStore,
+  addDocs,
+  retrieve,
+  formatContext,
+  ragMessages,
+  chatMistral,
+} from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
+
+let notes = "lumen compiles to a native binary with no runtime and no interpreter.\n\nsourdough bread needs a starter, flour, water and salt.";
+
+let docs = splitDocuments(notes, "notes.md", 200, 20);
+let store = addDocs(vectorStore(), docs, 128);
+
+let question = "does lumen need a runtime?";
+let hits = retrieve(store, docs, question, 128, 3);
+
+console.log(formatContext(hits));
+
+let result = chatMistral(
+  "mistral-key",
+  "mistral-large-latest",
+  ragMessages(question, hits),
+);
+console.log(result.content);</code></pre>
+  <p class="sub">The grounded system message tells the model to cite each claim with the bracket number of its context block and to reply exactly <code>The context does not contain the answer.</code> when the context does not answer the question.</p>
+  <p class="sub">Use at least 128 dimensions. <code>hashEmbedding</code> is a hashing bag of words, so distinct terms collide into the same bucket at low dimension counts. When "no match" must mean no results, use <code>keywordRetrieve</code>: it drops documents that share no term with the query, while the vector path always returns some collision noise. For real semantic search, embed with a provider model instead. <code>embedBatchWithConfig</code> takes every chunk in one request, and the returned vectors go into the store with <code>addVector</code>:</p>
+<pre><code class="lumen">let cfg = modelConfig("mistral", "mistral-embed", apiKey);
+let vectors = embedBatchWithConfig(cfg, texts);</code></pre>
+  <p class="sub">A response with fewer rows than inputs yields none rather than a partial list — a partial one would pair vectors with the wrong chunks, and the misalignment would show up later as retrieval that is merely bad rather than broken. <code>examples/embed-search.ts</code> is a runnable version; against mistral-embed it ranks a passage that shares no words with the question above one that does not, which is the whole difference from the hashing embedder.</p>
+  <h3>Conversation memory</h3>
+  <p class="sub">A history is a plain <code>AiMessage[]</code>. Every memory helper returns a new array, so a turn is a rebind rather than a mutation.</p>
+<pre><code class="lumen">import {
+  system,
+  user,
+  assistant,
+  appendMessage,
+  windowMemory,
+  saveHistory,
+  loadHistory,
+  remember,
+  recall,
+  chatMistral,
+} from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
+
+let history = [system("You are concise.")];
+history = appendMessage(history, user("What compiles to a native binary?"));
+
+let reply = chatMistral(
+  "mistral-key",
+  "mistral-large-latest",
+  windowMemory(history, 8),
+);
+history = appendMessage(history, assistant(reply.content));
+
+saveHistory("chat.json", history);
+let resumed = loadHistory("chat.json");
+console.log(resumed.length);
+
+let facts = remember("", "name", "Aymen");
+facts = remember(facts, "language", "Lumen");
+console.log(recall(facts, "language"));</code></pre>
+  <p class="sub"><code>windowMemory</code> counts messages, not turn pairs, and always re-prepends a leading system message. <code>budgetMemory</code> trims by character count instead but never drops the system message or the most recent turn, so it can return a history that is still over budget. For long conversations, build a running summary with <code>summaryPrompt</code>, send it to a model, and fold the result back in with <code>applySummary</code>.</p>
+  <h3>Tools and agents</h3>
+  <p class="sub">A tool is a name, a description the model reads, a one-line note about the input, and a plain function from one string to one string. An agent is a model and a registry run in a loop: the model asks for a tool, the loop dispatches it, appends the result to the conversation, and calls the model again until it answers or the step budget runs out.</p>
+  <p class="sub">This example runs offline. <code>fakeModel</code> replays canned provider response bodies in order, so the whole loop is testable with no network and no API key.</p>
+<pre><code class="lumen">import {
+  defineTool,
+  toolRegistry,
+  registerTool,
+  system,
+  user,
+  agentSystemPrompt,
+  runAgent,
+  agentTrace,
+  fakeModel,
+  fakeToolCall,
+  fakeAnswer,
+} from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
+
+function weatherTool(city: string): string {
+  return "18C and clear in " + city;
+}
+
+function clockTool(zone: string): string {
+  return "12:00 in " + zone;
+}
+
+let tools = registerTool(
+  toolRegistry(),
+  defineTool("weather", "Current weather for a city.", "city name", weatherTool),
+);
+tools = registerTool(
+  tools,
+  defineTool("clock", "The local time in a zone.", "zone name", clockTool),
+);
+
+let history = [
+  system(agentSystemPrompt(tools, "You are a weather assistant.")),
+  user("What is the weather in Paris?"),
+];
+
+// Turn one asks for the tool, turn two answers. A real run passes a closure
+// that calls a provider and returns the raw response body instead.
+let model = fakeModel([
+  fakeToolCall("weather", "Paris"),
+  fakeAnswer("It is 18C and clear in Paris."),
+]);
+
+let result = runAgent(model, tools, history, 4);
+
+console.log(result.answer);      // It is 18C and clear in Paris.
+console.log(result.stopReason);  // final
+console.log(agentTrace(result));
+// 1. weather(Paris) -&gt; 18C and clear in Paris
+// stopped: final after 2 model calls, 1 tool call</code></pre>
+  <p class="sub"><code>stopReason</code> is one of exactly three values: <code>final</code> when the model answered without asking for another tool, <code>max_steps</code> when the budget ran out first, and <code>error</code> when the provider returned a body with no usable message in it. <code>stepCount</code> counts model calls; <code>steps</code> holds one record per tool call, so a turn that asked for two tools contributes one to <code>stepCount</code> and two to <code>steps</code>. <code>answer</code> is the best answer seen so far, so a run that stops early still returns whatever prose the model had already written.</p>
+  <p class="sub">A tool body must not throw, and must not call anything that throws: the compiler rejects a throwing function in the registry's <code>run</code> field. Report trouble by returning text. A failed dispatch — an unknown name, a denied name — is not a crash either; it comes back as a step whose output is <code>error: ...</code> and goes to the model in the same message shape as a success, so the model can read it and try something else.</p>
+  <p class="sub"><code>runToolGuarded</code> and <code>runAgentWithPolicy</code> take an allow list and a deny list. Deny wins over allow, an empty allow list means everything not denied, and policy is checked before the registry is consulted, so a denied name never reveals whether such a tool exists.</p>
+  <p class="sub"><code>maxSteps</code> bounds model calls, so the loop terminates even against a model that asks for a tool forever. The tool calls of the last permitted turn are still dispatched, so the trace shows what the agent was doing when it ran out of budget; if a side effect must never run unobserved, deny that tool or raise the budget.</p>
+  <h4>Live tool-calling agents</h4>
+  <p class="sub"><code>openAIAgent</code> and <code>mistralAgent</code> return a <code>AiModel</code> you hand straight to <code>runAgent</code>. The closure carries the serialized tool definitions in every request and performs the native tool round trip, so the loop and its public signature are unchanged — only the model source differs from the offline <code>fakeModel</code>.</p>
+<pre><code class="lumen">import {
+  defineTool,
+  toolRegistry,
+  registerTool,
+  system,
+  user,
+  agentSystemPrompt,
+  runAgent,
+  agentTrace,
+  openAIAgent,
+} from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
+
+function weatherTool(city: string): string {
+  return "18C and clear in " + city;
+}
+
+function clockTool(zone: string): string {
+  return "12:00 in " + zone;
+}
+
+let tools = registerTool(
+  toolRegistry(),
+  defineTool("weather", "Current weather for a city.", "city name", weatherTool),
+);
+tools = registerTool(
+  tools,
+  defineTool("clock", "The local time in a zone.", "zone name", clockTool),
+);
+
+let history = [
+  system(agentSystemPrompt(tools, "You are a weather assistant.")),
+  user("What is the weather in Paris?"),
+];
+
+// The only change from the offline example is the model source. The request now
+// carries the tool definitions, and the assistant tool_calls -&gt; tool result
+// round trip is handled for you: each request rebuilds native tool_calls on the
+// assistant turn and a matching tool_call_id on each tool turn.
+let model = openAIAgent("sk-your-key", "gpt-4o-mini", tools);
+
+let result = runAgent(model, tools, history, 6);
+
+console.log(result.answer);
+console.log(result.stopReason);
+console.log(agentTrace(result));</code></pre>
+  <p class="sub"><code>mistralAgent</code> is the same against the Mistral endpoint. The loop still keeps its own bookkeeping as provider-neutral text (<code>[tool_calls] weather({"input":"Paris"})</code> for the assistant turn, role <code>tool</code> for a result); the agent model rebuilds that into native <code>tool_calls</code> and <code>tool_call_id</code> fields per request. The ids are synthesized fresh each request (<code>call_1</code>, <code>call_2</code>, ...) — a chat request is self-contained, so they only need to agree within the one request, not with any id the provider returned earlier. To build or send a single tool-enabled request yourself, use <code>openAIToolBody</code> / <code>toolChatOpenAI</code> (and the Mistral equivalents) over turns from <code>agentChatTurns</code>.</p>
+  <h3>MCP</h3>
+  <p class="sub">The Model Context Protocol lets an agent borrow tools that live on another server. <code>mcpTools</code> lists a server's tools, <code>mcpAsTools</code> adapts each one into a <code>AiTool</code> whose <code>run</code> calls the server, and the result drops straight into <code>runAgent</code> next to any local tools you defined. The adapter keeps each tool's raw JSON input schema in the <code>params</code> field, and follows this package's one string in, one string out convention: the input is sent as <code>{"input": &lt;input&gt;}</code> and the server's text output comes back as the tool result.</p>
+<pre><code class="lumen">import {
+  mcpTools,
+  mcpAsTools,
+  registerTool,
+  defineTool,
+  system,
+  user,
+  agentSystemPrompt,
+  runAgent,
+  agentTrace,
+  openAIAgent,
+} from "https://lumen-lang.org/package/std-contrib/ai/ai.ts";
+
+let url = "http://127.0.0.1:8080/mcp";
+let headers = new Map&lt;string, string&gt;();
+
+// List the server's tools and adapt them into runnable AiTools.
+let remote = mcpAsTools(url, headers, mcpTools(url, headers));
+
+// Mix them with any local tools and hand the registry to runAgent.
+let tools = remote;
+tools = registerTool(
+  tools,
+  defineTool("clock", "The local time in a zone.", "zone name", (zone: string) =&gt; "12:00 in " + zone),
+);
+
+let history = [
+  system(agentSystemPrompt(tools, "You are a helpful assistant.")),
+  user("What is the weather in Paris?"),
+];
+
+let model = openAIAgent("sk-your-key", "gpt-4o-mini", tools);
+let result = runAgent(model, tools, history, 6);
+
+console.log(result.answer);
+console.log(agentTrace(result));</code></pre>
+  <p class="sub">To call a single MCP tool without an agent, use <code>mcpCall(url, headers, name, argumentsJson)</code>; it returns an <code>ok</code> / <code>content</code> / <code>error</code> record. <code>mcpConnect</code> performs the <code>initialize</code> handshake, and the request builders (<code>mcpConnectBody</code>, <code>mcpListToolsBody</code>, <code>mcpCallBody</code>) plus parsers (<code>parseMcpTools</code>, <code>parseMcpResult</code>) are exposed for building or reading JSON-RPC yourself.</p>
+  <p class="sub">Three transports are supported, all driving the same <code>runAgent</code>:</p>
+  <ul>
+    <li><strong>HTTP JSON-RPC</strong> (<code>mcpConnect</code> / <code>mcpTools</code> / <code>mcpCall</code> / <code>mcpAsTools</code>) — one POST per call returning one complete JSON reply. Pass auth through <code>headers</code>.</li>
+    <li><strong>stdio</strong> (<code>mcpStdioConnect</code> / <code>mcpStdioTools</code> / <code>mcpStdioCall</code> / <code>mcpStdioAsTools</code> / <code>mcpStdioClose</code>) — spawn a local MCP server as a subprocess and exchange newline-delimited JSON-RPC over its stdin/stdout. The session stays live across calls, and the reader matches replies by id so a server's startup banner or stray blank lines can't desync it.</li>
+    <li><strong>SSE / streamable HTTP</strong> (<code>mcpSseTools</code> / <code>mcpSseCall</code> / <code>mcpSseAsTools</code>) — for servers whose replies stream as chunked Server-Sent Events, over a raw TCP socket. Plain <code>http://</code> only: <code>net.connect</code> has no TLS, so use localhost or a server behind a terminating proxy.</li>
+  </ul>
+<pre><code class="lumen">// stdio: spawn a server and give its tools to the agent
+let session = mcpStdioConnect("npx", ["-y", "@modelcontextprotocol/server-everything"]);
+let tools = mcpStdioAsTools(session, mcpStdioTools(session));
+let result = runAgent(openAIAgent(apiKey, "gpt-4o", tools), tools, history, 8);
+mcpStdioClose(session);</code></pre>
+  <p class="sub">See <code>examples/support-agent/</code> for runnable HTTP, stdio, and SSE examples.</p>
+  <h3>Context compression</h3>
+  <p class="sub">A long conversation eventually costs more to resend than it is worth. Compression folds the older turns into a running summary <strong>on demand</strong> — the app checks a budget and compresses only when it is exceeded:</p>
+<pre><code class="lumen">let summarize = mistralSummarizer(apiKey, "mistral-large-latest");
+
+if (needsCompression(history, 8000)) {
+  history = compressHistory(summarize, history, 4);   // keep the last 4 turns
+}
+// or, the same thing guarded in one call:
+history = compressIfNeeded(summarize, history, 8000, 4);</code></pre>
+  <p class="sub">The result is <code>[your system prompt, a summary message, ...the recent turns]</code>. An existing summary is folded forward rather than re-summarised, so compressing repeatedly keeps one running summary instead of nesting them.</p>
+  <p class="sub">Two safety properties matter in practice:</p>
+  <ul>
+    <li><strong>A failed summarizer never destroys the conversation.</strong> If the model call fails or is rate-limited and returns nothing, the history is returned unchanged.</li>
+    <li><strong>Your system prompt survives.</strong> Only the conversation turns are folded.</li>
+  </ul>
+  <p class="sub">The summarizer is an injected <code>(prompt: string) =&gt; string</code>, so the memory module does no I/O and is testable with a deterministic fake; the provider-backed <code>openAISummarizer</code> / <code>mistralSummarizer</code> are conveniences.</p>
+  <h3>Structured output</h3>
+  <p class="sub">Ask a provider for JSON that conforms to a schema and get a validated result instead of free text. Lumen has no runtime reflection, so a schema is described with explicit fields:</p>
+<pre><code class="lumen">let fields = [
+  schemaField("name", "string", "the person's full name", true),
+  schemaField("age", "integer", "age in years", true),
+  schemaField("city", "string", "city of residence", true),
+];
+let schema = objectSchema(fields);
+
+let r = structuredChat("mistral", apiKey, "mistral-large-latest",
+                       [user("Invent a person from Lisbon.")],
+                       "person", schema, schemaRequired(fields));
+if (r.ok) { let p = JSON.parse&lt;Person&gt;(r.json); }
+else      { console.log(r.error); }</code></pre>
+  <p class="sub"><strong>The two provider modes are not equivalent</strong>, and the difference bites:</p>
+  <ul>
+    <li><strong>Schema mode</strong> (<code>response_format: {"type":"json_schema", strict: true}</code>) constrains the <em>shape</em>. Verified against OpenAI and Mistral.</li>
+    <li><strong>JSON mode</strong> (<code>{"type":"json_object"}</code>) only guarantees the reply <em>parses</em>. Probed against Mistral, asking for name/age/city in JSON mode returned <code>{"person":{...}}</code> — valid JSON, wrong shape.</li>
+  </ul>
+  <p class="sub">So <code>structuredChat</code> uses schema mode for <code>openai</code> and <code>mistral</code>. For the many OpenAI-compatible endpoints that accept only JSON mode (Groq, Together, OpenRouter, Ollama, ...), <code>structuredJsonMode</code> states the schema in the prompt and validates the reply locally with <code>validateStructured</code>, which reports every missing field so you can drive a <code>structuredRetryPrompt</code>.</p>
+  <p class="sub"><code>validateStructured</code> is a top-level presence check, not a full JSON Schema validator — it deliberately ignores a key that only appears nested or inside a string value. Types and nested constraints are left to the provider's strict mode.</p>
+  <h3>Streaming</h3>
+  <p class="sub">Read a reply as it is generated instead of waiting for it to finish. Each <code>data:</code> line the provider sends becomes one normalized event, handed to your handler the moment it arrives:</p>
+<pre><code class="lumen">let stats = new Map&lt;string, i64&gt;();
+stats.set("n", 0);
+
+let onEvent: AiStreamHandler = (event: AiStreamEvent): void =&gt; {
+  if (event.kind == "delta") {
+    stats.set("n", (stats.get("n") ?? 0) + 1);
+    console.log(event.delta);          // one piece of the answer
+  }
+};
+
+let r = streamChat(mistral, [user("Name the planets.")], onEvent);
+console.log(r.content);                // the whole reply, assembled</code></pre>
+  <p class="sub"><code>event.kind</code> is <code>"delta"</code> (text in <code>event.delta</code>), <code>"done"</code> (the stream ended, with <code>finishReason</code> when the provider sent one), <code>"other"</code> (a chunk carrying no text — a role announcement or keep-alive), or <code>"error"</code> (a line that was not a chunk, kept verbatim in <code>raw</code>). Every event carries <code>raw</code>, so a field this record does not model is still reachable.</p>
+  <p class="sub">A handler assigned to a function type may read the variables it closes over but not reassign them, which is why the counter above lives in a map.</p>
+  <p class="sub"><code>streamChat</code> returns the assembled reply as well as streaming it, so one call serves both the live view and the final text. <code>streamChatCollect</code> drops the handler when you want streaming's arrival behaviour but have nothing to do per token, and <code>streamEvents</code>/<code>streamText</code> replay a captured body through the same parser with no network — which is how the tests cover it.</p>
+  <p class="sub">OpenAI and Mistral send the same chunk shape, so one parser serves both. Tool-call streaming is not covered yet: those arrive as fragments that must be reassembled by index, which is its own slice.</p>
+  <h3>Token budget</h3>
+  <p class="sub">Every provider call costs money, and an agent loop makes as many as its stopping condition allows. <code>maxSteps</code> bounds tool dispatches; nothing bounds tokens, and a long conversation or a large retrieved context can cost far more than the step count suggests.</p>
+  <p class="sub">A budget is a ceiling plus a running total, checked before a call and charged after one:</p>
+<pre><code class="lumen">let b = budget(50000);
+
+if (!budgetAllowsMessages(b, msgs)) {
+  console.log(budgetRefusal(b, messagesCost(msgs)));   // says what was spent
+} else {
+  let reply = chat(cfg, msgs);
+  b = chargeCall(b, msgs, reply.content);              // request and reply
+}</code></pre>
+  <p class="sub"><code>chargeCall</code> counts the reply as well as the request, since output tokens are usually the more expensive half. A limit of 0 means unlimited, so a budget can be threaded through code that does not always want one, and <code>budgetLeft</code> reports <code>-1</code> there rather than a number that would look like zero remaining.</p>
+  <p class="sub">There is no wrapper that takes a model and returns a guarded one: a closure here may read the values it captures but cannot call a function it received as a parameter. The explicit form is three lines and shows where the money goes.</p>
+  <p class="sub"><strong>Counts are estimates.</strong> There is no tokenizer in this package, so <code>estimateTokens</code> approximates at four characters per token — enough to stop a runaway loop, not enough to reconcile against an invoice.</p>
+  <h3>Files</h3>
+  <p class="sub">The package is grouped by concern; <code>ai.ts</code> at the root is the public barrel and the only entry point consumers import.</p>
+<pre><code class="lumen">ai.ts              public barrel — the package API
+core/              provider-neutral schema: messages, request, result,
+                   error, options, usage, headers, provider selection
+providers/         openai.ts, mistral.ts, chat.ts, stream.ts
+prompt/            prompt templates, output parsers, structured output
+rag/               vector maths, documents, splitting, loading,
+                   embeddings, store, retrieval
+memory/            conversation memory, persistence, context compression
+agent/             tools, tool-call JSON, the tool round trip, the agent loop
+mcp/               client.ts (HTTP), stdio.ts, sse.ts
+examples/          runnable examples, incl. examples/support-agent/</code></pre>
+  <p class="sub">Tests live beside the code they cover as <code>*.test.ts</code> — <code>rag/vector.test.ts</code> covers <code>rag/vector.ts</code>. Run one file, or the whole package:</p>
+<pre><code>lumen test packages/ai/rag/vector.test.ts   # one module
+sh packages/ai/run-tests.sh                 # all of them</code></pre>
+  <p class="sub">A module exporting a helper only so its test file can reach it is deliberate: a module's exports are not the package's API — only what <code>ai.ts</code> re-exports is public.</p>
+  <h3>Design</h3>
+  <p class="sub">AI application frameworks are broad: agents, tools, memory, retrieval, tracing, streaming, and provider integrations. This package starts with the smallest useful Lumen-native layer:</p>
+  <ul>
+    <li>typed chat messages</li>
+    <li>prompt templating</li>
+    <li>JSON request construction through the stdlib <code>JSON.stringify</code></li>
+    <li>typed response parsing through <code>JSON.parse&lt;T&gt;</code></li>
+    <li>HTTP calls through stdlib <code>http.request</code></li>
+    <li><code>Map&lt;string, string&gt;</code> headers</li>
+    <li>OpenAI and Mistral non-streaming chat APIs</li>
+    <li>documents, splitters, embeddings, and an in-memory vector store</li>
+    <li>keyword, vector, and hybrid retrieval with grounded RAG prompts</li>
+    <li>window, budget, summary, key/value, and file-backed memory</li>
+    <li>a tool registry, tool dispatch, and an allow/deny policy</li>
+    <li>provider tool-call parsing and a step-bounded agent loop</li>
+  </ul>
+  <p class="sub">That gives Lumen users a real AI API client without Node.js, npm packages, or a JavaScript runtime.</p>
+  <h3>Limits in V1</h3>
+  <p class="sub">Retrieval, embeddings, memory, tools, splitting, loading, and the agent loop now ship. What is still missing:</p>
+  <ul>
+    <li>token streaming ships, but tool-call streaming does not: a streamed tool call arrives as fragments that must be reassembled by index</li>
+    <li>MCP over SSE is plain <code>http://</code> only (<code>net.connect</code> has no TLS); point it at localhost or a server behind a terminating proxy</li>
+    <li>no multimodal or chunk-list response content; V1 expects string <code>content</code></li>
+    <li>a tool takes one string and returns one string; no typed tool arguments yet</li>
+    <li>a tool body cannot throw, because the compiler rejects a throwing function in the registry's <code>run</code> field; report failures by returning text</li>
+    <li>no middleware or guardrail hooks beyond the tool allow/deny policy</li>
+    <li>no model retry policy and no tool retry policy</li>
+    <li>no checkpoint, resume, or rewind of a partly finished agent run</li>
+    <li>no human-in-the-loop pause before a sensitive tool</li>
+    <li>splitting measures in bytes; token-based splitting would need a tokenizer, which this package does not have, so a byte budget is a proxy for the token limit an embedding endpoint actually enforces</li>
+    <li>loaders read plain text only: no PDF, DOCX, HTML or CSV parsing, and directory matching is by extension with no globbing</li>
+    <li>no dynamic schema validation</li>
+    <li>no provider-specific SDKs</li>
+    <li>no automatic retries</li>
+    <li>no response-header inspection</li>
+    <li>the built-in vector store is in-memory only: it is rebuilt on every start, so a service re-embeds its corpus each boot. The <code>pgvector</code> package in this repository keeps vectors in PostgreSQL instead, so an index survives a restart and unchanged text is not embedded twice</li>
+    <li><code>hashEmbedding</code> is a hashing bag of words, not a semantic model; real similarity needs provider embeddings through <code>embedText</code></li>
+    <li>no stemming, no stop-word list, and no re-ranking in the keyword retriever</li>
+    <li>summary memory builds the prompt but does not call a model for you</li>
+  </ul>
+  <p class="sub">These are natural follow-ups as Lumen grows richer JSON value support and more runtime primitives. Streaming was one of them until <code>http.stream</code> landed.</p>
+  <p class="sub">Test:</p>
+<pre><code>lumen test packages/ai/ai.ts</code></pre>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

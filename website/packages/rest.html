@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>rest · Packages · Lumen</title>
+<meta name="description" content="A router and an HTTP server for Lumen. Thin on purpose: matching a request to a handler is the part worth having, and this is that part.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/rest">
+<meta property="og:url" content="https://lumen-lang.org/packages/rest">
+<meta property="og:title" content="rest · Packages · Lumen">
+<meta property="og:description" content="A router and an HTTP server for Lumen. Thin on purpose: matching a request to a handler is the part worth having, and this is that part.">
+<meta name="twitter:title" content="rest · Packages · Lumen">
+<meta name="twitter:description" content="A router and an HTTP server for Lumen. Thin on purpose: matching a request to a handler is the part worth having, and this is that part.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">rest</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest" class="active">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>rest</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/rest">source</a></p>
+  <h2>rest</h2>
+  <p class="sub">A router and an HTTP server for Lumen. Thin on purpose: matching a request to a handler is the part worth having, and this is that part.</p>
+<pre><code class="lumen">@controller("/agents")
+class AgentController {
+  @get("/")       list(req: Request): Reply { ... }
+  @get("/:id")    find(req: Request): Reply { ... }
+  @post("/")      create(req: Request): Reply { ... }
+  @del("/:id")    remove(req: Request): Reply { ... }
+}</code></pre>
+  <p class="sub">The compiler runs <code>controller</code> while compiling and leaves the route table behind as a constant — no scanning, no registration at startup:</p>
+<pre><code class="lumen">let controllerAgentController: Route[] = [
+  { method: "GET",    pattern: "/agents",     handler: "list" },
+  { method: "GET",    pattern: "/agents/:id", handler: "find" },
+  { method: "POST",   pattern: "/agents",     handler: "create" },
+  { method: "DELETE", pattern: "/agents/:id", handler: "remove" },
+];</code></pre>
+  <p class="sub"><code>@del</code>, not <code>@delete</code> — <code>delete</code> is a reserved word. It is the one place the language shows through, and that beats something cleverer.</p>
+  <h3>Serving</h3>
+<pre><code class="lumen">let bound = new Map&lt;string, Handler&gt;();
+bound.set("list", listAgents);
+bound.set("find", findAgent);
+
+let problem = serve(8080, controllerAgentController, bound);
+if (problem != "") { console.error(problem); }</code></pre>
+  <p class="sub">The binding is written out because a decorator cannot call a method: there is no reflection here and there will not be, since the product is a native binary with no runtime type information. What that buys is that <code>serve</code> checks the table against the bindings <strong>before it listens</strong> — a route naming a handler nothing bound is a startup failure naming the route, not a 500 a user finds.</p>
+  <p class="sub">Handlers close over what they need, which is the dependency inversion: nothing reaches for a global, and a test builds the same handlers against a different <code>Db</code>.</p>
+  <h3>Without a decorator</h3>
+  <p class="sub">The table is an ordinary value; the decorator only derives one.</p>
+<pre><code class="lumen">let table = routes([
+  route("GET",  "/agents",     "list"),
+  route("GET",  "/agents/:id", "find"),
+]);</code></pre>
+  <h3>What it refuses, at startup</h3>
+  <ul>
+    <li><strong>A shadowed route.</strong> <code>/agents/:id</code> written before <code>/agents/new</code> makes the second unreachable — a <code>:param</code> matches any literal. Named at startup rather than found as a 404 later.</li>
+    <li><strong>A pattern that does not start with <code>/</code></strong>, one naming a parameter twice, or a <code>:</code> with no name.</li>
+    <li><strong>An empty table</strong>, and a route naming no handler.</li>
+  </ul>
+  <h3>What it answers</h3>
+  <ul>
+    <li>A path nobody claims: <strong>404</strong>, as JSON.</li>
+    <li>A path claimed under another method: <strong>405</strong>, with the <code>Allow</code> header it owes. That is a distinction a client acts on, and it needs the difference between "no such thing" and "not that way".</li>
+    <li>An unbound handler that somehow reached dispatch: <strong>500</strong>, rather than taking the server down.</li>
+  </ul>
+  <h3>Reading a request</h3>
+  <p class="sub"><code>param(req, "id")</code>, <code>queryParam(req, "limit", "10")</code>, <code>header(req, name)</code> — case-insensitive, since the server lowercases what it receives — and <code>bearerToken(req)</code>, which every API grows and every one writes differently.</p>
+  <p class="sub"><code>ok</code>, <code>created</code>, <code>noContent</code>, <code>json</code>, <code>problem</code>, <code>notFound</code>, <code>badRequest</code> build replies. An error is a JSON document, because a client parsing the body should not have to guess whether it got JSON or a sentence.</p>
+  <h3>Testing</h3>
+<pre><code>cd packages/rest
+lumen test router.test.ts       # 25 — matching, params, query, decoding
+lumen test controller.test.ts   # 12 — the decorator, by calling it
+lumen test server.test.ts       # 16 — dispatch, refusals, bindings</code></pre>
+  <p class="sub">None of them binds a port. <code>dispatch</code> is split from <code>serve</code> precisely so every route, refusal and binding failure is a function call — a test that has to bind a port is a test that gets skipped.</p>
+  <h3>Dependency inversion</h3>
+  <p class="sub">A controller takes what it needs through its constructor. Nothing reaches for a global, so a test builds one against a different database and the same code runs.</p>
+<pre><code class="lumen">@controller("/agents")
+class AgentController {
+  agents: Store;
+  constructor(agents: Store) { this.agents = agents; }
+
+  @get("/:id")
+  find(req: Request): Reply {
+    let document = this.agents.findById(param(req, "id"));
+    if (document == "") { return notFound("agent " + param(req, "id")); }
+    return ok(document);
+  }
+}</code></pre>
+<pre><code class="lumen">function main(): void {
+  let agents = store(openDatabase(), agentsMapping());
+  let api = new AgentController(agents);
+  ...
+}</code></pre>
+  <p class="sub">There is no <code>@inject</code>, no auto-wiring and no lifetime management. <code>main</code> builds the dependencies and hands them over. With no reflection there is no honest way to do more, and that being visible is better than dressing it up.</p>
+  <h3>Status</h3>
+  <p class="sub"><code>@controller</code> needs the decorator compiler (Lumen spec 455, merged) and the method descriptions it reads (spec 459, merged). <code>examples/agents-api.ts</code> is a full REST API over a <code>plume</code>-mapped table, written with a plain route table; <code>examples/agents-controller.ts</code> is the same API as a controller.</p>
+  <p class="sub"><strong>Not yet safe under concurrency.</strong> <code>http.createServer</code> dispatches each request to a worker thread, and a <code>plume</code> connection shared across threads has its result set overwritten by whichever request runs next — a POST followed by a read of the same id can report not found. Thread-local connections are in progress. Until then these examples are correct only for sequential traffic.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

@@ -4,4 +4,28 @@
   <url><loc>https://lumen-lang.org/examples</loc></url>
   <url><loc>https://lumen-lang.org/stdlib</loc></url>
   <url><loc>https://lumen-lang.org/packages</loc></url>
+  <url><loc>https://lumen-lang.org/packages/agents</loc></url>
+  <url><loc>https://lumen-lang.org/packages/ai</loc></url>
+  <url><loc>https://lumen-lang.org/packages/args</loc></url>
+  <url><loc>https://lumen-lang.org/packages/code-index</loc></url>
+  <url><loc>https://lumen-lang.org/packages/csv</loc></url>
+  <url><loc>https://lumen-lang.org/packages/dotenv</loc></url>
+  <url><loc>https://lumen-lang.org/packages/geo</loc></url>
+  <url><loc>https://lumen-lang.org/packages/greeter</loc></url>
+  <url><loc>https://lumen-lang.org/packages/hello</loc></url>
+  <url><loc>https://lumen-lang.org/packages/markdown</loc></url>
+  <url><loc>https://lumen-lang.org/packages/mathx</loc></url>
+  <url><loc>https://lumen-lang.org/packages/pdf</loc></url>
+  <url><loc>https://lumen-lang.org/packages/pgvector</loc></url>
+  <url><loc>https://lumen-lang.org/packages/plume</loc></url>
+  <url><loc>https://lumen-lang.org/packages/quickjs</loc></url>
+  <url><loc>https://lumen-lang.org/packages/rest</loc></url>
+  <url><loc>https://lumen-lang.org/packages/semver</loc></url>
+  <url><loc>https://lumen-lang.org/packages/socketio</loc></url>
+  <url><loc>https://lumen-lang.org/packages/sqlite</loc></url>
+  <url><loc>https://lumen-lang.org/packages/sse</loc></url>
+  <url><loc>https://lumen-lang.org/packages/token-gate</loc></url>
+  <url><loc>https://lumen-lang.org/packages/toml</loc></url>
+  <url><loc>https://lumen-lang.org/packages/tracing</loc></url>
+  <url><loc>https://lumen-lang.org/packages/websocket</loc></url>
 </urlset>

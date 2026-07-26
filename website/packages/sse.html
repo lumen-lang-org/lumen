@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>sse · Packages · Lumen</title>
+<meta name="description" content="Server-sent events: one-way push over an HTTP response that never ends.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/sse">
+<meta property="og:url" content="https://lumen-lang.org/packages/sse">
+<meta property="og:title" content="sse · Packages · Lumen">
+<meta property="og:description" content="Server-sent events: one-way push over an HTTP response that never ends.">
+<meta name="twitter:title" content="sse · Packages · Lumen">
+<meta name="twitter:description" content="Server-sent events: one-way push over an HTTP response that never ends.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">sse</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse" class="active">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>sse</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/sse">source</a></p>
+  <h2>sse</h2>
+  <p class="sub">Server-sent events: one-way push over an HTTP response that never ends.</p>
+<pre><code class="lumen">serveEvents(9010, (stream: EventStream) =&gt; {
+  pushEvent(stream, "token", "Hel");
+  pushEvent(stream, "token", "lo ");
+  pushEventWithId(stream, "7", "done", "complete");
+});</code></pre>
+  <p class="sub">A real browser's <code>EventSource</code>, subscribed to exactly that:</p>
+<pre><code class="lumen">browser: token|"Hel"|id=
+browser: note|"line one\nline two"|id=
+browser: done|"complete"|id=7
+browser: error → reconnect → token|"Hel"|id=7</code></pre>
+  <h3>Why this rather than a WebSocket</h3>
+  <p class="sub">Simpler, and enough for most of what a WebSocket gets used for: streaming an answer as it is written, or telling a page something changed.</p>
+  <p class="sub"><strong>The browser reconnects on its own</strong>, which is the part people underestimate. The trace above shows it: the stream ended, <code>EventSource</code> reconnected without being asked, and sent <code>Last-Event-ID: 7</code> so the server could resume rather than repeat. A dropped WebSocket needs code to recover; this needs none.</p>
+  <p class="sub">What it cannot do is carry anything upstream — the page talks back with an ordinary request, which it can already do. If you need the <em>browser</em> pushing into an open channel, you want the websocket package.</p>
+  <h3>The mistakes this format invites</h3>
+  <p class="sub"><strong>The blank line is the frame.</strong> Without it the event is never delivered, and the stream looks perfectly correct in a log.</p>
+  <p class="sub"><strong>Every line of the data needs its own <code>data:</code> prefix.</strong> A newline inside a value ends the event early and delivers half of it. The browser rejoins them, so <code>"line one\nline two"</code> arrives exact — that round trip is asserted here and confirmed above.</p>
+  <p class="sub"><strong>Only one leading space is framing.</strong> Stripping more corrupts data that begins with spaces.</p>
+  <p class="sub"><strong><code>Cache-Control: no-cache</code> is not decoration</strong> — a proxy that caches this serves one client's stream to another. <code>X-Accel-Buffering: no</code> turns off nginx's buffering, which otherwise holds events until its buffer fills and makes a live stream arrive in lumps minutes late.</p>
+  <p class="sub"><strong>A comment is a heartbeat.</strong> A proxy or a phone radio drops a connection that says nothing for a minute or two; <code>: ping</code> costs nothing and every client ignores it.</p>
+  <h3>A workaround for an unreduced compiler bug</h3>
+  <p class="sub"><code>serveEvents</code> puts its body in a top-level function rather than the closure it wants to be, because writing it inline makes the native backend reject the generated code — it reports "likely a Lumen compiler bug; please report it".</p>
+  <p class="sub"><strong>The trigger is not understood.</strong> A closure that captures and calls a parameter compiles fine, and so does one doing it inside <code>net.createServer</code>'s callback. Both were tried after the fact, and both disprove the tidy explanation this file used to carry. Something narrower is at fault and nobody has reduced it.</p>
+  <p class="sub">This is recorded as an open bug rather than a design decision, because a plausible-sounding rationale for a workaround is worse than no rationale: it stops the next person looking.</p>
+  <h3>Testing</h3>
+<pre><code>cd packages/sse
+lumen test sse.test.ts     # 17
+
+lumen run events-demo.ts &amp;
+curl -sN http://127.0.0.1:9010/events    # the raw frames
+python3 /tmp/ssecheck.py                 # a real browser's EventSource</code></pre>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

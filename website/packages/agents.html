@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>agents · Packages · Lumen</title>
+<meta name="description" content="The schema for a set of agents: what each one is, which model it runs on, which prompt it uses, which MCP servers it may reach, and which agents it…">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/agents">
+<meta property="og:url" content="https://lumen-lang.org/packages/agents">
+<meta property="og:title" content="agents · Packages · Lumen">
+<meta property="og:description" content="The schema for a set of agents: what each one is, which model it runs on, which prompt it uses, which MCP servers it may reach, and which agents it…">
+<meta name="twitter:title" content="agents · Packages · Lumen">
+<meta name="twitter:description" content="The schema for a set of agents: what each one is, which model it runs on, which prompt it uses, which MCP servers it may reach, and which agents it…">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">agents</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents" class="active">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>agents</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/agents">source</a></p>
+  <h2>agents</h2>
+  <p class="sub">The schema for a set of agents: what each one is, which model it runs on, which prompt it uses, which MCP servers it may reach, and which agents it delegates to.</p>
+  <p class="sub">Everything is a row. Nothing is compiled in, so a change through an API is visible to the next request without a restart — which is the requirement the rest of this follows from.</p>
+  <h3>One read gives a runnable agent</h3>
+<pre><code class="lumen">let agent: AgentView = JSON.parse&lt;AgentView&gt;(findById(database, agentsFull(database), "a1"));</code></pre>
+<pre><code>{"id":"a1","agentName":"lead","enabled":true,
+ "prompt":{"id":"p2","promptName":"lead","version":2,"body":"You lead, briefly."},
+ "config":{"id":"c1","modelId":"m1","temperature":0.2,"maxTokens":8192,"topP":0.95},
+ "servers":[{"id":"s1","serverName":"filesystem","transport":"stdio","endpoint":"mcp-fs","enabled":true}],
+ "subAgents":[{"id":"a2","agentName":"scout","enabled":true}]}</code></pre>
+  <p class="sub">One query, not five, and no N+1: each relation is a correlated subquery the database nests, so an agent with three servers and two sub-agents is still one row.</p>
+  <h3>The decisions worth knowing</h3>
+  <p class="sub"><strong>A model name is a column.</strong> <code>models.api_name</code> holds <code>claude-opus-5</code>; <code>label</code> is what a human picks from a list. Renaming the label never changes a request, and moving an agent to a newer model is an UPDATE.</p>
+  <p class="sub"><strong>A prompt is versioned and never edited.</strong> A change writes a new row with the next version; the agent points at one. Rolling back is an UPDATE, and the version you rolled back from is still there.</p>
+  <p class="sub">That invariant needs guarding, not just stating. <code>persist</code> is an upsert — the right default for a mapper and the wrong one for a create — so <code>POST /prompts</code> carrying an id that already exists used to <em>replace that version's text in place</em> and answer as though it had made a new one, while every agent pointing at it silently changed behaviour. Now the version and the id are both assigned by the server, and a taken id is refused by name. The same guard is on every create in the API: a POST that overwrites is a PUT wearing the wrong verb.</p>
+  <p class="sub"><strong>Config is separate from the model</strong>, because two agents on one model routinely want different knobs. <code>extra</code> carries whatever a provider accepts that the named columns do not, so an unfamiliar parameter needs no migration.</p>
+  <p class="sub"><strong>Sub-agents read one level at a time.</strong> <code>subAgents</code> names an agent's children, not its grandchildren. A cycle in the delegation graph is therefore a row rather than an infinite query — and the suite inserts one to prove it. What refuses to <em>walk</em> the cycle is the run; see Delegation below.</p>
+  <p class="sub"><strong>The schema is generated from the mappings.</strong> <code>schemaPlan</code> builds each <code>CREATE TABLE</code> with <code>createTableSql</code>, so the schema a program expects and the schema a migration builds cannot drift. Only the two link tables are written by hand, because they hold keys rather than an entity.</p>
+  <h3>Serving it</h3>
+  <p class="sub"><code>api.ts</code> is the schema behind a <code>rest</code> controller:</p>
+<pre><code class="lumen">GET    /agents            every agent, ordered, with ?enabled=true
+GET    /agents/:id        the whole agent in one query
+POST   /agents            create
+PUT    /agents/:id/model  point at a different model config
+PUT    /agents/:id/prompt point at a different prompt version
+POST   /agents/:id/servers  attach an MCP server
+DELETE /agents/:id</code></pre>
+  <p class="sub">Every read goes to the database. Nothing is cached and nothing is compiled in, so a change — through this API or from anything else touching the same tables — is visible to the very next request. That is met by not doing the thing that would break it, rather than by machinery.</p>
+  <h4>Credentials, over the API</h4>
+<pre><code class="lumen">GET    /providers              which providers have a key — names only
+GET    /providers/:provider    {"provider":"mistral","configured":true}
+PUT    /providers/:provider/key  {"apiKey":"sk-..."} — stored encrypted
+DELETE /providers/:provider/key</code></pre>
+  <p class="sub">A key can be written and named; it can never be read back. Nothing in this module returns an envelope or a plaintext, so a listing endpoint cannot leak one by accident, and <code>configured</code> answers the only question a caller actually has.</p>
+  <p class="sub">The server refuses to start without a usable <code>LUMEN_MASTER_KEY</code>, rather than serving with credentials it cannot open and failing every provider call later, far from the cause.</p>
+  <h3>Talking to what the rows describe</h3>
+  <p class="sub"><code>mcp.ts</code> mounts an MCP server from its row, and <code>provider.ts</code> calls a model from its row. Neither file names a server or a model.</p>
+<pre><code class="lumen">mounting  demo-mcp at http://127.0.0.1:8200
+initialize ok=true
+tools     add, echo
+add(2,40) 42
+disabled  ok=false demo-mcp is disabled</code></pre>
+<pre><code class="lumen">model     Mistral Small -&gt; mistral-small-latest
+ok=true status=200
+disabled  Mistral Small is disabled</code></pre>
+  <p class="sub">In both, the last line is the point: <code>enabled</code> was flipped in the database and the next call refused, with no restart.</p>
+  <p class="sub"><strong>MCP is HTTP-transport only.</strong> The other transport is stdio, which needs to spawn a process, and Lumen has no subprocess API — so a stdio server has to be fronted by something speaking HTTP. The client says exactly that rather than failing obscurely.</p>
+  <h3>Credentials</h3>
+  <p class="sub">A provider's API key is a row, encrypted:</p>
+<pre><code class="lumen">storeCredential(db, "mistral", "sk-...", masterKey(), now);
+complete(model, config, prompt, text, credentialFor(db, "mistral", masterKey()));</code></pre>
+<pre><code class="lumen">stored for  mistral
+envelope    yV23Bn0vGDrN3+lEt04PhvRyL4jYo1JVWajaKcaW7m3J…
+plaintext in the row? false
+call        ok=true status=200
+wrong master ok=false no API key for mistral</code></pre>
+  <p class="sub"><strong>The ciphertext is a row; the key that opens it is not.</strong> <code>LUMEN_MASTER_KEY</code> comes from the environment, so the database never sees it. Encrypting a credential with a key stored beside it protects nothing. The trade is real and intended: losing the environment loses the credentials.</p>
+  <p class="sub">AES-256-GCM, so it is authenticated — a row edited in the database refuses to open rather than decrypting to something plausible that would then be sent to a provider. A test does exactly that edit.</p>
+  <p class="sub"><strong>Every failure to open answers the same way</strong>: absent, wrong master key, and tampered all return <code>""</code>. A caller that could tell them apart could use this table to test master keys against.</p>
+  <p class="sub">An empty key is refused at the door, because an empty plaintext encrypts to a valid envelope that decrypts to <code>""</code> — indistinguishable from a failure.</p>
+  <p class="sub"><code>providersWithCredentials</code> returns names only; nothing in this module returns an envelope, so a listing endpoint cannot leak one by accident.</p>
+  <h3>Running an agent</h3>
+<pre><code class="lumen">let answer = runAgent(db, "a1", "What is 2 plus 40?", masterKey());
+answer.text            // "42"
+answer.promptVersion   // which prompt actually served it
+answer.modelApiName    // which model actually served it</code></pre>
+<pre><code class="lumen">agent=calculator prompt=v1 model=mistral-small-latest
+ok=true status=200
+reply 42
+
+after UPDATE: prompt=v2 ok=true
+disabled -&gt; calculator is disabled</code></pre>
+  <p class="sub">The prompt, the model, its wire name, the temperature and the key are all rows. Rolling a prompt back or moving an agent to another model is an UPDATE, and it takes effect on the next call.</p>
+  <p class="sub">Each row is read on its own rather than through <code>agentsFull</code>. A relation that matches nothing is <code>null</code>, and a run needs its prompt, config and model to exist — so a dangling reference is named rather than turned into a parse failure against a type that declares them present.</p>
+  <p class="sub">The run reports which prompt version and model answered, so a caller records what happened rather than what it assumed would.</p>
+  <h3>Calling tools</h3>
+  <p class="sub">An agent reaches an MCP server because a row links the two. That link is all it takes — the tools are fetched from the server on each run, described to the model in its own format, called, and their results fed back until the model stops asking.</p>
+<pre><code class="lumen">mounted   2 tools from 1 server(s)
+  - warehouse_stock: How many units of a part are in a named warehouse.
+  - part_price: The unit price of a part in euros.
+
+user      We need 40 units of A-114. Is there enough in Rotterdam, and what
+          would 40 cost?
+
+-- what the model did (context) --------------------------------
+0 ok  parts.warehouse_stock {"part": "A-114", "warehouse": "Rotterdam"}
+      -&gt; 37 units of A-114 in Rotterdam.
+1 ok  parts.part_price {"part": "A-114"}
+      -&gt; A-114 costs EUR 12.50 per unit.
+rounds    2, stopped: final
+
+-- what the user sees (conversation) ---------------------------
+agent     There are 37 units of A-114 in Rotterdam, so you're short by 3.
+          The cost for 40 units would be EUR 500.00 (40 × €12.50).</code></pre>
+  <p class="sub"><code>examples/run-with-tools.ts</code>, against a live model and a live MCP server. Nothing in it names a tool: <code>INSERT INTO agent_mcp_servers</code> is what gave the agent both of them.</p>
+  <p class="sub"><strong>A run has two kinds of state and they are different things.</strong> The <em>context</em> is everything the model was shown — every turn, every call, every result. The <em>conversation</em> is what a person reads. Neither is a filter of the other: the context holds a tool's four thousand lines of output that nobody wants to read, and a transcript holds nothing about the six calls behind one sentence. <code>AgentRun</code> carries both, separately, and <code>text</code> is the only field meant for display.</p>
+  <p class="sub"><strong>Tool results are asked for, not cached.</strong> Each run asks every linked server what it offers. That is a round trip per server per run, and it is deliberate: a cached list is a list that is wrong the first time somebody deploys a tool.</p>
+  <p class="sub"><strong>What could not be mounted is reported, never silent.</strong> A disabled server, a stdio one, an unreachable one — the agent still answers, and <code>notes</code> says what it answered without. A tool the model was never told about is a failure that looks exactly like a bad answer.</p>
+  <p class="sub"><strong>A failed tool call goes back to the model, not to the caller.</strong> A tool that reports an error, or a name the model invented, comes back as a result it can act on. Stopping the run instead would turn a recoverable mistake into a dead one.</p>
+  <p class="sub"><strong>The step budget bounds calls, not just rounds.</strong> One reply can ask for an unbounded number of calls, so both are counted against the same budget.</p>
+  <p class="sub">Three formats, not one abstraction: OpenAI and Mistral wrap a tool in a <code>function</code> object and send arguments as a string holding JSON; Anthropic names the schema <code>input_schema</code>, carries calls as content blocks, and needs every result of one turn inside a single user message. Those are the differences, and <code>wire.test.ts</code> is the record of them.</p>
+  <h3>Delegation</h3>
+  <p class="sub">An agent's children are tools too. A parent that can ask a specialist is the same shape as a parent that can read a file — a name, a description of when to use it, one argument — so one loop, one trace and one budget cover both.</p>
+<pre><code class="lumen">user      Can we ship 40 units of A-114 from Rotterdam today, and what is the bill?
+
+0 ok  parts-desk.ask_parts-desk {"question":"What is the price and stock level
+                                 of part A-114 in Rotterdam?"}
+      -&gt; A-114 costs €12.50 per unit, and there are 37 units in Rotterdam.
+1 ok  parts-desk.ask_parts-desk {"question":"Can we ship 40 units of A-114
+                                 from Rotterdam today?"}
+      -&gt; No, only 37 units are available in Rotterdam.
+
+lead      We cannot ship 40 units today, as only 37 are in stock; the bill for
+          37 would be €462.50.</code></pre>
+  <p class="sub"><code>examples/delegate.ts</code>. The lead reaches no MCP server at all — two rows give it everything: one links the desk to the parts server, one makes the desk the lead's child.</p>
+  <p class="sub"><strong>A child is a separate run.</strong> It has its own prompt, its own model, its own tools and its own context. It cannot see the parent's conversation, which is why the argument's description insists the question repeat every name it depends on. That is not a style note: asked <em>"stock of A-114?"</em> with Rotterdam left out, a child picked a warehouse, its lookup failed, and it answered "no stock" — which the parent passed on as fact. The wording that stops it is in <code>delegateSchema</code>, and the reason is in the comment beside it.</p>
+  <p class="sub"><strong>A cycle is refused by name, not by the depth limit.</strong> <code>agent_sub_agents</code> accepts a cycle deliberately — the schema suite inserts one — so a run also refuses to enter an agent already on its path. Stopping three levels down would report the wrong cause.</p>
+  <p class="sub"><strong>Past the depth limit an agent runs alone</strong>, rather than not at all. Refusing the whole run because a child was out of reach turns a bounded plan into no answer.</p>
+  <p class="sub"><strong>What went wrong below surfaces above.</strong> A child's own notes are re-reported under its name, and a child that answered <em>after</em> its tool calls failed is recorded as such — in the notes, never in the result, because the result goes to the model and a warning it can quote is a warning that reaches the user as an answer.</p>
+  <h3>Evaluations</h3>
+  <p class="sub">Cases live in a Langfuse dataset, so the people who write them do not need a programmer. Running them is a request, not a deployment — the agent, its sub-agents, its tools and the judge are all rows.</p>
+<pre><code class="lumen">let out = runEvals(db, "a1", "judge1", "parts-desk-evals", "nightly", tracerFor(db, master), master, 50);</code></pre>
+  <p class="sub">A case says what to ask, what a good answer looks like, and — when it cares — the route the run should take:</p>
+<pre><code>{"input":  {"question": "Can we ship 40 units of A-114 from Rotterdam today?"},
+ "expectedOutput": {"answer": "No — only 37 units are in stock in Rotterdam.",
+                    "tools":  ["warehouse_stock", "part_price"],
+                    "agents": ["parts-desk"]}}</code></pre>
+  <p class="sub"><strong>The route is scored separately from the answer</strong>, and that is the point:</p>
+<pre><code class="lumen">PASS  answer 1  tools 0.5  agents 1   Can we ship 40 units of A-114 today?
+      route   : tools [warehouse_stock]  agents [parts-desk]
+      MISSING tools : part_price</code></pre>
+  <p class="sub">The answer was right and the run never called <code>part_price</code>, so it had no basis for the bill it quoted. An outcome-only suite records that as a clean pass and finds out when the prices change. The mirror case is an agent that answers a stock question from its own head — <code>agents 0</code>, no delegation — which reads as a good answer until the stock moves.</p>
+  <p class="sub">So <code>tool-use</code> and <code>delegation</code> go to Langfuse as their own scores beside <code>correctness</code>. Averaging them into one number would hide both failures.</p>
+  <p class="sub"><strong>What was reached is collected from the whole tree.</strong> <code>AgentRun.steps</code> holds only what <em>that</em> agent did; a tool called inside a sub-agent appears nowhere in it. <code>calledTools</code> and <code>calledAgents</code> accumulate through the delegations, because "did this run reach the stock tool" is a question about the tree and not about the top of it.</p>
+  <p class="sub"><strong>A case that names no route cannot fail one</strong> — it scores 1, rather than being dragged to zero by a check it never asked for.</p>
+  <p class="sub"><strong>The judge is an agent</strong>, so which model judges and how strictly are rows. With none configured, a built-in judge compares the numbers in the reference against the answer and says that is what it did; a suite that refuses to run until someone sets up a judge is a suite nobody sets up a judge for. A judge that <em>was</em> configured and failed to run is reported rather than fallen back from — those are different problems, and grading anyway would hide one. A judge answering in prose has not judged, which is not the same as scoring zero.</p>
+  <p class="sub"><strong>The backend is a row, not an assumption.</strong> <code>trace_config.backend</code> names it — <code>langfuse</code>, <code>otlp</code>, <code>braintrust</code>, <code>langsmith</code>, <code>phoenix</code>, <code>arize</code> — and the tracing package turns that name into how a request authenticates, which extra headers it wants, which attribute scheme it reads, and which encoding it takes.</p>
+  <p class="sub">Researching five vendors changed the design twice. One extra header was not enough: Arize AX wants <code>space_id</code> and <code>api_key</code> together, so extras are a list. And an attribute <em>prefix</em> was the wrong abstraction entirely — OpenInference names things by meaning, not by vendor (<code>openinference.span.kind</code>, <code>input.value</code>, <code>llm.model_name</code>), which no prefix substitution reaches. What varies is the whole scheme.</p>
+  <p class="sub">Sending to a real Phoenix then found a third thing, which no amount of reading had: it answers <code>415 Unsupported content type: application/json</code>. OTLP defines a JSON mapping and a protobuf one, and a receiver may implement either. This package writes JSON, so a protobuf-only backend is refused before the request is made rather than after someone else's server rejects it. Against a plain OpenTelemetry collector the same run produces the same 15-span tree with the standard <code>gen_ai.*</code> attributes and no <code>langfuse.*</code> at all; against Langfuse it carries both. Datasets are the one thing that does not generalise — they are not an OpenTelemetry concept, so a backend either has an API for them or says it has none, and evaluations report that rather than building a URL that 404s.</p>
+  <p class="sub">Langfuse's own LLM-as-a-judge can run alongside this one: it scores server-side on new dataset runs, needs an LLM connection configured in Langfuse, and in v3.224 its evaluator config has no public API. Both scores then sit on the same trace, and they do disagree at the margins — which is an argument for keeping both rather than trusting either alone.</p>
+  <h3>Retrieval</h3>
+  <p class="sub">Documents live in folders and an agent reads the folders it is granted.</p>
+<pre><code class="lumen">uploaded  /engineering/plume  chunks=1
+uploaded  /hr/policies        chunks=1
+
+engineer granted /engineering
+people   granted /hr
+
+-- eng: How many days of annual leave do we get?
+   read  /engineering/plume/plume_relations  distance 0.377
+   said  Your documents do not cover it.
+
+-- hr:  How many days of annual leave do we get?
+   read  /hr/policies/leave_policy  distance 0.147
+   said  You get 28 days of annual leave, including public holidays.</code></pre>
+  <p class="sub"><code>examples/scoped-rag.ts</code>, against PostgreSQL. One table, one embedding model, one question — and the engineer cannot see the HR document. The isolation is the <code>agent_scopes</code> rows, not separate corpora, which is what makes it survive somebody adding a folder.</p>
+  <p class="sub">That was a disclosure before scopes existed: <code>retrieve</code> filtered on <code>model_id</code> alone, so any two agents sharing an embedding model read each other's documents. A demo with one corpus never shows it.</p>
+  <p class="sub"><strong>Scopes match on segment boundaries.</strong> <code>/specs</code> covers <code>/specs/plume</code> and must not cover <code>/specifications</code>. A string prefix would hand a folder to anyone granted a name that starts the same way.</p>
+  <p class="sub"><strong>An empty grant reads nothing</strong>, never everything. The alternative makes revoking an agent's access the most destructive edit available, and the failure looks like the system working.</p>
+  <p class="sub"><strong>Retrieval happens in the run</strong>, not in the caller. It was a thing you did before calling <code>runAgent</code>, which meant an agent's knowledge lived in whoever remembered to fetch it — two callers of the same agent got different behaviour. Now <code>agent_scopes</code> says what it may read and <code>agent_retrieval</code> says how.</p>
+  <p class="sub"><strong>Every way it can come up short is in <code>notes</code></strong> — not PostgreSQL, switched off, no embedding model, no scopes, no credential, nothing close enough. An agent that answered without its documents looks exactly like one that answered from them.</p>
+  <h4>Retrieval, the older way</h4>
+  <p class="sub">pgvector, so PostgreSQL only — SQLite and MySQL have no vector type. An agent runs anywhere; it retrieves against Postgres.</p>
+<pre><code class="lumen">let width = embedText(embedModel, "probe", key).dimensions;   // ask the model
+createDocuments(db, width);
+indexDocument(db, embedModel, "d1", "plume", "Plume maps records to tables…", key);
+
+let found = retrieve(db, embedModel, "Why is an unordered page refused?", 2, key);
+runAgent(db, "a1", asContext(found.found) + "\nQuestion: " + question, masterKey());</code></pre>
+<pre><code class="lumen">embedding width 1024
+indexed 3 documents
+
+retrieved plume/d2  distance 0.19052260549339184
+retrieved plume/d1  distance 0.23477740073896414
+
+Plume refuses an unordered page because two requests for the first twenty rows
+can overlap or skip records when the database answers in any order.</code></pre>
+  <p class="sub">The embedding model is a row like every other. <code>models</code> carries <code>kind</code> — <code>"chat"</code> or <code>"embedding"</code> — and <code>dimensions</code>, the width of the vectors it produces. Pointing a corpus at a different embedding model is an INSERT and an UPDATE, not an edit to any file.</p>
+  <p class="sub">That makes three things checkable that were not:</p>
+  <ul>
+    <li><strong>A chat model cannot embed.</strong> A provider offers both and they answer different endpoints; refusing here beats a 404 from the provider.</li>
+    <li><strong>A corpus needs a width.</strong> <code>createDocuments</code> refuses a model that does not say how wide its vectors are, rather than creating a column of some default.</li>
+    <li><strong>A search only sees its own model's chunks.</strong> <code>documents.model_id</code> records which model embedded each one, and <code>retrieve</code> filters on it. Two models' vectors sit at the same width and are not comparable; mixing them returns confident nonsense rather than an error.</li>
+  </ul>
+  <p class="sub">And what the model says it produces is checked against what it returned, so a mismatch is a sentence rather than a wire error about column widths.</p>
+  <p class="sub">The query vector is bound, not interpolated: it came from a provider's reply and is data like any other. <code>distance</code> is returned so a caller can decide what is too far, rather than trusting the ranking blindly.</p>
+  <h3>Testing</h3>
+<pre><code>cd packages/agents
+lumen test schema.test.ts     # 10, against SQLite
+lumen test scan.test.ts       # 16, reading a document no type can declare
+lumen test wire.test.ts       # 18, the three providers' tool formats
+lumen test mcp.test.ts        # 3, the refusals — the live half is an example
+lumen test tools.test.ts      # 8, which tools an agent gets, and why not
+lumen test delegate.test.ts   # 13, children as tools, cycles, the depth limit
+lumen test evals.test.ts      # 19, datasets, judges, and route checks
+lumen test runlog.test.ts     # 7, what a run leaves behind
+lumen test provider.test.ts   # 5, provider selection and refusals
+lumen test credentials.test.ts # 13, encryption at rest
+lumen test run.test.ts        # 11, every refusal on the run path
+lumen test knowledge.test.ts  # 11, what retrieval refuses before embedding</code></pre>
+  <p class="sub">The live halves are <code>examples/mount-mcp.ts</code>, <code>examples/call-model.ts</code> and <code>examples/run-with-tools.ts</code>. A test that needs a credential or a listening port is a test that gets skipped, so those stay examples and the refusals stay tests.</p>
+  <p class="sub">Requires <code>sh ../plume/build.sh</code> first.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

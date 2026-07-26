@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>semver · Packages · Lumen</title>
+<meta name="description" content="A pure-Lumen Semantic Versioning library.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/semver">
+<meta property="og:url" content="https://lumen-lang.org/packages/semver">
+<meta property="og:title" content="semver · Packages · Lumen">
+<meta property="og:description" content="A pure-Lumen Semantic Versioning library.">
+<meta name="twitter:title" content="semver · Packages · Lumen">
+<meta name="twitter:description" content="A pure-Lumen Semantic Versioning library.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">semver</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver" class="active">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>semver</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/semver">source</a></p>
+  <h2>semver</h2>
+  <p class="sub">A pure-Lumen Semantic Versioning library.</p>
+  <p class="sub"><code>semver</code> parses, compares, sorts, increments, and evaluates common npm-style version ranges without Node.js, a JavaScript runtime, FFI, or external dependencies.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { parse, compare, satisfies } from "https://lumen-lang.org/package/std-contrib/semver/semver.ts";
+
+let v = parse("1.2.3-alpha.1+build.5");
+console.log(v.major); // 1
+
+console.log(compare("1.0.0", "2.0.0") &lt; 0);
+console.log(satisfies("1.5.0", "^1.2.0"));</code></pre>
+  <p class="sub">Run the package tests:</p>
+<pre><code>lumen test packages/semver/semver.ts</code></pre>
+  <h3>API</h3>
+  <table>
+    <tr><th>API</th><th>Meaning</th></tr>
+    <tr><td><code>parse(input: string): Version</code></td><td>Parse a strict SemVer version or throw an error</td></tr>
+    <tr><td><code>valid(input: string): bool</code></td><td>Return whether <code>input</code> is a strict valid SemVer version</td></tr>
+    <tr><td><code>clean(input: string): string</code></td><td>Trim whitespace, strip a leading <code>v</code>/<code>V</code>, and return canonical form</td></tr>
+    <tr><td><code>format(v: Version): string</code></td><td>Convert a parsed version back to a string</td></tr>
+    <tr><td><code>compare(a: string, b: string): int</code></td><td>Return <code>-1</code>, <code>0</code>, or <code>1</code> by SemVer precedence</td></tr>
+    <tr><td><code>compareVersions(a: Version, b: Version): int</code></td><td>Compare already parsed versions</td></tr>
+    <tr><td><code>eq</code>, <code>neq</code>, <code>gt</code>, <code>gte</code>, <code>lt</code>, <code>lte</code></td><td>Convenience comparison helpers</td></tr>
+    <tr><td><code>sort(list: string[]): string[]</code></td><td>Return versions in ascending SemVer order</td></tr>
+    <tr><td><code>rsort(list: string[]): string[]</code></td><td>Return versions in descending SemVer order</td></tr>
+    <tr><td><code>inc(version: string, release: string): string</code></td><td>Increment by <code>patch</code>, <code>minor</code>, <code>major</code>, or <code>prerelease</code></td></tr>
+    <tr><td><code>satisfies(version: string, range: string): bool</code></td><td>Evaluate a version against a range</td></tr>
+  </table>
+  <p class="sub"><code>Version</code> has this shape:</p>
+<pre><code class="lumen">interface Version {
+  major: int;
+  minor: int;
+  patch: int;
+  prerelease: string[];
+  build: string[];
+}</code></pre>
+  <h3>Ranges</h3>
+  <p class="sub">Supported V1 range syntax:</p>
+  <ul>
+    <li><code>*</code>, <code>x</code>, <code>X</code></li>
+    <li><code>1.x</code></li>
+    <li><code>1.2.x</code></li>
+    <li>exact versions such as <code>1.2.3</code></li>
+    <li><code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>=</code></li>
+    <li>caret ranges such as <code>^1.2.3</code>, <code>^0.2.3</code>, <code>^0.0.3</code>, <code>^1.2</code></li>
+    <li>tilde ranges such as <code>~1.4.0</code>, <code>~1.4</code></li>
+    <li>AND ranges with spaces: <code>&gt;=1.0.0 &lt;2.0.0</code></li>
+    <li>OR ranges with <code>||</code>: <code>^1.2 || ^2.0</code></li>
+  </ul>
+  <h3>Design notes</h3>
+  <p class="sub">The parser is scanner-based rather than regex-based. Numeric identifiers are validated explicitly so strict <code>parse</code> rejects leading zeroes, missing fields, empty prerelease/build identifiers, invalid characters, and trailing input.</p>
+  <p class="sub">Build metadata does not affect comparison or equality, matching SemVer 2.0.0.</p>
+  <p class="sub"><code>sort</code> and <code>rsort</code> return new arrays. Current Lumen arrays do not support element assignment, so sorting is implemented as a non-mutating selection pass that constructs the result through a string round-trip.</p>
+  <h3>Differences from npm semver</h3>
+  <p class="sub">V1 is intentionally strict by default. It does not attempt npm's full coercion or loose parsing surface. Use <code>clean</code> for the small compatibility convenience of trimming whitespace and stripping a leading <code>v</code>.</p>
+  <p class="sub">Prerelease range behavior is conservative in V1 and covered by the package tests; additional npm edge-case compatibility can be added as follow-up tests.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

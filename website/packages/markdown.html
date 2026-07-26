@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>markdown · Packages · Lumen</title>
+<meta name="description" content="A small Markdown → HTML renderer, written entirely in Lumen.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/markdown">
+<meta property="og:url" content="https://lumen-lang.org/packages/markdown">
+<meta property="og:title" content="markdown · Packages · Lumen">
+<meta property="og:description" content="A small Markdown → HTML renderer, written entirely in Lumen.">
+<meta name="twitter:title" content="markdown · Packages · Lumen">
+<meta name="twitter:description" content="A small Markdown → HTML renderer, written entirely in Lumen.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">markdown</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown" class="active">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>markdown</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/markdown">source</a></p>
+  <h2>markdown</h2>
+  <p class="sub">A small <strong>Markdown → HTML</strong> renderer, written entirely in Lumen.</p>
+  <p class="sub">Unlike the FFI packages (<code>quickjs</code>, <code>sqlite</code>), markdown is <strong>pure Lumen</strong> — no C shim, no native library, nothing to install. Import it by URL and use it.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { render } from "https://lumen-lang.org/package/std-contrib/markdown/markdown.ts";
+
+console.log(render("# Title\n\nSome **bold**, *italic*, `code`, and a [link](https://x.io).\n\n- one\n- two"));</code></pre>
+  <h3>API</h3>
+  <table>
+    <tr><th>API</th><th>Meaning</th></tr>
+    <tr><td><code>render(md: string): string</code></td><td>render a Markdown document to an HTML fragment</td></tr>
+  </table>
+  <h3>Supported syntax</h3>
+  <p class="sub">A practical subset of CommonMark:</p>
+  <ul>
+    <li>ATX headings <code>#</code> … <code>######</code></li>
+    <li>paragraphs</li>
+    <li>inline <code>**bold**</code>, <code>*italic*</code>, `<code> </code>code<code> </code><code>, </code><a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/markdown/url">text</a>`</li>
+    <li>unordered lists (<code>-</code> / <code>*</code>)</li>
+    <li>blockquotes (<code>&gt;</code>)</li>
+    <li>fenced code blocks (```<code> </code>`<code> </code>```)</li>
+    <li>horizontal rules (<code>---</code>)</li>
+  </ul>
+  <p class="sub">HTML metacharacters (<code>&amp; &lt; &gt; "</code>) are escaped. Multi-row tables, ordered lists, nested lists, and reference links are future additions.</p>
+  <h3>Performance</h3>
+  <p class="sub">markdown is fast. Rendering a typical ~3 KB document in a tight loop — renders per second, higher is better:</p>
+  <table>
+    <tr><th>Renderer</th><th>renders/sec</th></tr>
+    <tr><td><strong>markdown</strong> (this package)</td><td><strong>6,775</strong></td></tr>
+    <tr><td>markdown-it</td><td>2,020</td></tr>
+    <tr><td>marked</td><td>1,064</td></tr>
+  </table>
+  <p class="sub">About <strong>3.4× faster than markdown-it</strong> and <strong>6.4× faster than marked</strong> on the same document.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

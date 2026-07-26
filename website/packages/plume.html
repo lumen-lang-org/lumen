@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>plume · Packages · Lumen</title>
+<meta name="description" content="An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/plume">
+<meta property="og:url" content="https://lumen-lang.org/packages/plume">
+<meta property="og:title" content="plume · Packages · Lumen">
+<meta property="og:description" content="An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.">
+<meta name="twitter:title" content="plume · Packages · Lumen">
+<meta name="twitter:description" content="An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">plume</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume" class="active">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>plume</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/plume">source</a></p>
+  <h2>plume</h2>
+  <p class="sub">An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.</p>
+  <p class="sub">Nothing is inferred. A table name, a key, every column and every SQL type is written out; plume never guesses a column from a field name or a table from a type. The mapping is a value you construct, so it can be built, inspected and tested like any other value.</p>
+<pre><code class="lumen">import { Db, DbConfig } from "./driver.ts";
+import { postgres } from "./postgres.ts";
+import { field, repository, connectDatabase, createTable, persist, findById } from "./plume.ts";
+
+type Agent = { id: string, agentName: string, maxSteps: int, temperature: number };
+
+let database: Db = postgres();
+
+function agents(): DbRepository {
+  let fields: DbField[] = [
+    field("id", "id", "text"),
+    field("agentName", "agent_name", "text"),
+    field("maxSteps", "max_steps", "int"),
+    field("temperature", "temperature", "float8"),
+  ];
+  return repository("agents", "id", "id", fields);
+}
+
+let config: DbConfig = { host: "127.0.0.1", database: "app", user: "lumen" };
+connectDatabase(database, config);
+createTable(database, agents());
+
+let a: Agent = { id: "a1", agentName: "researcher", maxSteps: 5, temperature: 0.2 };
+persist(database, agents(), JSON.stringify(a));
+
+let back: Agent = JSON.parse&lt;Agent&gt;(findById(database, agents(), "a1"));</code></pre>
+  <p class="sub">A record crosses the boundary as JSON in both directions. That is what lets one set of operations serve any record type without a generated mapper per type: the database does the conversion, using functions it already has.</p>
+  <h3>Databases</h3>
+  <table>
+    <tr><th></th><th>PostgreSQL</th><th>SQLite</th><th>MySQL / MariaDB</th></tr>
+    <tr><td>module</td><td><code>postgres.ts</code></td><td><code>sqlite.ts</code></td><td><code>mysql.ts</code></td></tr>
+    <tr><td>links</td><td><code>pq</code></td><td><code>sqlite3</code></td><td><code>mariadb</code></td></tr>
+    <tr><td>config</td><td><code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>database</code></td><td><code>filename</code></td><td><code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>database</code></td></tr>
+    <tr><td>default port</td><td>5432</td><td>—</td><td>3306</td></tr>
+    <tr><td>verified against</td><td>PostgreSQL 17</td><td>SQLite 3</td><td>MySQL 8, MariaDB 11.8</td></tr>
+    <tr><td>placeholder</td><td><code>$1</code>, <code>$2</code>, …</td><td><code>?</code></td><td><code>?</code></td></tr>
+  </table>
+  <p class="sub">Each driver is its own module, so a program that uses SQLite does not need libpq installed and vice versa. The core links nothing.</p>
+  <p class="sub">The same test suite runs against all three — <code>plume.test.ts</code>, <code>sqlite.test.ts</code> and <code>mysql.test.ts</code> are the same suite with one import changed, which is what makes "portable" a claim rather than an intention.</p>
+  <p class="sub">Where a caller writes SQL of their own — a <code>where</code> clause, a projection — it is that database's SQL. Use <code>placeholderAt(database, 1)</code> rather than a literal <code>$1</code> or <code>?</code> and the same call works everywhere; <code>database.placeholder</code> is the first marker, for the common case of one value.</p>
+  <h3>Connecting</h3>
+  <p class="sub">A connection is asked for with a record, not a string. A <code>host=… user=…</code> list is untyped, spelled differently by every library, and a typo in it is a runtime failure; the field names here are node-postgres's, verbatim.</p>
+<pre><code class="lumen">let config: DbConfig = { host: "127.0.0.1", database: "app", user: "lumen", password: "secret" };
+connectDatabase(database, config);
+
+let local: DbConfig = { filename: "/tmp/app.db" };      // SQLite
+let memory: DbConfig = { filename: ":memory:" };</code></pre>
+  <p class="sub">Every field is optional; each driver applies its own defaults and renders the config into whatever its library takes. Nothing outside a driver builds a target string, and no diagnostic carries any part of the config — a failed connection cannot put a password in a log. Values are quoted where the rendered form is a <code>key=value</code> list, so a password containing a space connects where it says rather than being cut short at the space. A config naming neither a <code>host</code> nor a <code>filename</code> is reported rather than attempted, since libpq and SQLite would both happily connect to something else.</p>
+  <p class="sub"><code>options</code> is the escape hatch: anything the fields do not cover — <code>sslmode</code>, a socket path, a libpq service name — appended verbatim, and a config carrying only <code>options</code> is a raw target.</p>
+  <h4>A connection of its own</h4>
+  <p class="sub"><code>postgres()</code>, <code>sqlite()</code> and <code>mysql()</code> are the process-wide connection, which is what a CLI or a migration runner wants. <code>postgresConnection(config)</code>, <code>sqliteConnection(config)</code> and <code>mysqlConnection(config)</code> each open a connection of their own, out of a table of 64 slots per driver, and each owns its own result set — so two of them interleaved cannot read each other's rows.</p>
+<pre><code class="lumen">let pool: Db[] = [];
+let i: int = 0;
+while (i &lt; size) { pool.push(postgresConnection(config)); i = i + 1; }</code></pre>
+  <p class="sub">That is a pool. Handing one out is the program's business: a program with an event loop, a thread pool or one connection per request wants three different answers and none of them belong in a mapper. <code>close()</code> releases the slot.</p>
+  <h3>Building</h3>
+<pre><code>sh packages/plume/build.sh</code></pre>
+  <p class="sub">Each shim is optional; a missing library is a skipped shim rather than a failed build.</p>
+<pre><code>apt install libpq-dev libsqlite3-dev libmariadb-dev   # Debian, Ubuntu
+brew install postgresql@17 sqlite mariadb             # macOS</code></pre>
+  <h3>Operations</h3>
+  <p class="sub">Reading: <code>findById</code>, <code>findProjected</code>, <code>listWhere</code>, <code>listProjected</code>, <code>pageWhere</code>, <code>countWhere</code>, <code>existsById</code>.</p>
+  <p class="sub">Writing: <code>persist</code>, <code>persistMany</code>, <code>deleteById</code>, <code>deleteWhere</code>.</p>
+  <p class="sub">Schema: <code>createTable</code>, <code>dropTable</code>. Transactions: <code>beginTransaction</code>, <code>commitTransaction</code>, <code>rollbackTransaction</code>. Escape hatch: <code>execute</code>.</p>
+  <p class="sub">A projection is a select list you write, so a DTO is a query rather than a generated mapper — <code>agent_name AS "agentName"</code> is what a Java mapper spells with an annotation:</p>
+<pre><code class="lumen">let summary = findProjected(database, agents(), "id, agent_name AS \"agentName\"", "a1");</code></pre>
+  <p class="sub"><code>listWhere</code>, <code>listProjected</code>, <code>pageWhere</code>, <code>countWhere</code> and <code>deleteWhere</code> take an array of values, one per marker in the clause, and the driver binds each in its own place:</p>
+<pre><code class="lumen">let where = "agent_name = " + placeholderAt(database, 1)
+  + " AND max_steps &gt; " + placeholderAt(database, 2);
+listWhere(database, agents(), where, ["critic", "4"]);</code></pre>
+  <p class="sub"><code>pickFields</code> does the same narrowing in memory, without a round trip.</p>
+  <h4>Ordering</h4>
+<pre><code class="lumen">listOrdered(database, agents, "", [], [desc("max_steps"), asc("agent_name")]);
+pageOrdered(database, agents, "", [], [asc("max_steps"), asc("id")], 20, 40);</code></pre>
+  <p class="sub"><code>asc</code> and <code>desc</code> are what every SQL builder calls these. A key that is not a plain identifier refuses the whole query rather than being escaped into it, and <code>pageOrdered</code> refuses a page with no ordering at all — two requests for "the first twenty" can overlap or skip rows when the database is free to answer in any order, so an unordered page is not a page.</p>
+  <p class="sub">The array is assembled from one document per row rather than aggregated in SQL, because MySQL's <code>JSON_ARRAYAGG</code> does not preserve the order of what it aggregates: a subquery's <code>ORDER BY</code> decides which rows come back and not the order they sit in. <code>pageWhere</code> was silently unordered on MySQL until this, and its test passed only because <code>LIMIT 1</code> makes order unobservable.</p>
+  <p class="sub">An alias must be a plain name, on every driver. PostgreSQL would accept any quoted identifier, but a driver that builds the document's keys itself cannot, and a projection that works in development and is refused in production has not made anything portable. Expressions are otherwise free: <code>coalesce(a, b) AS "x"</code> is read correctly, commas and all.</p>
+  <h3>A repository</h3>
+  <p class="sub"><code>store.ts</code> binds a mapping to a connection, which is what Panache calls a repository and what you inject:</p>
+<pre><code class="lumen">let agents = store(database, agentsMapping());
+
+agents.findById("a1");
+agents.list();
+agents.listOrdered("max_steps &lt;= " + agents.db.placeholder, ["4"], [asc("agent_name")]);
+agents.persist(JSON.stringify(a));
+agents.count();</code></pre>
+  <p class="sub">plume's operations take <code>(db, mapping, ...)</code> because that keeps them ordinary functions — testable, composable, nothing hidden. But threading the same two values through every call is doing bookkeeping by hand, and a class holding both is holding one thing twice.</p>
+  <p class="sub">A <code>Store</code> adds no capability: every method is the same function with the first two arguments supplied. It carries <code>db</code> and <code>mapping</code>, so anything it does not cover is one plume call away.</p>
+  <p class="sub">It is named <code>Store</code> rather than <code>Repository</code> because <code>DbRepository</code> is already the mapping here. That is arguably the wrong name for a mapping — Panache would call the bound thing the repository — and renaming the older type is a change worth making deliberately rather than in passing.</p>
+  <h3>Relations</h3>
+  <p class="sub">A related row, or rows, fetched with the record that points at them:</p>
+<pre><code class="lumen">let rs: DbRelation[] = [
+  hasOne("team", "teams", "team_id", "id", "id, team_name AS \"teamName\""),
+  hasMany("tasks", "tasks", "id", "agent_id", "id, title"),
+];
+let agents = repositoryWith("agents", "id", "id", fields, rs);
+
+findById(database, agents, "a1");</code></pre>
+<pre><code>{"id":"a1","agentName":"researcher","teamId":"t1",
+ "team":{"id":"t1","teamName":"research"},
+ "tasks":[{"id":"k1","title":"read"},{"id":"k2","title":"write"}]}</code></pre>
+  <p class="sub"><strong>This is not a join.</strong> Each relation is a correlated subquery producing its own JSON, which all three databases nest inside the parent document. A join would flatten the two into one row set and leave you to regroup — and a to-many would repeat the parent once per child. Here a parent with two tasks is still one row: <code>countWhere</code> returns what it returned before the relation existed.</p>
+  <p class="sub">A to-one that matches nothing is <code>null</code>; a to-many that matches nothing is <code>[]</code>. The last argument is a select list over the other table, read the same way a projection is, so <code>team_name AS "teamName"</code> names the key. A relation whose names or select list will not parse refuses the read rather than sending it.</p>
+  <p class="sub">With the decorator, the relation is declared on the field that holds it:</p>
+<pre><code class="lumen">@entity("agents")
+class Agent {
+  @id @column("id", "text")           id: string;
+  @column("team_id", "text")          teamId: string;
+
+  @hasOne("teams", "team_id", "id", "id, team_name AS \"teamName\"")
+  team: Team;
+
+  @hasMany("tasks", "id", "agent_id", "id, title")
+  tasks: Task[];
+}</code></pre>
+  <h4>Foreign keys</h4>
+  <p class="sub">A relation already says which column points at which column of which table, which is a foreign key written out. plume will generate the constraint but never adds it for you: a schema change belongs in a migration, where it is recorded and checksummed like every other one.</p>
+<pre><code class="lumen">let plan: Migration[] = [
+  migration("1", "teams",  createTableSql(database, teams)),
+  migration("2", "agents", createTableSqlWithKeys(database, agents)),
+];</code></pre>
+  <p class="sub"><code>createTable</code> is unchanged — a relation adds nothing to it, so no existing schema moves. <code>createTableSql</code> is the statement it runs, and <code>createTableSqlWithKeys</code> is that statement with a <code>REFERENCES</code> clause per to-one relation. A to-many adds nothing here: its column lives on the other table, so the constraint belongs to that table's mapping.</p>
+  <p class="sub">On PostgreSQL and MySQL, <code>foreignKeys(db, repo)</code> returns <code>ALTER TABLE ... ADD CONSTRAINT</code> statements instead, which do not constrain creation order:</p>
+<pre><code class="lumen">migration("3", "agent keys", foreignKeys(database, agents)[0]),
+// ALTER TABLE agents ADD CONSTRAINT fk_agents_team_id
+//   FOREIGN KEY (team_id) REFERENCES teams (id)</code></pre>
+  <p class="sub">SQLite cannot add a constraint to a table that exists, so <code>foreignKeys</code> is empty there and <code>createTableSqlWithKeys</code> is the route — and SQLite enforces foreign keys only after <code>PRAGMA foreign_keys = ON</code>, which is its choice and one the tests state rather than leave to be discovered.</p>
+  <h4>Many-to-many</h4>
+  <p class="sub">Through a link table, including the case where both sides are the same table:</p>
+<pre><code class="lumen">let rs: DbRelation[] = [
+  hasManyThrough("servers", "mcp_servers", "id",
+                 "agent_mcp_servers", "agent_id", "server_id",
+                 "id", "id, server_name AS \"serverName\", url"),
+  hasManyThrough("subAgents", "agents", "id",
+                 "agent_children", "parent_id", "child_id",
+                 "id", "id, agent_name AS \"agentName\""),
+];</code></pre>
+<pre><code>{"id":"a1","agentName":"lead",
+ "servers":[{"id":"s1","serverName":"filesystem","url":"stdio://fs"}],
+ "subAgents":[{"id":"a2","agentName":"scout"}]}</code></pre>
+  <p class="sub">Reads as: this row's <code>id</code> matches <code>agent_mcp_servers.agent_id</code>, and <code>agent_mcp_servers.server_id</code> matches <code>mcp_servers.id</code>.</p>
+  <p class="sub">The far table is aliased in the generated subquery, which is what makes the second relation work. Without it <code>agents.id = agents.parent_id</code> binds both sides to the inner table and asks for rows that are their own parent — which answers <code>[]</code> rather than failing, so it is the kind of bug a test finds and an eye does not.</p>
+  <p class="sub">A to-one through a link table is refused: a link yields many, and promising otherwise is a promise the database will not keep.</p>
+  <p class="sub">What is still missing: <code>FROM a JOIN b</code> proper, so no fetching two whole entities in one query.</p>
+  <h3>Migrations</h3>
+  <p class="sub"><code>migrate.ts</code> is Flyway's model: an ordered plan of versioned steps, a history table, and a CRC-32 checksum over each step so an applied migration that has since been edited is refused rather than silently skipped.</p>
+<pre><code class="lumen">import { Migration, migration, repeatable, migrate, migrationInfo } from "./migrate.ts";
+
+let plan: Migration[] = [
+  migration("1", "create agents", "CREATE TABLE agents (id text PRIMARY KEY)"),
+  migration("1.1", "add name", "ALTER TABLE agents ADD COLUMN agent_name text"),
+  repeatable("active view", "CREATE OR REPLACE VIEW active AS SELECT * FROM agents"),
+];
+
+let r = migrate(database, plan);
+if (!r.ok) { console.error(r.failedVersion, r.error); }</code></pre>
+  <p class="sub">What it does:</p>
+  <ul>
+    <li><strong>Ordering</strong> by version, numerically, so <code>1.10</code> runs after <code>1.9</code>. The plan does not have to be written in order.</li>
+    <li><strong>Checksums.</strong> Editing an applied migration is an error naming both checksums. <code>repairChecksums</code> accepts the edit when it was deliberate.</li>
+    <li><strong>Out-of-order detection.</strong> A version below one already applied — two branches merging — is refused unless you call <code>migrateAllowingOutOfOrder</code>.</li>
+    <li><strong>Missing migrations.</strong> A step deleted from the plan after it ran is reported, because the next database built from that plan would differ.</li>
+    <li><strong>Repeatable steps.</strong> No version; re-run whenever their SQL changes. For views and procedures, which are easier to redefine than to alter.</li>
+    <li><strong>Baseline</strong> for adopting plume on a database that already has a schema.</li>
+    <li><strong><code>migrationInfo</code></strong> reports what would happen without doing it.</li>
+  </ul>
+  <h4>A plan from a directory</h4>
+  <p class="sub">The statements can live in <code>.sql</code> files, named the way Flyway names them, with the version and description read from the name:</p>
+<pre><code class="lumen">sql/1__create_teams.sql         version 1,   "create teams"
+sql/1_1__add_team_name.sql      version 1.1, "add team name"
+sql/2__create_agents.sql        version 2,   "create agents"
+sql/R__active_agents_view.sql   repeatable,  "active agents view"</code></pre>
+  <p class="sub">A name starts with its version. Flyway's <code>V</code> prefix is accepted, since directories full of it exist, but nothing needs it.</p>
+<pre><code class="lumen">let plan = migrationsFrom(embedDir("./sql"));
+migrate(database, plan);</code></pre>
+  <p class="sub">Adding a migration is adding a file. A single underscore is a dot in the version and a space in the description; <code>__</code> separates the two, which is why a description cannot contain one.</p>
+  <p class="sub"><code>embedDir</code> reads the directory <strong>while compiling</strong> (Lumen spec 458), so the SQL is reviewable as SQL and the program is still one binary — delete <code>sql/</code> after building and it still runs. Nothing requires <code>embedDir</code>, though: <code>migrationsFrom</code> takes any list of names and contents.</p>
+  <p class="sub">A file that is not a migration — a <code>README.md</code> beside the SQL — is left out of the plan and reported by <code>migrationNameProblem</code>. It is not silently skipped: a migration named wrongly would otherwise never run and never be missed.</p>
+  <p class="sub">Everything after the name is still checked. Ordering is by version, so <code>10</code> runs after <code>9</code> where a name sort would get it backwards; the checksum is over the file's contents, so editing an applied <code>.sql</code> is refused exactly as editing an inline string was.</p>
+  <h4>The state table</h4>
+  <p class="sub"><code>plume_schema_history</code>, created on first use, is what every one of those checks reads:</p>
+<pre><code class="lumen">rank | version | description   | checksum    | applied
+  1  | 1       | create teams  |  2061472074 | 2026-07-25 08:53:03
+  2  | 1.1     | add team name |    87105387 | 2026-07-25 08:53:03
+  3  | 2       | create agents | -1224966372 | 2026-07-25 08:53:03
+  4  | (rpt)   | active agents |  1515252556 | 2026-07-25 08:53:03</code></pre>
+  <p class="sub">The files were handed over as <code>2</code>, <code>1</code>, <code>R</code>, <code>1.1</code> — the ranks show the order they actually ran in. <code>installed_rank</code> records that order, <code>checksum</code> is the CRC-32 of the file's contents, and <code>installed_on</code>, <code>execution_ms</code> and <code>success</code> round out the row. The table name is fixed rather than configurable, because two of them in one database is a way to apply everything twice.</p>
+  <p class="sub">Migration bodies are your SQL, not plume's, so they are spelled for the database they run against.</p>
+  <h3>The <code>@entity</code> decorator</h3>
+  <p class="sub"><code>entity.ts</code> derives a mapping from a decorated class, so the fields are stated once instead of twice:</p>
+<pre><code class="lumen">@entity("agents")
+class Agent {
+  @id @column("id", "text")
+  id: string;
+
+  @column("agent_name", "text")
+  agentName: string;
+}
+
+persist(database, entityAgent, JSON.stringify(a));</code></pre>
+  <p class="sub">A decorator in Lumen is a pure function from a description of the declaration to a value — here, a <code>DbRepository</code>. That is why <code>entity</code> is an ordinary function of an ordinary type, tested by calling it, and why <code>entity.test.ts</code> exists before the compiler can run a decorator at all (spec 455 is not landed).</p>
+  <p class="sub">Still nothing is inferred: a field without <code>@column</code> is not mapped, a class without <code>@id</code> has no key and <code>entityProblem</code> says so. The one exception is a <code>@column("id")</code> with no type, which falls back to the declared type — the column type can always be stated outright.</p>
+  <p class="sub"><code>entity_live.test.ts</code> checks that the generated mapping is identical to the hand-written one and that every operation works against it.</p>
+  <h3>Testing</h3>
+<pre><code>sh packages/plume/build.sh
+createdb lumenvec                       # PostgreSQL
+docker run -d --name plume-mysql -e MYSQL_ROOT_PASSWORD=lumen \
+  -e MYSQL_DATABASE=lumentest -p 13306:3306 mysql:8
+docker run -d --name plume-mariadb -e MARIADB_ROOT_PASSWORD=lumen \
+  -e MARIADB_DATABASE=lumentest -p 13307:3306 mariadb:11
+
+cd packages/plume
+lumen test plume.test.ts                # PostgreSQL operations
+lumen test sqlite.test.ts               # the same, on SQLite
+lumen test mysql.test.ts                # the same, on MySQL
+lumen test migrate.test.ts              # migrations, SQLite
+lumen test migrate_pg.test.ts           # migrations, PostgreSQL
+lumen test migrate_mysql.test.ts        # migrations, MySQL
+lumen test entity.test.ts               # the @entity decorator, offline
+lumen test entity_live.test.ts          # its mapping against a database
+lumen test relations.test.ts            # relations, SQLite
+lumen test relations_pg.test.ts         # relations, PostgreSQL
+lumen test relations_mysql.test.ts      # relations, MySQL
+lumen test foreignkeys.test.ts          # generated keys, SQLite
+lumen test foreignkeys_pg.test.ts       # generated keys, PostgreSQL
+lumen test foreignkeys_mysql.test.ts    # generated keys, MySQL
+lumen test migratenames.test.ts         # the V1__name.sql convention
+lumen test ordering.test.ts             # ordering, SQLite
+lumen test ordering_pg.test.ts          # ordering, PostgreSQL
+lumen test ordering_mysql.test.ts       # ordering, MySQL
+lumen test store.test.ts                # the bound repository
+lumen test linkrelations.test.ts        # many-to-many, SQLite
+lumen test linkrelations_pg.test.ts     # many-to-many, PostgreSQL
+lumen test linkrelations_mysql.test.ts  # many-to-many, MySQL</code></pre>
+  <p class="sub"><code>PLUME_TEST_CONNINFO</code> and <code>PLUME_MYSQL_CONNINFO</code> override the connections; a suite passes whatever they hold through <code>options</code>, so setting one exercises the raw-target hatch as well. The MySQL suites pass unmodified against MariaDB — point <code>PLUME_MYSQL_CONNINFO</code> at port 13307 above to see it, which is the only evidence that "and MariaDB" is a fact rather than an assumption about wire compatibility.</p>
+  <p class="sub">A suite can be run from anywhere — the shims are linked relative to the driver that names them, not to the working directory.</p>
+  <p class="sub">Every suite runs against a real server. None of these claims survive a mock: the database is half of the mapper.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>pdf · Packages · Lumen</title>
+<meta name="description" content="Text and metadata from PDF files, via Poppler.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/pdf">
+<meta property="og:url" content="https://lumen-lang.org/packages/pdf">
+<meta property="og:title" content="pdf · Packages · Lumen">
+<meta property="og:description" content="Text and metadata from PDF files, via Poppler.">
+<meta name="twitter:title" content="pdf · Packages · Lumen">
+<meta name="twitter:description" content="Text and metadata from PDF files, via Poppler.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">pdf</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf" class="active">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>pdf</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/pdf">source</a></p>
+  <h2>pdf</h2>
+  <p class="sub">Text and metadata from PDF files, via Poppler.</p>
+  <h3>Why this delegates</h3>
+  <p class="sub">A PDF does not contain text. It contains positioned glyphs with font-specific encodings. Word spaces are frequently not encoded at all and must be inferred from coordinates; reading order across columns is recorded nowhere; ligatures are single glyphs that need a font's <code>ToUnicode</code> map to become characters; and a scanned page has no text layer whatsoever. Extracting readable text means interpreting content streams and walking font encodings.</p>
+  <p class="sub">Nobody hand-writes this. LangChain's PDF loaders wrap <code>pdf.js</code>, <code>pypdf</code> or PDFium; the only ordering logic they add is a ten-line comparison of y-coordinates, and it is the source of their most-reported bugs — words run together, text split mid-word, side-by-side columns interleaved.</p>
+  <p class="sub">So this package delegates to <a href="https://poppler.freedesktop.org/">Poppler</a>, the C++ library behind most PDF viewers on Linux. <code>pdftotext -layout</code> orders columns better than any of those heuristics, and handles encodings and ligatures correctly.</p>
+  <h3>Install</h3>
+  <p class="sub">Poppler must be on <code>PATH</code>:</p>
+<pre><code>apt install poppler-utils     # Debian, Ubuntu
+brew install poppler          # macOS</code></pre>
+  <p class="sub">A missing tool is reported in the error of the first call, which says how to install it.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { extractText, extractLayout, extractPage, readInfo } from "https://lumen-lang.org/package/std-contrib/pdf/pdf.ts";
+
+let r = extractText("manual.pdf");
+if (!r.ok) {
+  console.error(r.error);
+} else {
+  console.log(r.text);
+}
+
+// Columns and tables: layout mode keeps the page's horizontal arrangement.
+let laid = extractLayout("report.pdf");
+
+// One page, numbered from 1.
+let page3 = extractPage("manual.pdf", 3);
+
+let info = readInfo("manual.pdf");
+console.log(`${info.pages} pages, by ${info.author}`);</code></pre>
+  <h3>API</h3>
+  <table>
+    <tr><th>function</th><th><code>pdf_ffi.ts</code></th><th><code>pdf.ts</code></th><th>returns</th></tr>
+    <tr><td><code>extractText(path)</code></td><td>yes</td><td>yes</td><td>the whole document</td></tr>
+    <tr><td><code>extractLayout(path)</code></td><td>yes</td><td>yes</td><td>layout preserved, for columns and tables</td></tr>
+    <tr><td><code>extractPage(path, page)</code></td><td>yes</td><td>yes</td><td>one page, numbered from 1</td></tr>
+    <tr><td><code>extractPageLayout(path, page)</code></td><td>yes</td><td>—</td><td>one page, layout preserved</td></tr>
+    <tr><td><code>extractPages(path, first, last)</code></td><td>—</td><td>yes</td><td>an inclusive range</td></tr>
+    <tr><td><code>extractWithPassword(path, pw)</code></td><td>yes</td><td>—</td><td>an encrypted document</td></tr>
+    <tr><td><code>readInfo(path)</code></td><td>yes</td><td>yes</td><td>title, author, dates, page count</td></tr>
+    <tr><td><code>pageCount(path)</code></td><td>yes</td><td>yes</td><td>0 when it cannot be read</td></tr>
+    <tr><td><code>popplerVersion()</code></td><td>yes</td><td>—</td><td>the linked library's version</td></tr>
+  </table>
+  <p class="sub"><code>PdfText</code> is <code>{ ok, text, error }</code> in both. <code>PdfInfo</code> differs: the FFI form reports <code>created</code> and <code>modified</code> as Unix seconds (0 when absent), the subprocess form reports <code>creationDate</code> and <code>modificationDate</code> as the strings <code>pdfinfo</code> prints, and carries <code>encrypted</code>. A field the PDF omits is <code>""</code> — most PDFs carry few of them.</p>
+  <p class="sub">The two modules declare the same type names, so a program imports one or the other, not both.</p>
+  <p class="sub">Every failure is reported, never raised: a missing file, a file that is not a PDF, an encrypted document, and a missing Poppler all return <code>ok: false</code> with a reason.</p>
+  <h3>With the ai package</h3>
+  <p class="sub"><code>extractText</code> returns text, which is what the <code>ai</code> package's splitter takes, so indexing a PDF is the two steps you would expect:</p>
+<pre><code class="lumen">let r = extractText("manual.pdf");
+if (r.ok) {
+  let doc = loadText(r.text, "manual.pdf");
+  let parts = splitDocument(doc, 1000, 200);
+}</code></pre>
+  <p class="sub">Use <code>extractLayout</code> when the source has columns: the default mode will run them together, and chunks of interleaved columns retrieve poorly.</p>
+  <h3>Two forms: linked, or spawned</h3>
+  <p class="sub">The package ships the same API twice.</p>
+  <p class="sub"><strong><code>pdf_ffi.ts</code> links Poppler into the binary.</strong> <code>poppler_shim.cpp</code> flattens poppler-cpp's objects and <code>ustring</code> to the scalars and C strings the FFI carries, the way SQLite's shim flattens its out-pointers. A document is opened once and then read, so pages cost nothing extra.</p>
+  <p class="sub"><strong><code>pdf.ts</code> spawns <code>pdftotext</code> and <code>pdfinfo</code>.</strong> No build step, no headers — if Poppler is installed, it works.</p>
+  <p class="sub">Measured over 200 extractions of a three-page document:</p>
+<pre><code class="lumen">ffi            248ms
+subprocess    3332ms</code></pre>
+  <p class="sub"><strong>13×</strong>, and the gap widens with page count, because the subprocess form reruns the tool — reparsing the file — for every page or range.</p>
+  <p class="sub">Take the FFI form unless a build step is unacceptable. Take the subprocess form when you want a binary that runs anywhere Poppler happens to be installed, or when the input is untrusted enough that you would rather a malformed PDF crash a child process than yours.</p>
+  <h4>Building the shim</h4>
+<pre><code>apt install libpoppler-cpp-dev     # Debian, Ubuntu
+brew install poppler               # macOS
+sh packages/pdf/build.sh</code></pre>
+  <p class="sub"><code>build.sh</code> finds the headers and produces <code>poppler_shim.o</code>. Because <code>// @link</code> paths resolve against the working directory, compile a program that imports <code>pdf_ffi.ts</code> from this directory, or adjust the pragma to an absolute path.</p>
+  <p class="sub">The <code>// @link</code> lines name libstdc++ and libgcc_s by absolute path, which is correct for Debian and Ubuntu. On another distribution or on macOS, point them at that system's C++ runtime and unwinder — a bare <code>-lstdc++</code> does not resolve under the Zig-hosted linker, and without the unwinder <code>_Unwind_Resume</code> is left undefined because Poppler's API can throw.</p>
+  <h3>Limits</h3>
+  <ul>
+    <li><strong>Scanned PDFs yield nothing.</strong> A page that is an image has no text layer, and this does no OCR. Poppler's <code>pdftoppm</code> plus Tesseract is the usual answer, and is not wrapped here.</li>
+    <li><strong>Poppler's warnings reach stderr and cannot be suppressed from here.</strong> A spawned process inherits stderr, so "May not be a PDF file" appears in your output even though the call itself reports the failure cleanly. This is also why there is no <code>available()</code> probe: Poppler prints its version to stderr too, so nothing readable distinguishes "not installed" from "installed and quiet".</li>
+    <li><strong>No encrypted-PDF passwords.</strong> An encrypted document is reported as such rather than decrypted.</li>
+    <li>Reading order for a heavily designed page — a magazine layout, a form — is as good as Poppler's, which is good but not perfect. <code>extractLayout</code> helps.</li>
+  </ul>
+  <h3>Tests</h3>
+<pre><code>lumen test packages/pdf/pdf.test.ts          # subprocess form, from anywhere
+cd packages/pdf &amp;&amp; lumen test pdf_ffi.test.ts # FFI form, from this directory</code></pre>
+  <p class="sub">The fixtures are PDFs the test writes itself, cross-reference offsets and all, so there are no binary files in the repository and the bytes under test are visible in the source.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

@@ -8,6 +8,10 @@ and no compiler required**.
 - `index.html` — landing page (hero, features, quickstart)
 - `examples.html` — runnable example programs
 - `stdlib.html` — standard-library reference
+- `packages.html` — package catalog; `packages/<name>.html` — one page per
+  std-contrib package, generated from its README by `genpages.py` (run
+  manually when a README changes — the output is committed, so serving the
+  site still needs no build step)
 - `style.css` — styling
 - `highlight.js` — tiny self-contained syntax highlighter
 

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>websocket · Packages · Lumen</title>
+<meta name="description" content="RFC 6455 over raw TCP: frames, the handshake, and a server. A real browser connects to it, exchanges messages and closes cleanly.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/websocket">
+<meta property="og:url" content="https://lumen-lang.org/packages/websocket">
+<meta property="og:title" content="websocket · Packages · Lumen">
+<meta property="og:description" content="RFC 6455 over raw TCP: frames, the handshake, and a server. A real browser connects to it, exchanges messages and closes cleanly.">
+<meta name="twitter:title" content="websocket · Packages · Lumen">
+<meta name="twitter:description" content="RFC 6455 over raw TCP: frames, the handshake, and a server. A real browser connects to it, exchanges messages and closes cleanly.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">websocket</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket" class="active">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>websocket</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/websocket">source</a></p>
+  <h2>websocket</h2>
+  <p class="sub">RFC 6455 over raw TCP: frames, the handshake, and a server. A real browser connects to it, exchanges messages and closes cleanly.</p>
+<pre><code class="lumen">import { Peer, serveWebSocket, send } from "./server.ts";
+
+serveWebSocket(9001, (peer: Peer, message: string) =&gt; {
+  send(peer, "echo:" + message);
+});</code></pre>
+<pre><code class="lumen">browser: open
+browser: recv(10):echo:hello
+browser: recv(5005):echo:xxxxxxxxx…
+browser: close:1000 clean=true</code></pre>
+  <h3>What is checked, and against what</h3>
+  <p class="sub">Nothing here is validated against itself. A codec compared to its own output passes however wrong it is — this repository learned that from a base64 test that did exactly that.</p>
+  <table>
+    <tr><th>layer</th><th>judged by</th></tr>
+    <tr><td>frames</td><td>RFC 6455 §5.7's published bytes — 20 tests</td></tr>
+    <tr><td>handshake</td><td>RFC 6455 §1.3's worked example — 13 tests</td></tr>
+    <tr><td>server, wire</td><td>an independent Python client with its own framing</td></tr>
+    <tr><td>server, real world</td><td>Chromium, via <code>browsercheck.py</code></td></tr>
+    <tr><td>client</td><td>an independent Python server</td></tr>
+  </table>
+  <p class="sub">The RFC prints exact bytes for four frames and this asserts all four: <code>810548656c6c6f</code> for an unmasked "Hello", <code>8185 37fa213d 7f9f4d5158</code> masked, and both extended-length headers. Section 1.3's key <code>dGhlIHNhbXBsZSBub25jZQ==</code> must answer <code>s3pPLMBiTxaQ9kYGzzhZRbK+xOo=</code>; a browser compares that exactly and closes the connection on anything else.</p>
+  <p class="sub">Both halves are judged by foreign implementations: the server by Chromium and by a Python client, the client by a Python server. Nothing in the chain tests this package against itself.</p>
+  <p class="sub">The Python server prints what it received, which is where the client's own claims are checked — <code>key decoded to 16 bytes</code>, and <code>masked=True</code> on every frame. A client that forgot to mask would be refused by any real server, and a client that masked with a fixed key would defeat the point of masking.</p>
+  <h3>The decisions worth knowing</h3>
+  <p class="sub"><strong>Client frames are masked and server frames must not be.</strong> Getting it backwards is the classic failure and it is silent — a browser simply disconnects. Masking is XOR written by hand, since this language has no bitwise operator on the byte type, so it is tested across all 256 values: a byte it got wrong would corrupt payloads rather than fail.</p>
+  <p class="sub"><strong>A partial frame is not an error.</strong> A read returns whatever arrived and a frame spans reads. Treating that as failure would close a healthy connection on the first large message.</p>
+  <p class="sub"><strong>Everything decodable is drained before reading again.</strong> One read can carry several frames, and handling one per read stalls behind the socket.</p>
+  <p class="sub"><strong>Pings are answered here, not by the handler.</strong> A heartbeat somebody has to remember to answer is a heartbeat that eventually stops.</p>
+  <p class="sub"><strong>Control frames pass through fragment assembly untouched.</strong> A ping may arrive between the fragments of a message; buffering it would answer after the message it interrupted.</p>
+  <p class="sub"><strong>A close is echoed with its code.</strong> A peer that gets no answering close waits for a timeout instead of hanging up.</p>
+  <h3>Limits, stated rather than discovered</h3>
+  <p class="sub"><strong>One worker per open connection.</strong> The runtime's pool is sized for requests that end — <code>max(4, cpus × 2)</code> — and a WebSocket does not end. A dozen idle browser tabs can starve a server. This needs measuring before anything calls it production-ready.</p>
+  <p class="sub"><strong>No TLS.</strong> <code>net</code> has none, so <code>wss://</code> needs a terminating proxy in front.</p>
+  <p class="sub"><strong>8 MB per message</strong>, and a frame claiming more than 4 GB is refused rather than allocated. A peer does not get to decide how much memory this process uses.</p>
+  <h3>Two bugs this found</h3>
+  <p class="sub">Both were beneath this package, and both were found by running it rather than reading it:</p>
+  <ul>
+    <li><strong><code>socket.read()</code> treated a short read as end-of-stream.</strong> It used <code>readSliceShort</code>, which loops until its buffer is full. A 150-byte request into a 64 KB buffer looked like a closed peer, and every write after a read was silently dropped. Fixed in the compiler runtime (<code>readVec</code>, one read).</li>
+    <li><strong><code>crypto.randomBytes(16)</code> returns 32 hex characters, not 16 bytes</strong>, so base64 of it is a 44-character key decoding to 32 bytes where the RFC says 16. Converted at the call site, with the surprise noted there.</li>
+  </ul>
+  <h3>Testing</h3>
+<pre><code>cd packages/websocket
+lumen test frame.test.ts        # 20, the RFC's own bytes
+lumen test handshake.test.ts    # 13, the RFC's own exchange
+
+lumen run echo-server.ts &amp;      # then, against a real browser:
+python3 browsercheck.py
+
+lumen run ws-client-demo.ts    # the client, against an independent server</code></pre>
+  <p class="sub"><code>browsercheck.py</code> carries two harness lessons in its comments, because both cost real time: <code>about:blank</code> has an opaque origin and Chromium refuses to dial from it, and a page serving a Content-Security-Policy blocks <code>connect-src</code> to another port. Every "the browser failed" before those were understood was the harness, not the server — the browser had never opened a connection.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>
