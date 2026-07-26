@@ -1,0 +1,11 @@
+{
+  "feature": "474-sha1-for-websocket",
+  "cases": [
+    {
+      "id": "sha1.valid.vectors",
+      "source": "../examples/valid/vectors.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "a9993e364706816aba3e25717850c26c9cd0d89d\nda39a3ee5e6b4b0d3255bfef95601890afd80709\n20\ncGs6c2s=\nYQ==\nhello world\ns3pPLMBiTxaQ9kYGzzhZRbK+xOo=" }
+    }
+  ]
+}
