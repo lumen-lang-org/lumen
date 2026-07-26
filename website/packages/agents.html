@@ -293,6 +293,18 @@ lumen test run.test.ts        # 11, every refusal on the run path
 lumen test knowledge.test.ts  # 11, what retrieval refuses before embedding</code></pre>
   <p class="sub">The live halves are <code>examples/mount-mcp.ts</code>, <code>examples/call-model.ts</code> and <code>examples/run-with-tools.ts</code>. A test that needs a credential or a listening port is a test that gets skipped, so those stay examples and the refusals stay tests.</p>
   <p class="sub">Requires <code>sh ../plume/build.sh</code> first.</p>
+  <h3>The console</h3>
+  <p class="sub">A web frontend for this package lives in <code>app/</code>: a Lit element built on <a href="https://www.npmjs.com/package/@nuraly/lumenui">LumenUI</a>'s <code>&lt;nr-chatbot&gt;</code>, served by Vite, talking to the API above through one origin.</p>
+  <p class="sub">Run everything — database, API, console — with one command:</p>
+<pre><code>cd packages/agents
+cp .env.example .env      # set LUMEN_MASTER_KEY (openssl rand -hex 16)
+docker compose up --build</code></pre>
+  <p class="sub">Console on <code>http://localhost:8080</code>, the API behind it on <code>/api</code>, PostgreSQL with pgvector underneath so documents and retrieval work.</p>
+  <p class="sub">For development against a locally running API:</p>
+<pre><code>cd packages/agents/app
+npm install
+npm run dev               # http://localhost:5173, /api proxied to :8100</code></pre>
+  <p class="sub">The app is plain npm/Vite and is not part of the URL-import catalog; CI's <code>packages/*/*.ts</code> glob is one level deep on purpose, so the TypeScript here is never handed to the Lumen compiler. Keep it that way — both languages use <code>.ts</code>.</p>
   </div>
   </div>
 </section>
