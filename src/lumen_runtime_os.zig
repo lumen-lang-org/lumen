@@ -702,6 +702,38 @@ pub fn emitOsCryptoRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanage
             \\    return __cryptoHexEncode(alloc, &out);
             \\}
             \\
+            \\fn __cryptoSha1Raw(data: []const u8) [std.crypto.hash.Sha1.digest_length]u8 {
+            \\    var out: [std.crypto.hash.Sha1.digest_length]u8 = undefined;
+            \\    std.crypto.hash.Sha1.hash(data, &out, .{});
+            \\    return out;
+            \\}
+            \\
+            \\fn __cryptoSha1(alloc: std.mem.Allocator, data: []const u8) []const u8 {
+            \\    const out = __cryptoSha1Raw(data);
+            \\    return __cryptoHexEncode(alloc, &out);
+            \\}
+            \\
+            \\fn __cryptoSha1Bytes(alloc: std.mem.Allocator, data: []const u8) []const u8 {
+            \\    const out = __cryptoSha1Raw(data);
+            \\    const buf = alloc.alloc(u8, out.len) catch unreachable;
+            \\    @memcpy(buf, &out);
+            \\    return buf;
+            \\}
+            \\
+            \\fn __cryptoBase64Encode(alloc: std.mem.Allocator, data: []const u8) []const u8 {
+            \\    const enc = std.base64.standard.Encoder;
+            \\    const buf = alloc.alloc(u8, enc.calcSize(data.len)) catch unreachable;
+            \\    return enc.encode(buf, data);
+            \\}
+            \\
+            \\fn __cryptoBase64Decode(alloc: std.mem.Allocator, text: []const u8) []const u8 {
+            \\    const dec = std.base64.standard.Decoder;
+            \\    const n = dec.calcSizeForSlice(text) catch return "";
+            \\    const buf = alloc.alloc(u8, n) catch unreachable;
+            \\    dec.decode(buf, text) catch return "";
+            \\    return buf;
+            \\}
+            \\
         );
     }
     if (program.needs_aead) {

@@ -1030,6 +1030,22 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.appendSlice(arena, "__cryptoSha256(__alloc, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "sha1")) {
+        try w.appendSlice(arena, "__cryptoSha1(__alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "sha1Bytes")) {
+        try w.appendSlice(arena, "__cryptoSha1Bytes(__alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "base64Encode")) {
+        try w.appendSlice(arena, "__cryptoBase64Encode(__alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.append(arena, ')');
+    } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "base64Decode")) {
+        try w.appendSlice(arena, "__cryptoBase64Decode(__alloc, ");
+        try em.emitExpr(cl.args[0], w, arena);
+        try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "randomKey")) {
         try w.appendSlice(arena, "__cryptoRandomKey(__io, __alloc)");
     } else if (std.mem.eql(u8, cl.namespace, "crypto") and std.mem.eql(u8, cl.name, "encrypt")) {

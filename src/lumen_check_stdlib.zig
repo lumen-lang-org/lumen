@@ -264,6 +264,42 @@ pub fn cryptoCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCa
         call.checked_type = .string;
         return .string;
     }
+    // sha1 (spec 474): for RFC 6455's handshake token and nothing else. It is
+    // broken for anything relying on collision resistance; here the input is a
+    // random key the peer just sent plus a constant from the RFC, and the
+    // output is compared for equality. No SHA-1, no WebSocket.
+    if (std.mem.eql(u8, call.name, "sha1") or std.mem.eql(u8, call.name, "sha1Bytes")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const sha1_arg = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, sha1_arg)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_crypto_api = true;
+        call.checked_type = .string;
+        return .string;
+    }
+    // base64 (spec 474): an encoding protocols and credentials need, not a
+    // string operation — which is why it lives here rather than on String.
+    if (std.mem.eql(u8, call.name, "base64Encode") or std.mem.eql(u8, call.name, "base64Decode")) {
+        if (call.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const b64_arg = self.exprType(program, call.args[0], line, col) orelse return null;
+        if (!types.same(.string, b64_arg)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        program.uses_io = true;
+        program.needs_crypto_api = true;
+        call.checked_type = .string;
+        return .string;
+    }
     if (std.mem.eql(u8, call.name, "randomKey")) {
         if (call.args.len != 0) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
