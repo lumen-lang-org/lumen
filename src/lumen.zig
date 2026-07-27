@@ -214,6 +214,22 @@ const ImportSpec = struct {
 /// One `{ name }` or `{ name as alias }` entry of a named import.
 const NamedBinding = struct { name: []const u8, alias: []const u8 };
 
+/// The local names an import line binds, whatever its form.
+fn importedAliases(arena: std.mem.Allocator, kind: ImportSpec.Kind) []const []const u8 {
+    switch (kind) {
+        .named => |binds| {
+            const out = arena.alloc([]const u8, binds.len) catch return &.{};
+            for (binds, 0..) |b, i| out[i] = b.alias;
+            return out;
+        },
+        .default, .namespace => |b| {
+            const out = arena.alloc([]const u8, 1) catch return &.{};
+            out[0] = b;
+            return out;
+        },
+    }
+}
+
 /// Splits a comma-separated `{ a, b as c }` binding list into name/alias pairs.
 /// Each entry is `name` (alias == name) or `name as alias`. Rejects empty entries
 /// and stray punctuation so the import surface stays the TypeScript named form.
@@ -1284,6 +1300,17 @@ fn appendExpandedSource(
                 if (std.mem.eql(u8, b.name, b.alias)) continue;
                 if (exp.claimed(b.name)) try avoid_child.append(arena, b.name);
             };
+            // A name this file imports AND declares itself is not the spelling
+            // coincidence spec 476 absorbs: the author asked for the name and
+            // then wrote it again, so a call to it has two readings and only
+            // they can say which was meant. Absorbing it would pick one
+            // silently, so this stays an error (spec 015).
+            for (importedAliases(arena, import_spec.kind)) |alias| {
+                if (physical.get(alias) == null) continue;
+                setImportDetail(arena, "'{s}' is imported here and also declared in this file", .{alias});
+                for (decls.items) |d| if (std.mem.eql(u8, d.name, alias)) setImportLoc(path, d.line);
+                return error.ShadowedImport;
+            }
             child_recorded = true;
             const child = try appendExpandedSource(exp, imported_path, import_spec.kind, avoid_child.items, depth + 1);
             switch (import_spec.kind) {
@@ -2351,6 +2378,14 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             error.DecoratorFailed => {
                 const f: DecoratorFail = g_decorator_fail orelse .{ .file = path, .at = .{ .line = 1, .col = 1, .msg = "a decorator failed" } };
                 try err.print("{s}:{d}:{d}: error: {s} [E_DECORATOR]\n", .{ displayPath(f.file), f.at.line, f.at.col, f.at.msg });
+            },
+            error.ShadowedImport => {
+                const loc = g_import_loc;
+                try err.print("{s}:{d}:1: error: {s} [E_DUPLICATE_BINDING]\n", .{
+                    if (loc) |l| displayPath(l.file) else path,
+                    if (loc) |l| l.line else 1,
+                    detail orelse "a name is both imported and declared here",
+                });
             },
             error.DuplicateTypeName => {
                 const loc = g_import_loc;
