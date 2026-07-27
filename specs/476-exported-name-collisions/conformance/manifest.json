@@ -1,0 +1,11 @@
+{
+  "feature": "476-exported-name-collisions",
+  "cases": [
+    {
+      "id": "collision.valid.two-modules-export-one-name",
+      "source": "../examples/valid/collide.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "5\n77\n3\n82" }
+    }
+  ]
+}

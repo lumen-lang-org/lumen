@@ -1022,6 +1022,15 @@ const Expander = struct {
         return self.taken.get(name) != null or self.type_owners.get(name) != null;
     }
 
+    /// Whether some OTHER module has already claimed this name. A module
+    /// reached by two paths shares one canonical key, so it never counts as
+    /// clashing with itself.
+    fn ownedByOther(self: *Expander, name: []const u8, id: []const u8) bool {
+        if (self.taken.get(name)) |owner| return !std.mem.eql(u8, owner, id);
+        if (self.type_owners.get(name)) |owner| return !std.mem.eql(u8, owner.key, id);
+        return false;
+    }
+
     /// A `NAME__mN` identifier nothing in the flat program has claimed yet.
     fn freshName(self: *Expander, name: []const u8) ![]const u8 {
         while (true) {
@@ -1120,13 +1129,23 @@ fn appendExpandedSource(
         if (demanded and exp.claimed(d.name)) {
             name = try exp.freshName(d.name);
             try renames.append(arena, .{ .name = d.name, .alias = name });
-        } else if (d.kind == .value and !d.exported and !d.is_default and exp.claimed(d.name)) {
-            // A declaration that is not exported cannot be named from outside
-            // its module, so a clash with a name some other module claimed is
-            // the compiler's to absorb, not the author's to avoid: two files'
-            // private helpers sharing a spelling is ordinary, and neither
-            // author has seen the other's code (spec 473). Same mechanism as
-            // the importer-forced rename above — only the default changes.
+        } else if (d.kind == .value and !d.is_default and exp.ownedByOther(d.name, id)) {
+            // A clash with a name another module already claimed is the
+            // compiler's to absorb, not the author's to avoid: two files
+            // sharing a spelling is ordinary, and neither author has seen the
+            // other's code (spec 473).
+            //
+            // This holds whether or not the declaration is exported. An export
+            // is reached through its module's export table, which records the
+            // physical name, so renaming the definition and letting importers
+            // resolve through that table is invisible to both authors — which
+            // is what a module system is for. Refusing instead made two
+            // packages unable to coexist because each had a function called
+            // `authHeaders` (spec 476).
+            //
+            // Only a clash with a DIFFERENT module renames: a module reached
+            // twice by two paths is one module, and renaming it against itself
+            // would break the second importer.
             name = try exp.freshName(d.name);
             try renames.append(arena, .{ .name = d.name, .alias = name });
         } else if (d.kind == .type_name) {
