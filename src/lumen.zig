@@ -8,11 +8,18 @@ const decorator = @import("lumen_decorator.zig");
 const CompileMode = enum {
     release_safe,
     release_fast,
+    /// The self-hosted backend and linker instead of LLVM — measured ~35x
+    /// faster on a decorator module (0.6s against 21s). Never the mode of a
+    /// binary a user keeps: it exists for compiles whose output is consumed
+    /// and thrown away inside this very process, where machine-code quality
+    /// buys nothing and the wait is the whole cost.
+    debug,
 
     fn zigName(self: CompileMode) []const u8 {
         return switch (self) {
             .release_safe => "ReleaseSafe",
             .release_fast => "ReleaseFast",
+            .debug => "Debug",
         };
     }
 
@@ -20,6 +27,7 @@ const CompileMode = enum {
         return switch (self) {
             .release_safe => true,
             .release_fast => false,
+            .debug => true,
         };
     }
 };
@@ -984,26 +992,38 @@ fn buildAndRun(
     const arena = exp.arena;
     const io = exp.io;
 
-    // The entry point is a temporary file in someone else's directory, so its
-    // name carries the running process: two compiles of the same decorator at
-    // once write and delete their own.
-    const entry_name = try std.fmt.allocPrint(arena, ".lumen-decorator-{s}-{x}.ts", .{ binding.exported, std.Thread.getCurrentId() });
-    const entry_path = try std.fs.path.join(arena, &.{ std.fs.path.dirname(module_path) orelse ".", entry_name });
-    const entry = try decorator.entrySource(arena, try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.basename(module_path)}), binding.exported);
-    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = entry_path, .data = entry }) catch
-        return decoratorFailed(arena, path, app, "'@{s}' could not be run: {s} is not writable, and the generated entry point is written beside the module it calls", .{ app.name, displayPath(std.fs.path.dirname(module_path) orelse ".") });
-    defer std.Io.Dir.cwd().deleteFile(io, entry_path) catch {};
+    // One build per decorator, however many sites apply it. The program being
+    // built does not depend on the application — the description is argv at
+    // run time — so the binary is memoized on (module, exported name) and
+    // only the run happens per site. Before this, every @controller in a file
+    // rebuilt an identical program from scratch.
+    const memo_key = try std.fmt.allocPrint(arena, "{s}:{s}", .{ module_path, binding.exported });
+    const exe = exp.decorator_exes.get(memo_key) orelse built: {
+        // The entry point is a temporary file in someone else's directory, so
+        // its name carries the running process: two compiles of the same
+        // decorator at once write and delete their own.
+        const entry_name = try std.fmt.allocPrint(arena, ".lumen-decorator-{s}-{x}.ts", .{ binding.exported, std.Thread.getCurrentId() });
+        const entry_path = try std.fs.path.join(arena, &.{ std.fs.path.dirname(module_path) orelse ".", entry_name });
+        const entry = try decorator.entrySource(arena, try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.basename(module_path)}), binding.exported);
+        std.Io.Dir.cwd().writeFile(io, .{ .sub_path = entry_path, .data = entry }) catch
+            return decoratorFailed(arena, path, app, "'@{s}' could not be run: {s} is not writable, and the generated entry point is written beside the module it calls", .{ app.name, displayPath(std.fs.path.dirname(module_path) orelse ".") });
+        defer std.Io.Dir.cwd().deleteFile(io, entry_path) catch {};
 
-    // The decorator's module is the user's own code with its own file and
-    // lines, so its diagnostics are the message — captured rather than printed,
-    // so they arrive under the decorator that pulled the module in.
-    var captured: std.Io.Writer.Allocating = .init(arena);
-    const built = compileFile(arena, io, entry_path, .release_safe, .build_quiet, &.{}, false, false, &captured.writer) catch |e|
-        return decoratorFailed(arena, path, app, "'@{s}' could not be compiled: {s}", .{ app.name, @errorName(e) });
-    const exe = try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.stem(entry_name)});
-    defer std.Io.Dir.cwd().deleteFile(io, exe) catch {};
-    if (built != 0)
-        return decoratorFailed(arena, path, app, "'@{s}' does not compile:\n{s}", .{ app.name, std.mem.trim(u8, captured.written(), "\n") });
+        // The decorator's module is the user's own code with its own file and
+        // lines, so its diagnostics are the message — captured rather than
+        // printed, so they arrive under the decorator that pulled the module
+        // in. Debug, not ReleaseSafe: this binary lives for the length of one
+        // expansion and its speed of construction is the user's whole wait.
+        var captured: std.Io.Writer.Allocating = .init(arena);
+        const built = compileFile(arena, io, entry_path, .debug, .build_quiet, &.{}, false, false, &captured.writer) catch |e|
+            return decoratorFailed(arena, path, app, "'@{s}' could not be compiled: {s}", .{ app.name, @errorName(e) });
+        const exe_path = try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.stem(entry_name)});
+        if (built != 0)
+            return decoratorFailed(arena, path, app, "'@{s}' does not compile:\n{s}", .{ app.name, std.mem.trim(u8, captured.written(), "\n") });
+        try exp.decorator_exes.put(arena, memo_key, exe_path);
+        try exp.decorator_cleanup.append(arena, exe_path);
+        break :built exe_path;
+    };
 
     const ran = std.process.run(arena, io, .{ .argv = &.{ exe, description } }) catch
         return decoratorFailed(arena, path, app, "'@{s}' was built but could not be run", .{app.name});
@@ -1033,6 +1053,16 @@ const Expander = struct {
     /// paths would report a module as conflicting with itself.
     type_owners: std.StringHashMapUnmanaged(TypeOwner) = .empty,
     mangle_seq: u32 = 0,
+    /// Decorator binaries already built during this expansion, keyed by
+    /// module path + ":" + exported name. A decorator's program does not
+    /// depend on the site that applies it — the application arrives as
+    /// argv at run time — so fifteen @controller sites are fifteen runs of
+    /// ONE binary. Building it fifteen times was the whole of api.ts's
+    /// five-minute check: 15 x ~21s of identical work.
+    decorator_exes: std.StringHashMapUnmanaged([]const u8) = .empty,
+    /// The executables above, for deletion when the expansion finishes —
+    /// they outlive one buildAndRun call precisely because they are shared.
+    decorator_cleanup: std.ArrayListUnmanaged([]const u8) = .empty,
 
     fn claimed(self: *Expander, name: []const u8) bool {
         return self.taken.get(name) != null or self.type_owners.get(name) != null;
@@ -1403,6 +1433,14 @@ fn readSourceWithImports(arena: std.mem.Allocator, io: std.Io, path: []const u8)
     var out: std.ArrayListUnmanaged(u8) = .empty;
     var line_map: std.ArrayListUnmanaged(LineOrigin) = .empty;
     var exp: Expander = .{ .arena = arena, .io = io, .out = &out, .line_map = &line_map };
+    // Decorator binaries are shared across application sites, so they outlive
+    // any single build call and are removed here, when nothing can run them
+    // again. On the error path they are left behind — a stray temp file is a
+    // better failure than deleting evidence mid-diagnosis — and the pid in
+    // the name keeps two processes out of each other's files.
+    defer for (exp.decorator_cleanup.items) |exe| {
+        std.Io.Dir.cwd().deleteFile(io, exe) catch {};
+    };
     _ = try appendExpandedSource(&exp, path, null, &.{}, 0);
     return .{ .text = out.items, .line_map = line_map.items };
 }
