@@ -470,10 +470,18 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\                };
                 \\                const res = self.handler.call(self.handler.ctx, req);
                 \\                const conn_header: []const u8 = if (keep_alive) "keep-alive" else "close";
-                \\                w.print("HTTP/1.1 {d} OK\r\nContent-Type: text/plain\r\nContent-Length: {d}\r\nConnection: {s}\r\n", .{ res.status, res.body.len, conn_header }) catch break :conn;
+                \\                w.print("HTTP/1.1 {d} OK\r\nContent-Length: {d}\r\nConnection: {s}\r\n", .{ res.status, res.body.len, conn_header }) catch break :conn;
+                \\                var typed = false;
                 \\                for (res.headers.keys_.items, res.headers.values_.items) |hk, hv| {
+                \\                    if (std.ascii.eqlIgnoreCase(hk, "content-type")) typed = true;
                 \\                    w.print("{s}: {s}\r\n", .{ hk, hv }) catch break :conn;
                 \\                }
+                \\                // The default goes last and only when the handler named none.
+                \\                // Writing it first sent two Content-Type lines for any handler
+                \\                // that set its own, and a duplicate is not a merge: a client
+                \\                // takes one of them, usually the first, so the handler's type
+                \\                // was silently discarded.
+                \\                if (!typed) w.writeAll("Content-Type: text/plain\r\n") catch break :conn;
                 \\                w.writeAll("\r\n") catch break :conn;
                 \\                w.writeAll(res.body) catch break :conn;
                 \\                w.flush() catch break :conn;
@@ -654,10 +662,15 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\            };
                 \\            const res = handler.call(handler.ctx, req);
                 \\            const conn_header: []const u8 = if (keep_alive) "keep-alive" else "close";
-                \\            w.print("HTTP/1.1 {d} OK\r\nContent-Type: text/plain\r\nContent-Length: {d}\r\nConnection: {s}\r\n", .{ res.status, res.body.len, conn_header }) catch break :conn;
+                \\            w.print("HTTP/1.1 {d} OK\r\nContent-Length: {d}\r\nConnection: {s}\r\n", .{ res.status, res.body.len, conn_header }) catch break :conn;
+                \\            var typed = false;
                 \\            for (res.headers.keys_.items, res.headers.values_.items) |hk, hv| {
+                \\                if (std.ascii.eqlIgnoreCase(hk, "content-type")) typed = true;
                 \\                w.print("{s}: {s}\r\n", .{ hk, hv }) catch break :conn;
                 \\            }
+                \\            // Only when the handler named none — see the note on the other
+                \\            // server above: two Content-Type lines are not a merge.
+                \\            if (!typed) w.writeAll("Content-Type: text/plain\r\n") catch break :conn;
                 \\            w.writeAll("\r\n") catch break :conn;
                 \\            w.writeAll(res.body) catch break :conn;
                 \\            w.flush() catch break :conn;
