@@ -1,0 +1,17 @@
+{
+  "feature": "479-suspending-await",
+  "cases": [
+    {
+      "id": "suspending-await.valid.two-waiters-interleave",
+      "source": "../examples/valid/two-waiters-interleave.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "both started\nfinished quick\nfinished slow\nawaited slow then quick\n" }
+    },
+    {
+      "id": "suspending-await.valid.call-does-not-run-the-body",
+      "source": "../examples/valid/call-does-not-run-the-body.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "after the call\ninside the body\nawaited 1\n" }
+    }
+  ]
+}
