@@ -474,6 +474,10 @@ pub fn specializeFunction(self: *Checker, decl: *const ast.FunctionDecl, type_ar
         .visibility = decl.visibility,
         .is_static = decl.is_static,
         .accessor = decl.accessor,
+        // Where the call that asked for this specialization was written, so a
+        // diagnostic from the specialized body lands there rather than on the
+        // generic's own line in whatever library declared it (spec 478).
+        .spec_site = .{ line, col },
         .line = decl.line,
         .col = decl.col,
     };
@@ -635,7 +639,12 @@ pub fn cloneExpr(self: *Checker, e: *const ast.Expr) CompileError!*ast.Expr {
             const na = self.arena.create(ast.ArrowExpr) catch return error.OutOfMemory;
             const nparams = self.arena.alloc(ast.FunctionParam, a.params.len) catch return error.OutOfMemory;
             for (a.params, 0..) |pp, i| nparams[i] = .{ .name = pp.name, .annotation = try self.substCur(pp.annotation) };
-            na.* = .{ .params = nparams, .return_annotation = try self.substCur(a.return_annotation), .body_expr = if (a.body_expr) |be| try self.cloneExpr(be) else null, .body_block = a.body_block };
+            // The block body is cloned like any other body. Sharing it between
+            // specializations left one copy of every statement inside an arrow:
+            // a `let x: T` in there never had `T` substituted, and anything the
+            // checker rewrites in place (spec 477's `Class.*`) was rewritten
+            // once, for whichever specialization reached it first.
+            na.* = .{ .params = nparams, .return_annotation = try self.substCur(a.return_annotation), .body_expr = if (a.body_expr) |be| try self.cloneExpr(be) else null, .body_block = if (a.body_block) |bb| try self.cloneBody(bb) else null };
             break :blk .{ .arrow = na };
         },
         .new_expr => |ne| blk: {

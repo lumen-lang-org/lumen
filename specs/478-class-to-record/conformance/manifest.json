@@ -1,0 +1,23 @@
+{
+  "feature": "478-class-to-record",
+  "cases": [
+    {
+      "id": "class-to-record.valid.controllers-without-mount",
+      "source": "../examples/valid/controllers-without-mount.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "200 AgentApi.list agents of lead\n200 ModelApi.list models\n400 AgentApi.broken field \"name\" is missing\n200 AgentApi.list agents of second" }
+    },
+    {
+      "id": "class-to-record.invalid.not-a-controller",
+      "source": "../examples/invalid/not-a-controller.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "`NotAController` carries no `@routes`" }
+    },
+    {
+      "id": "class-to-record.invalid.two-converters",
+      "source": "../examples/invalid/two-converters.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "which one this should use is not the compiler's to choose" }
+    }
+  ]
+}

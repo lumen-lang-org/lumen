@@ -600,6 +600,11 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
         .function_decl => |*decl| {
             if (self.nested_stmt_depth > 0) return self.fail(decl.line, decl.col, "E_UNSUPPORTED_NESTED_FUNCTION");
             if (decl.checked_return_type == null) try self.declareFunction(program, decl);
+            // A generated specialization carries the call that asked for it, so
+            // anything reported from inside its body lands there (spec 478).
+            const saved_site = self.spec_site;
+            self.spec_site = decl.spec_site;
+            defer self.spec_site = saved_site;
             try self.checkFunctionBody(program, decl);
         },
         .var_decl => |*decl| try self.checkVarDecl(program, decl),

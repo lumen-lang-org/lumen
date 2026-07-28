@@ -211,6 +211,11 @@ pub const FunctionDecl = struct {
     // function is a template; concrete copies are generated per call instance.
     type_params: [][]const u8 = &.{},
     decorators: []Decorator = &.{},
+    // For a generated specialization of a generic function: the line and column
+    // of the call that asked for it. A diagnostic raised while checking a
+    // specialized body belongs at the call that chose the type, not at the
+    // library line that happens to hold the generic (spec 478).
+    spec_site: ?[2]u32 = null,
     line: u32,
     col: u32,
 };

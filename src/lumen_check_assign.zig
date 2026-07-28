@@ -81,6 +81,28 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                             return self.ensureAssignable(program, expected, value, line, col);
                         }
                     }
+                    // A class instance where a record is expected (spec 478).
+                    // There is no subtyping between the two and never will be,
+                    // so this is always an error today — which is what makes it
+                    // safe to give it a meaning. If the program declares exactly
+                    // one generic converter `f<T>(c: T): <this record>`, the
+                    // value goes through it.
+                    //
+                    // That is how `listen(8100, [new AgentApi(db), …])` works:
+                    // the array literal's elements are checked against `Mount`,
+                    // and `mount<T>` is the one function that makes one. No
+                    // program that compiles today changes meaning, because every
+                    // site this fires on is a site that does not compile today.
+                    if (actual_type == .class_type) {
+                        if (try self.recordConverter(type_name, line, col)) |fname| {
+                            const inner = self.arena.create(ast.Expr) catch return error.OutOfMemory;
+                            inner.* = value.*;
+                            const args = self.arena.alloc(*ast.Expr, 1) catch return error.OutOfMemory;
+                            args[0] = inner;
+                            value.* = .{ .call = .{ .name = fname, .args = args } };
+                            return self.ensureAssignable(program, expected, value, line, col);
+                        }
+                    }
                     return self.failTypeMismatch(line, col, expected, actual_type);
                 }
                 return;
@@ -378,4 +400,30 @@ pub fn castAllowed(self: *Checker, source: types.Type, target: types.Type) bool 
     const sn = types.zigName(self.arena, source) catch return false;
     const tn = types.zigName(self.arena, target) catch return false;
     return std.mem.eql(u8, sn, tn);
+}
+
+/// The one generic function that turns any class instance into `record` — a
+/// declaration `f<T>(c: T): record` taking a single parameter of its own type
+/// parameter (spec 478). Null when the program declares none, an error naming
+/// both when it declares more than one, since which of them was meant is not
+/// something the compiler should guess.
+///
+/// Generic on purpose: a converter written for one class (`f(c: Agent): Mount`)
+/// says nothing about any other, and should not be reached for one.
+pub fn recordConverter(self: *Checker, record: []const u8, line: u32, col: u32) CompileError!?[]const u8 {
+    var found: ?[]const u8 = null;
+    var it = self.generic_funcs.iterator();
+    while (it.next()) |entry| {
+        const decl = entry.value_ptr.*;
+        if (decl.type_params.len != 1 or decl.params.len != 1) continue;
+        if (decl.params[0].is_rest or decl.params[0].default != null) continue;
+        if (!std.mem.eql(u8, decl.params[0].annotation, decl.type_params[0])) continue;
+        if (!std.mem.eql(u8, decl.return_annotation, record)) continue;
+        if (found) |first| {
+            const msg = std.fmt.allocPrint(self.arena, "both `{s}` and `{s}` turn a class into `{s}`, so which one this should use is not the compiler's to choose — write the call", .{ first, decl.name, record }) catch "two converters to this record";
+            return self.fail(line, col, msg);
+        }
+        found = decl.name;
+    }
+    return found;
 }

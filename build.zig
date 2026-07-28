@@ -77,6 +77,7 @@ pub fn build(b: *std.Build) void {
         "src/lumen_check_stmt.zig",
         "src/lumen_check_assign.zig",
         "src/lumen_check_expr.zig",
+        "src/lumen_check_meta.zig",
         "src/lumen_check_stdlib.zig",
         "src/lumen_decorator.zig",
         "src/lumen_describe.zig",
@@ -320,6 +321,16 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_476.addArg("specs/476-exported-name-collisions/conformance/manifest.json");
     conformance_cmd_476.addArg("zig-out/bin/lumen");
 
+    const conformance_cmd_477 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_477.step.dependOn(b.getInstallStep());
+    conformance_cmd_477.addArg("specs/477-class-metadata/conformance/manifest.json");
+    conformance_cmd_477.addArg("zig-out/bin/lumen");
+
+    const conformance_cmd_478 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_478.step.dependOn(b.getInstallStep());
+    conformance_cmd_478.addArg("specs/478-class-to-record/conformance/manifest.json");
+    conformance_cmd_478.addArg("zig-out/bin/lumen");
+
     const conformance_step = b.step("conformance", "Run Lumen manifest conformance cases");
     conformance_step.dependOn(&conformance_cmd.step);
     conformance_step.dependOn(&conformance_cmd_010.step);
@@ -363,4 +374,6 @@ pub fn build(b: *std.Build) void {
     conformance_step.dependOn(&conformance_cmd_474.step);
     conformance_step.dependOn(&conformance_cmd_475.step);
     conformance_step.dependOn(&conformance_cmd_476.step);
+    conformance_step.dependOn(&conformance_cmd_477.step);
+    conformance_step.dependOn(&conformance_cmd_478.step);
 }

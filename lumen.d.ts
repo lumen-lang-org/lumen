@@ -70,6 +70,20 @@ declare function defer(fn: () => void): Disposable;
 declare function embed(path: string): string;
 declare function embedDir(path: string): { name: string; text: string }[];
 
+// What the compiler knows about a class (spec 477). All three are resolved
+// while compiling and rewritten in place — `Class.nameOf` becomes the class's
+// name as a string literal, `Class.decorator` a reference to the constant that
+// decorator left beside the class, and `Class.invoke` a call to a generated
+// chain of direct method calls. Nothing named `Class` exists at run time, and
+// there is no reflection in the binary. Declared here only so tsc can see a
+// type; `any` is as close as plain TypeScript gets to "the method's own return
+// type, resolved from the class".
+declare const Class: {
+  nameOf(instance: any): string;
+  decorator(instance: any, decorator: string): any;
+  invoke(instance: any, method: string, ...args: any[]): any;
+};
+
 // Testing. `test("name", () => { ... })` declares a test run by `lumen test`
 // (Jest/Vitest/node:test-style). Inside a test body, `expect` asserts either a
 // boolean condition or a matcher on a value:

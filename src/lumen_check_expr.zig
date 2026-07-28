@@ -19,6 +19,7 @@ const types = @import("lumen_types.zig");
 const diag_mod = @import("lumen_diag.zig");
 const check_mod = @import("lumen_check.zig");
 const check_stmt = @import("lumen_check_stmt.zig");
+const check_meta = @import("lumen_check_meta.zig");
 
 const Checker = check_mod.Checker;
 const CompileError = diag_mod.CompileError;
@@ -2190,6 +2191,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             return func.return_type;
         },
         .static_call => |*call| {
+            // `Class.nameOf` / `Class.decorator` / `Class.invoke` (spec 477):
+            // what the compiler knows about a class, resolved here and rewritten
+            // in place, so nothing named `Class` reaches the emitter. A local
+            // binding of the name shadows it, as with every other namespace.
+            if (std.mem.eql(u8, call.namespace, check_meta.namespace) and self.bindingPtr(check_meta.namespace) == null) {
+                return self.classMetaCall(program, e, call, line, col);
+            }
             // The parser treats `name.method(...)` as a namespace call whenever
             // `name` is a known std namespace (fs/path/os/...), but a local
             // binding of that name shadows the namespace. Re-route to an instance

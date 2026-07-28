@@ -25,6 +25,7 @@ const check_class = @import("lumen_check_class.zig");
 const check_stmt = @import("lumen_check_stmt.zig");
 const check_assign = @import("lumen_check_assign.zig");
 const check_expr = @import("lumen_check_expr.zig");
+const check_meta = @import("lumen_check_meta.zig");
 
 const CompileError = diag_mod.CompileError;
 const Diag = diag_mod.Diag;
@@ -220,6 +221,7 @@ pub const Checker = struct {
     // Assignability/cast checking lives in lumen_check_assign.zig.
     pub const ensureAssignable = check_assign.ensureAssignable;
     pub const castAllowed = check_assign.castAllowed;
+    pub const recordConverter = check_assign.recordConverter;
 
     // Expression type-checking (the core dispatch) lives in lumen_check_expr.zig.
     pub const exprType = check_expr.exprType;
@@ -227,6 +229,9 @@ pub const Checker = struct {
     pub const wrapFloat = check_expr.wrapFloat;
     pub const checkCbArg = check_expr.checkCbArg;
     pub const fieldType = check_expr.fieldType;
+
+    // `Class.nameOf` / `Class.decorator` / `Class.invoke` (spec 477).
+    pub const classMetaCall = check_meta.classMetaCall;
 
     arena: std.mem.Allocator,
     scopes: std.ArrayListUnmanaged(Scope) = .empty,
@@ -257,6 +262,10 @@ pub const Checker = struct {
     // rewrite annotations inside a generic body while it is being cloned.
     subst_params: []const []const u8 = &.{},
     subst_args: []const []const u8 = &.{},
+    // While checking a generated specialization's body: the line and column of
+    // the call that asked for it (spec 478). A diagnostic that would otherwise
+    // point at the generic's own line in a library points here instead.
+    spec_site: ?[2]u32 = null,
     current_class: ?[]const u8 = null,
     in_constructor: bool = false,
     // Set once every top-level declaration is registered. Parameter renaming

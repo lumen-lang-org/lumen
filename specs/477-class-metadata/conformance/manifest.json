@@ -1,0 +1,17 @@
+{
+  "feature": "477-class-metadata",
+  "cases": [
+    {
+      "id": "class-metadata.valid.mounted-controllers",
+      "source": "../examples/valid/mounted-controllers.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "200 AgentApi.list agents of lead\n200 ModelApi.list models\n200 AgentApi.find agent a1\n400 AgentApi.broken the request could not be handled: field \"name\" is missing\n404 /nope" }
+    },
+    {
+      "id": "class-metadata.invalid.no-such-decorator",
+      "source": "../examples/invalid/no-such-decorator.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "carries no `@entity`" }
+    }
+  ]
+}
