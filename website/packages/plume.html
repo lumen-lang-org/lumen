@@ -169,12 +169,19 @@ brew install postgresql@17 sqlite mariadb             # macOS</code></pre>
 listWhere(database, agents(), where, ["critic", "4"]);</code></pre>
   <p class="sub"><code>pickFields</code> does the same narrowing in memory, without a round trip.</p>
   <h4>Ordering</h4>
-<pre><code class="lumen">listOrdered(database, agents, { order: [desc("max_steps"), asc("agent_name")] });
-pageOrdered(database, agents, { order: [asc("max_steps"), asc("id")], limit: 20, offset: 40 });
-listOrdered(database, agents, { where: "enabled = " + database.placeholder, args: ["1"],
-                                order: [asc("agent_name")] });</code></pre>
+<pre><code class="lumen">listOrdered(database, agents, { order: [
+  { column: "max_steps", direction: "desc" },
+  { column: "agent_name" },                    // omitted is "asc", as in SQL
+] });
+
+pageOrdered(database, agents, { order: [{ column: "id" }], limit: 20, offset: 40 });
+
+listOrdered(database, agents, { where: "enabled = " + database.placeholder,
+                                args: ["1"], order: [{ column: "agent_name" }] });</code></pre>
   <p class="sub">What to read past the mapping is one <code>DbQuery</code> record — <code>where</code>, <code>args</code>, <code>order</code> or <code>orderBy</code>, <code>limit</code>, <code>offset</code>, every field optional, so <code>{}</code> is every row. It was a positional tail ending in two bare numbers, and a caller who passed the offset where the limit goes got a page the database was happy to return.</p>
-  <p class="sub"><code>asc</code> and <code>desc</code> are what every SQL builder calls these. A key that is not a plain identifier refuses the whole query rather than being escaped into it, and <code>pageOrdered</code> refuses a page with no ordering at all — two requests for "the first twenty" can overlap or skip rows when the database is free to answer in any order, so an unordered page is not a page.</p>
+  <p class="sub"><code>direction</code> is <code>"asc" | "desc"</code> rather than a <code>descending</code> boolean, because a boolean only reads correctly beside the name of the function that set it: <code>{ column: "agent_name", descending: false }</code> says "not descending" where SQL, and every caller, says ascending.</p>
+  <p class="sub">There were <code>asc(column)</code> and <code>desc(column)</code> constructors for this, and there are not now: a constructor whose whole body is a record literal is a second spelling of the same value, a name to import, and one more thing to look up to find out which field it sets.</p>
+  <p class="sub">A key that is not a plain identifier refuses the whole query rather than being escaped into it, and <code>pageOrdered</code> refuses a page with no ordering at all — two requests for "the first twenty" can overlap or skip rows when the database is free to answer in any order, so an unordered page is not a page.</p>
   <p class="sub">The array is assembled from one document per row rather than aggregated in SQL, because MySQL's <code>JSON_ARRAYAGG</code> does not preserve the order of what it aggregates: a subquery's <code>ORDER BY</code> decides which rows come back and not the order they sit in. <code>pageWhere</code> was silently unordered on MySQL until this, and its test passed only because <code>LIMIT 1</code> makes order unobservable.</p>
   <p class="sub">An alias must be a plain name, on every driver. PostgreSQL would accept any quoted identifier, but a driver that builds the document's keys itself cannot, and a projection that works in development and is refused in production has not made anything portable. Expressions are otherwise free: <code>coalesce(a, b) AS "x"</code> is read correctly, commas and all.</p>
   <h3>A repository</h3>
@@ -184,7 +191,7 @@ listOrdered(database, agents, { where: "enabled = " + database.placeholder, args
 agents.findById("a1");
 agents.list();
 agents.listOrdered({ where: "max_steps &lt;= " + agents.db.placeholder, args: ["4"],
-                     order: [asc("agent_name")] });
+                     order: [{ column: "agent_name" }] });
 agents.persist(JSON.stringify(a));
 agents.count();</code></pre>
   <p class="sub">plume's operations take <code>(db, mapping, ...)</code> because that keeps them ordinary functions — testable, composable, nothing hidden. But threading the same two values through every call is doing bookkeeping by hand, and a class holding both is holding one thing twice.</p>
