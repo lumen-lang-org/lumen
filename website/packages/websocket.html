@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>websocket · Packages · Lumen</title>
-<meta name="description" content="RFC 6455 over raw TCP: frames, the handshake, and a server. A real browser connects to it, exchanges messages and closes cleanly.">
+<meta name="description" content="RFC 6455 websockets: handshake, frames, server and client — a browser connects, exchanges and closes clean.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/websocket">
 <meta property="og:url" content="https://lumen-lang.org/packages/websocket">
 <meta property="og:title" content="websocket · Packages · Lumen">
-<meta property="og:description" content="RFC 6455 over raw TCP: frames, the handshake, and a server. A real browser connects to it, exchanges messages and closes cleanly.">
+<meta property="og:description" content="RFC 6455 websockets: handshake, frames, server and client — a browser connects, exchanges and closes clean.">
 <meta name="twitter:title" content="websocket · Packages · Lumen">
-<meta name="twitter:description" content="RFC 6455 over raw TCP: frames, the handshake, and a server. A real browser connects to it, exchanges messages and closes cleanly.">
+<meta name="twitter:description" content="RFC 6455 websockets: handshake, frames, server and client — a browser connects, exchanges and closes clean.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -122,16 +122,6 @@ browser: close:1000 clean=true</code></pre>
     <li><strong><code>socket.read()</code> treated a short read as end-of-stream.</strong> It used <code>readSliceShort</code>, which loops until its buffer is full. A 150-byte request into a 64 KB buffer looked like a closed peer, and every write after a read was silently dropped. Fixed in the compiler runtime (<code>readVec</code>, one read).</li>
     <li><strong><code>crypto.randomBytes(16)</code> returns 32 hex characters, not 16 bytes</strong>, so base64 of it is a 44-character key decoding to 32 bytes where the RFC says 16. Converted at the call site, with the surprise noted there.</li>
   </ul>
-  <h3>Testing</h3>
-<pre><code>cd packages/websocket
-lumen test frame.test.ts        # 20, the RFC's own bytes
-lumen test handshake.test.ts    # 13, the RFC's own exchange
-
-lumen run echo-server.ts &amp;      # then, against a real browser:
-python3 browsercheck.py
-
-lumen run ws-client-demo.ts    # the client, against an independent server</code></pre>
-  <p class="sub"><code>browsercheck.py</code> carries two harness lessons in its comments, because both cost real time: <code>about:blank</code> has an opaque origin and Chromium refuses to dial from it, and a page serving a Content-Security-Policy blocks <code>connect-src</code> to another port. Every "the browser failed" before those were understood was the harness, not the server — the browser had never opened a connection.</p>
   </div>
   </div>
 </section>

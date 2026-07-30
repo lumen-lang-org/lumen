@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>pdf · Packages · Lumen</title>
-<meta name="description" content="Text and metadata from PDF files, via Poppler.">
+<meta name="description" content="PDF text and metadata via Poppler: layout mode, page ranges, document info.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/pdf">
 <meta property="og:url" content="https://lumen-lang.org/packages/pdf">
 <meta property="og:title" content="pdf · Packages · Lumen">
-<meta property="og:description" content="Text and metadata from PDF files, via Poppler.">
+<meta property="og:description" content="PDF text and metadata via Poppler: layout mode, page ranges, document info.">
 <meta name="twitter:title" content="pdf · Packages · Lumen">
-<meta name="twitter:description" content="Text and metadata from PDF files, via Poppler.">
+<meta name="twitter:description" content="PDF text and metadata via Poppler: layout mode, page ranges, document info.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -156,10 +156,6 @@ sh packages/pdf/build.sh</code></pre>
     <li><strong>No encrypted-PDF passwords.</strong> An encrypted document is reported as such rather than decrypted.</li>
     <li>Reading order for a heavily designed page — a magazine layout, a form — is as good as Poppler's, which is good but not perfect. <code>extractLayout</code> helps.</li>
   </ul>
-  <h3>Tests</h3>
-<pre><code>lumen test packages/pdf/pdf.test.ts          # subprocess form, from anywhere
-cd packages/pdf &amp;&amp; lumen test pdf_ffi.test.ts # FFI form, from this directory</code></pre>
-  <p class="sub">The fixtures are PDFs the test writes itself, cross-reference offsets and all, so there are no binary files in the repository and the bytes under test are visible in the source.</p>
   </div>
   </div>
 </section>

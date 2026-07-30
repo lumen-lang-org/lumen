@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>token-gate · Packages · Lumen</title>
-<meta name="description" content="Token-optimizing command proxy (tkg): run a command and compress its output before it reaches an AI assistant&#x27;s context window.">
+<meta name="description" content="Token-optimizing command proxy (tkg): per-command handlers for git/ls/find/du/grep/tables/linters/tests, savings ledger, Claude Code hook.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/token-gate">
 <meta property="og:url" content="https://lumen-lang.org/packages/token-gate">
 <meta property="og:title" content="token-gate · Packages · Lumen">
-<meta property="og:description" content="Token-optimizing command proxy (tkg): run a command and compress its output before it reaches an AI assistant&#x27;s context window.">
+<meta property="og:description" content="Token-optimizing command proxy (tkg): per-command handlers for git/ls/find/du/grep/tables/linters/tests, savings ledger, Claude Code hook.">
 <meta name="twitter:title" content="token-gate · Packages · Lumen">
-<meta name="twitter:description" content="Token-optimizing command proxy (tkg): run a command and compress its output before it reaches an AI assistant&#x27;s context window.">
+<meta name="twitter:description" content="Token-optimizing command proxy (tkg): per-command handlers for git/ls/find/du/grep/tables/linters/tests, savings ledger, Claude Code hook.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -143,8 +143,6 @@ const cleaned = truncate(dedupe(splitLines(raw)), 40);</code></pre>
   </ul>
 <pre><code>chmod +x hook/tkg-hook.sh
 # then merge hook/settings.snippet.json into .claude/settings.json</code></pre>
-  <h3>Tests</h3>
-<pre><code>lumen test packages/token-gate/token-gate.ts</code></pre>
   </div>
   </div>
 </section>

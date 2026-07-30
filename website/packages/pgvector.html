@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>pgvector · Packages · Lumen</title>
-<meta name="description" content="A persistent vector store: PostgreSQL with the pgvector extension, reached through the C FFI.">
+<meta name="description" content="Persistent vector store on PostgreSQL + pgvector via FFI: upsert, cosine search, distance bounds.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/pgvector">
 <meta property="og:url" content="https://lumen-lang.org/packages/pgvector">
 <meta property="og:title" content="pgvector · Packages · Lumen">
-<meta property="og:description" content="A persistent vector store: PostgreSQL with the pgvector extension, reached through the C FFI.">
+<meta property="og:description" content="Persistent vector store on PostgreSQL + pgvector via FFI: upsert, cosine search, distance bounds.">
 <meta name="twitter:title" content="pgvector · Packages · Lumen">
-<meta name="twitter:description" content="A persistent vector store: PostgreSQL with the pgvector extension, reached through the C FFI.">
+<meta name="twitter:description" content="Persistent vector store on PostgreSQL + pgvector via FFI: upsert, cosine search, distance bounds.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -132,7 +132,8 @@ pgClose();</code></pre>
   <p class="sub">A <code>PgHit</code> carries <code>id</code>, <code>text</code>, <code>source</code>, <code>metadata</code>, <code>distance</code> and <code>score</code>. <code>distance</code> is what the database returned, so smaller is nearer; <code>score</code> is <code>1 - distance</code>, the cosine similarity that reads the familiar way.</p>
   <p class="sub">Calls that change something return a <code>PgResult</code> — <code>{ ok, rows, error }</code> — with the database's own message rather than one this package invented.</p>
   <h4>Why the names are prefixed</h4>
-  <p class="sub">Every module is inlined into one flat namespace, so two packages that both define <code>search</code> or <code>count</code> cannot be used together — and import aliasing does not help, since it renames references rather than definitions. The prefix is what lets this and the <code>ai</code> package appear in one program.</p>
+  <p class="sub">The prefix names the store rather than dodging a clash. <code>pgVectorLiteral</code> and <code>pgParseVector</code> are pgvector's own wire format, and <code>pgSearch</code> says which store is being searched when a program has more than one.</p>
+  <p class="sub">It began as a workaround — two modules exporting <code>search</code> used to be a compile error — and that reason is gone: the compiler now renames internally and importers resolve through the exporting module's table (spec 476). The names stay because they read well, not because they must.</p>
   <h3>Skipping work you have already paid for</h3>
   <p class="sub">The point of persisting vectors is not to embed the same text twice:</p>
 <pre><code class="lumen">let pending: string[] = [];
@@ -150,9 +151,6 @@ if (pending.length &gt; 0) {
   <h3>Safety</h3>
   <p class="sub">Every value is sent as a bound parameter through <code>PQexecParams</code>, never pasted into statement text, so a document containing a quote is data rather than syntax. A test stores the string <code>it's a test'); DROP TABLE lumen_test_vectors; --</code> and then checks the table is still there.</p>
   <p class="sub">Table names cannot be bound — SQL has no placeholder for an identifier — so they are checked against <code>pgSafeIdentifier</code> (letters, digits, underscores, not starting with a digit) and refused otherwise.</p>
-  <h3>Tests</h3>
-<pre><code>cd packages/pgvector &amp;&amp; lumen test pgvector.test.ts</code></pre>
-  <p class="sub">They need a live database, which is the point: the distance operators, the vector literal round-trip, and the width check are the parts worth knowing are real, and none of them can be tested against a mock. Override the connection with <code>PGVECTOR_TEST_CONNINFO</code>.</p>
   <h3>Limits</h3>
   <ul>
     <li>One connection and one live result at a time, held behind globals in the shim, as the FFI has no handle type to pass back and forth.</li>

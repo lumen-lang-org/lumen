@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>socketio · Packages · Lumen</title>
-<meta name="description" content="A socket.io server the official browser client connects to.">
+<meta name="description" content="A socket.io server the official browser client connects to: Engine.IO and Socket.IO framing over websocket.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/socketio">
 <meta property="og:url" content="https://lumen-lang.org/packages/socketio">
 <meta property="og:title" content="socketio · Packages · Lumen">
-<meta property="og:description" content="A socket.io server the official browser client connects to.">
+<meta property="og:description" content="A socket.io server the official browser client connects to: Engine.IO and Socket.IO framing over websocket.">
 <meta name="twitter:title" content="socketio · Packages · Lumen">
-<meta name="twitter:description" content="A socket.io server the official browser client connects to.">
+<meta name="twitter:description" content="A socket.io server the official browser client connects to: Engine.IO and Socket.IO framing over websocket.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -111,13 +111,6 @@ connected: True</code></pre>
   <p class="sub"><strong>An event that asked for acknowledgement always gets one.</strong> If the handler sends nothing, an empty ack goes anyway: otherwise the client's callback stays pending forever with nothing to show why.</p>
   <h3>Why the session loop lives here</h3>
   <p class="sub">A socket.io session has per-connection state — a sid, a namespace, whether CONNECT has happened — and the websocket package's server calls back per <em>message</em>, with nowhere to keep any of it. So the loop that owns a connection is written here, over websocket's framing rather than its server.</p>
-  <h3>Testing</h3>
-<pre><code>cd packages/socketio
-lumen test protocol.test.ts    # 18, socket.io's own wire strings
-
-lumen run sio-demo.ts &amp;
-python3 siocheck.py            # the real client, from a page serving their CDN bundle</code></pre>
-  <p class="sub"><code>siocheck.py</code> needs a page serving socket.io's browser bundle on another port; the script says which. Two harness traps cost time here and are worth knowing: a page with a Content-Security-Policy blocks the connection, and <code>about:blank</code> has an opaque origin that Chromium refuses to dial from.</p>
   </div>
   </div>
 </section>

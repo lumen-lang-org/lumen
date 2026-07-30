@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>rest · Packages · Lumen</title>
-<meta name="description" content="A router and an HTTP server for Lumen. Thin on purpose: matching a request to a handler is the part worth having, and this is that part.">
+<meta name="description" content="Router and HTTP server: decorated controllers, a route table checked at startup, JSON replies.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/rest">
 <meta property="og:url" content="https://lumen-lang.org/packages/rest">
 <meta property="og:title" content="rest · Packages · Lumen">
-<meta property="og:description" content="A router and an HTTP server for Lumen. Thin on purpose: matching a request to a handler is the part worth having, and this is that part.">
+<meta property="og:description" content="Router and HTTP server: decorated controllers, a route table checked at startup, JSON replies.">
 <meta name="twitter:title" content="rest · Packages · Lumen">
-<meta name="twitter:description" content="A router and an HTTP server for Lumen. Thin on purpose: matching a request to a handler is the part worth having, and this is that part.">
+<meta name="twitter:description" content="Router and HTTP server: decorated controllers, a route table checked at startup, JSON replies.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -113,10 +113,19 @@ if (problem != "") { console.error(problem); }</code></pre>
   route("GET",  "/agents",     "list"),
   route("GET",  "/agents/:id", "find"),
 ]);</code></pre>
+  <h3>Catching the rest of a path</h3>
+  <p class="sub">A pattern's <strong>last</strong> segment may be <code>*name</code>, which stands for the whole rest of the path — one segment or more, joined with <code>/</code>, each segment decoded on its own.</p>
+<pre><code class="lumen">let table = routes([
+  route("GET", "/files/:box/*path", "readFile"),
+]);
+// GET /files/b1/css/main.css  -&gt;  box = b1, path = "css/main.css"</code></pre>
+  <p class="sub">A catch-all is always the last resort: any route that matches without one wins, whatever order the table is written in. So <code>/files/:box/v/:n</code> still answers <code>/files/b1/v/3</code> even if the catch-all is written above it, and you never have to reason about placement to keep an exact route alive.</p>
+  <p class="sub">The capture is reported, not vetted. <code>..</code> and an encoded <code>%2F</code> arrive as sent and read as ordinary path text, so a handler that resolves one against a filesystem or key space owns that check itself.</p>
   <h3>What it refuses, at startup</h3>
   <ul>
     <li><strong>A shadowed route.</strong> <code>/agents/:id</code> written before <code>/agents/new</code> makes the second unreachable — a <code>:param</code> matches any literal. Named at startup rather than found as a 404 later.</li>
-    <li><strong>A pattern that does not start with <code>/</code></strong>, one naming a parameter twice, or a <code>:</code> with no name.</li>
+    <li><strong>A <code>*name</code> that is not the last segment.</strong> Nothing after a catch-all could ever be reached, so the pattern does not mean what it looks like.</li>
+    <li><strong>A pattern that does not start with <code>/</code></strong>, one naming a parameter twice — <code>:</code> and <code>*</code> share one namespace, since a handler reads a parameter by name — or a <code>:</code> or <code>*</code> with no name.</li>
     <li><strong>An empty table</strong>, and a route naming no handler.</li>
   </ul>
   <h3>What it answers</h3>
@@ -128,12 +137,6 @@ if (problem != "") { console.error(problem); }</code></pre>
   <h3>Reading a request</h3>
   <p class="sub"><code>param(req, "id")</code>, <code>queryParam(req, "limit", "10")</code>, <code>header(req, name)</code> — case-insensitive, since the server lowercases what it receives — and <code>bearerToken(req)</code>, which every API grows and every one writes differently.</p>
   <p class="sub"><code>ok</code>, <code>created</code>, <code>noContent</code>, <code>json</code>, <code>problem</code>, <code>notFound</code>, <code>badRequest</code> build replies. An error is a JSON document, because a client parsing the body should not have to guess whether it got JSON or a sentence.</p>
-  <h3>Testing</h3>
-<pre><code>cd packages/rest
-lumen test router.test.ts       # 25 — matching, params, query, decoding
-lumen test controller.test.ts   # 12 — the decorator, by calling it
-lumen test server.test.ts       # 16 — dispatch, refusals, bindings</code></pre>
-  <p class="sub">None of them binds a port. <code>dispatch</code> is split from <code>serve</code> precisely so every route, refusal and binding failure is a function call — a test that has to bind a port is a test that gets skipped.</p>
   <h3>Dependency inversion</h3>
   <p class="sub">A controller takes what it needs through its constructor. Nothing reaches for a global, so a test builds one against a different database and the same code runs.</p>
 <pre><code class="lumen">@controller("/agents")

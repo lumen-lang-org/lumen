@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>plume · Packages · Lumen</title>
-<meta name="description" content="An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.">
+<meta name="description" content="Typed data-mapper and migration tool over PostgreSQL, SQLite and MySQL via FFI: explicit field/column mapping, projections, relations, checksummed…">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/plume">
 <meta property="og:url" content="https://lumen-lang.org/packages/plume">
 <meta property="og:title" content="plume · Packages · Lumen">
-<meta property="og:description" content="An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.">
+<meta property="og:description" content="Typed data-mapper and migration tool over PostgreSQL, SQLite and MySQL via FFI: explicit field/column mapping, projections, relations, checksummed…">
 <meta name="twitter:title" content="plume · Packages · Lumen">
-<meta name="twitter:description" content="An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.">
+<meta name="twitter:description" content="Typed data-mapper and migration tool over PostgreSQL, SQLite and MySQL via FFI: explicit field/column mapping, projections, relations, checksummed…">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -140,8 +140,7 @@ let i: int = 0;
 while (i &lt; size) { pool.push(postgresConnection(config)); i = i + 1; }</code></pre>
   <p class="sub">That is a pool. Handing one out is the program's business: a program with an event loop, a thread pool or one connection per request wants three different answers and none of them belong in a mapper. <code>close()</code> releases the slot.</p>
   <h3>Building</h3>
-<pre><code>sh packages/plume/build.sh</code></pre>
-  <p class="sub">Each shim is optional; a missing library is a skipped shim rather than a failed build.</p>
+  <p class="sub">The drivers link C shims, built by this package's <code>build.sh</code>. Each shim is optional; a missing library is a skipped shim rather than a failed build.</p>
 <pre><code>apt install libpq-dev libsqlite3-dev libmariadb-dev   # Debian, Ubuntu
 brew install postgresql@17 sqlite mariadb             # macOS</code></pre>
   <h3>Operations</h3>
@@ -291,40 +290,6 @@ persist(database, entityAgent, JSON.stringify(a));</code></pre>
   <p class="sub">A decorator in Lumen is a pure function from a description of the declaration to a value — here, a <code>DbRepository</code>. That is why <code>entity</code> is an ordinary function of an ordinary type, tested by calling it, and why <code>entity.test.ts</code> exists before the compiler can run a decorator at all (spec 455 is not landed).</p>
   <p class="sub">Still nothing is inferred: a field without <code>@column</code> is not mapped, a class without <code>@id</code> has no key and <code>entityProblem</code> says so. The one exception is a <code>@column("id")</code> with no type, which falls back to the declared type — the column type can always be stated outright.</p>
   <p class="sub"><code>entity_live.test.ts</code> checks that the generated mapping is identical to the hand-written one and that every operation works against it.</p>
-  <h3>Testing</h3>
-<pre><code>sh packages/plume/build.sh
-createdb lumenvec                       # PostgreSQL
-docker run -d --name plume-mysql -e MYSQL_ROOT_PASSWORD=lumen \
-  -e MYSQL_DATABASE=lumentest -p 13306:3306 mysql:8
-docker run -d --name plume-mariadb -e MARIADB_ROOT_PASSWORD=lumen \
-  -e MARIADB_DATABASE=lumentest -p 13307:3306 mariadb:11
-
-cd packages/plume
-lumen test plume.test.ts                # PostgreSQL operations
-lumen test sqlite.test.ts               # the same, on SQLite
-lumen test mysql.test.ts                # the same, on MySQL
-lumen test migrate.test.ts              # migrations, SQLite
-lumen test migrate_pg.test.ts           # migrations, PostgreSQL
-lumen test migrate_mysql.test.ts        # migrations, MySQL
-lumen test entity.test.ts               # the @entity decorator, offline
-lumen test entity_live.test.ts          # its mapping against a database
-lumen test relations.test.ts            # relations, SQLite
-lumen test relations_pg.test.ts         # relations, PostgreSQL
-lumen test relations_mysql.test.ts      # relations, MySQL
-lumen test foreignkeys.test.ts          # generated keys, SQLite
-lumen test foreignkeys_pg.test.ts       # generated keys, PostgreSQL
-lumen test foreignkeys_mysql.test.ts    # generated keys, MySQL
-lumen test migratenames.test.ts         # the V1__name.sql convention
-lumen test ordering.test.ts             # ordering, SQLite
-lumen test ordering_pg.test.ts          # ordering, PostgreSQL
-lumen test ordering_mysql.test.ts       # ordering, MySQL
-lumen test store.test.ts                # the bound repository
-lumen test linkrelations.test.ts        # many-to-many, SQLite
-lumen test linkrelations_pg.test.ts     # many-to-many, PostgreSQL
-lumen test linkrelations_mysql.test.ts  # many-to-many, MySQL</code></pre>
-  <p class="sub"><code>PLUME_TEST_CONNINFO</code> and <code>PLUME_MYSQL_CONNINFO</code> override the connections; a suite passes whatever they hold through <code>options</code>, so setting one exercises the raw-target hatch as well. The MySQL suites pass unmodified against MariaDB — point <code>PLUME_MYSQL_CONNINFO</code> at port 13307 above to see it, which is the only evidence that "and MariaDB" is a fact rather than an assumption about wire compatibility.</p>
-  <p class="sub">A suite can be run from anywhere — the shims are linked relative to the driver that names them, not to the working directory.</p>
-  <p class="sub">Every suite runs against a real server. None of these claims survive a mock: the database is half of the mapper.</p>
   </div>
   </div>
 </section>
