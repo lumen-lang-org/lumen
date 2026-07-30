@@ -83,33 +83,47 @@
   · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/plume">source</a></p>
   <h2>plume</h2>
   <p class="sub">An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.</p>
-  <p class="sub">Nothing is inferred. A table name, a key, every column and every SQL type is written out; plume never guesses a column from a field name or a table from a type. The mapping is a value you construct, so it can be built, inspected and tested like any other value.</p>
-<pre><code class="lumen">import { Db, DbConfig } from "./driver.ts";
+  <p class="sub">Nothing is inferred. A table name, a key, every column and every SQL type is written out; plume never guesses a column from a field name or a table from a type. The declaration that states the shape states the mapping with it:</p>
+<pre><code class="lumen">import { entity } from "./entity.ts";
+import { Db, DbConfig } from "./driver.ts";
 import { postgres } from "./postgres.ts";
-import { field, repository, connectDatabase, createTable, persist, findById } from "./plume.ts";
+import { DbRepository, connectDatabase, createTable, persist, findById } from "./plume.ts";
 
-type Agent = { id: string, agentName: string, maxSteps: int, temperature: number };
+@entity("agents")
+class Agent {
+  @id @column("id", "text")
+  id: string;
 
-let database: Db = postgres();
+  @column("agent_name", "text")
+  agentName: string;
 
-function agents(): DbRepository {
-  let fields: DbField[] = [
-    field("id", "id", "text"),
-    field("agentName", "agent_name", "text"),
-    field("maxSteps", "max_steps", "int"),
-    field("temperature", "temperature", "float8"),
-  ];
-  return repository("agents", "id", "id", fields);
+  @column("max_steps", "int")
+  maxSteps: int;
+
+  @column("temperature", "float8")
+  temperature: number;
+
+  // No @column, so no column: a field the program keeps and the table does not.
+  scratch: string;
 }
 
+// A row still crosses the boundary as a record, because a class instance cannot
+// travel as JSON yet (spec 456).
+type AgentRow = { id: string, agentName: string, maxSteps: int, temperature: number };
+
+let database: Db = postgres();
 let config: DbConfig = { host: "127.0.0.1", database: "app", user: "lumen" };
 connectDatabase(database, config);
-createTable(database, agents());
 
-let a: Agent = { id: "a1", agentName: "researcher", maxSteps: 5, temperature: 0.2 };
-persist(database, agents(), JSON.stringify(a));
+let agents: DbRepository = entityAgent;
+createTable(database, agents);
 
-let back: Agent = JSON.parse&lt;Agent&gt;(findById(database, agents(), "a1"));</code></pre>
+let a: AgentRow = { id: "a1", agentName: "researcher", maxSteps: 5, temperature: 0.2 };
+persist(database, agents, JSON.stringify(a));
+
+let back: AgentRow = JSON.parse&lt;AgentRow&gt;(findById(database, agents, "a1"));</code></pre>
+  <p class="sub"><code>agentName</code> becomes <code>agent_name</code> because the decorator was told to, not because a convention inferred it. The compiler runs <code>entity</code> while compiling and leaves its return value behind as a constant named for the decorator and the class — <code>entityAgent</code>, a <code>DbRepository</code> record literal, so the program does no work at startup to have it.</p>
+  <p class="sub">The decorator needs the decorator compiler (Lumen spec 455, merged). Everything else in this package works on any Lumen build, and a mapping is an ordinary value either way — a hand-built one is at the end, and every operation below takes both.</p>
   <p class="sub">A record crosses the boundary as JSON in both directions. That is what lets one set of operations serve any record type without a generated mapper per type: the database does the conversion, using functions it already has.</p>
   <h3>Databases</h3>
   <table>
@@ -149,14 +163,17 @@ brew install postgresql@17 sqlite mariadb             # macOS</code></pre>
   <p class="sub">Schema: <code>createTable</code>, <code>dropTable</code>. Transactions: <code>beginTransaction</code>, <code>commitTransaction</code>, <code>rollbackTransaction</code>. Escape hatch: <code>execute</code>.</p>
   <p class="sub">A projection is a select list you write, so a DTO is a query rather than a generated mapper — <code>agent_name AS "agentName"</code> is what a Java mapper spells with an annotation:</p>
 <pre><code class="lumen">let summary = findProjected(database, agents(), "id, agent_name AS \"agentName\"", "a1");</code></pre>
-  <p class="sub"><code>listWhere</code>, <code>listProjected</code>, <code>pageWhere</code>, <code>countWhere</code> and <code>deleteWhere</code> take an array of values, one per marker in the clause, and the driver binds each in its own place:</p>
+  <p class="sub"><code>listWhere</code>, <code>listProjected</code>, <code>countWhere</code> and <code>deleteWhere</code> take an array of values, one per marker in the clause, and the driver binds each in its own place — as does <code>args</code> on the query record the ordered reads take:</p>
 <pre><code class="lumen">let where = "agent_name = " + placeholderAt(database, 1)
   + " AND max_steps &gt; " + placeholderAt(database, 2);
 listWhere(database, agents(), where, ["critic", "4"]);</code></pre>
   <p class="sub"><code>pickFields</code> does the same narrowing in memory, without a round trip.</p>
   <h4>Ordering</h4>
-<pre><code class="lumen">listOrdered(database, agents, "", [], [desc("max_steps"), asc("agent_name")]);
-pageOrdered(database, agents, "", [], [asc("max_steps"), asc("id")], 20, 40);</code></pre>
+<pre><code class="lumen">listOrdered(database, agents, { order: [desc("max_steps"), asc("agent_name")] });
+pageOrdered(database, agents, { order: [asc("max_steps"), asc("id")], limit: 20, offset: 40 });
+listOrdered(database, agents, { where: "enabled = " + database.placeholder, args: ["1"],
+                                order: [asc("agent_name")] });</code></pre>
+  <p class="sub">What to read past the mapping is one <code>DbQuery</code> record — <code>where</code>, <code>args</code>, <code>order</code> or <code>orderBy</code>, <code>limit</code>, <code>offset</code>, every field optional, so <code>{}</code> is every row. It was a positional tail ending in two bare numbers, and a caller who passed the offset where the limit goes got a page the database was happy to return.</p>
   <p class="sub"><code>asc</code> and <code>desc</code> are what every SQL builder calls these. A key that is not a plain identifier refuses the whole query rather than being escaped into it, and <code>pageOrdered</code> refuses a page with no ordering at all — two requests for "the first twenty" can overlap or skip rows when the database is free to answer in any order, so an unordered page is not a page.</p>
   <p class="sub">The array is assembled from one document per row rather than aggregated in SQL, because MySQL's <code>JSON_ARRAYAGG</code> does not preserve the order of what it aggregates: a subquery's <code>ORDER BY</code> decides which rows come back and not the order they sit in. <code>pageWhere</code> was silently unordered on MySQL until this, and its test passed only because <code>LIMIT 1</code> makes order unobservable.</p>
   <p class="sub">An alias must be a plain name, on every driver. PostgreSQL would accept any quoted identifier, but a driver that builds the document's keys itself cannot, and a projection that works in development and is refused in production has not made anything portable. Expressions are otherwise free: <code>coalesce(a, b) AS "x"</code> is read correctly, commas and all.</p>
@@ -166,7 +183,8 @@ pageOrdered(database, agents, "", [], [asc("max_steps"), asc("id")], 20, 40);</c
 
 agents.findById("a1");
 agents.list();
-agents.listOrdered("max_steps &lt;= " + agents.db.placeholder, ["4"], [asc("agent_name")]);
+agents.listOrdered({ where: "max_steps &lt;= " + agents.db.placeholder, args: ["4"],
+                     order: [asc("agent_name")] });
 agents.persist(JSON.stringify(a));
 agents.count();</code></pre>
   <p class="sub">plume's operations take <code>(db, mapping, ...)</code> because that keeps them ordinary functions — testable, composable, nothing hidden. But threading the same two values through every call is doing bookkeeping by hand, and a class holding both is holding one thing twice.</p>
@@ -175,10 +193,13 @@ agents.count();</code></pre>
   <h3>Relations</h3>
   <p class="sub">A related row, or rows, fetched with the record that points at them:</p>
 <pre><code class="lumen">let rs: DbRelation[] = [
-  hasOne("team", "teams", "team_id", "id", "id, team_name AS \"teamName\""),
-  hasMany("tasks", "tasks", "id", "agent_id", "id, title"),
+  hasOne({ field: "team", table: "teams", localColumn: "team_id", foreignColumn: "id",
+           columns: "id, team_name AS \"teamName\"" }),
+  hasMany({ field: "tasks", table: "tasks", localColumn: "id", foreignColumn: "agent_id",
+            columns: "id, title" }),
 ];
-let agents = repositoryWith("agents", "id", "id", fields, rs);
+let agents = repository({ table: "agents", idField: "id", idColumn: "id",
+                          fields: fields, relations: rs });
 
 findById(database, agents, "a1");</code></pre>
 <pre><code>{"id":"a1","agentName":"researcher","teamId":"t1",
@@ -198,6 +219,7 @@ class Agent {
   @hasMany("tasks", "id", "agent_id", "id, title")
   tasks: Task[];
 }</code></pre>
+  <p class="sub">The decorator's arguments stay positional where <code>hasOne</code> and <code>hasMany</code> take a record, because the compiler hands a decorator its arguments as a list of strings — <code>DecoratorUse.args</code> — and a record literal is not one. Same four values, same order as the record's fields, and <code>entity</code> is what turns one into the other.</p>
   <h4>Foreign keys</h4>
   <p class="sub">A relation already says which column points at which column of which table, which is a foreign key written out. plume will generate the constraint but never adds it for you: a schema change belongs in a migration, where it is recorded and checksummed like every other one.</p>
 <pre><code class="lumen">let plan: Migration[] = [
@@ -275,21 +297,28 @@ migrate(database, plan);</code></pre>
   4  | (rpt)   | active agents |  1515252556 | 2026-07-25 08:53:03</code></pre>
   <p class="sub">The files were handed over as <code>2</code>, <code>1</code>, <code>R</code>, <code>1.1</code> — the ranks show the order they actually ran in. <code>installed_rank</code> records that order, <code>checksum</code> is the CRC-32 of the file's contents, and <code>installed_on</code>, <code>execution_ms</code> and <code>success</code> round out the row. The table name is fixed rather than configurable, because two of them in one database is a way to apply everything twice.</p>
   <p class="sub">Migration bodies are your SQL, not plume's, so they are spelled for the database they run against.</p>
-  <h3>The <code>@entity</code> decorator</h3>
-  <p class="sub"><code>entity.ts</code> derives a mapping from a decorated class, so the fields are stated once instead of twice:</p>
-<pre><code class="lumen">@entity("agents")
-class Agent {
-  @id @column("id", "text")
-  id: string;
+  <h3>A mapping built by hand</h3>
+  <p class="sub">A mapping is an ordinary value, so nothing requires a decorator to produce it. <code>repository</code> takes the table, the key's field and column, and the fields:</p>
+<pre><code class="lumen">import { field, repository, DbField, DbRepository } from "./plume.ts";
 
-  @column("agent_name", "text")
-  agentName: string;
+type AgentRow = { id: string, agentName: string, maxSteps: int, temperature: number };
+
+function agents(): DbRepository {
+  let fields: DbField[] = [
+    field("id", "id", "text"),
+    field("agentName", "agent_name", "text"),
+    field("maxSteps", "max_steps", "int"),
+    field("temperature", "temperature", "float8"),
+  ];
+  return repository({ table: "agents", idField: "id", idColumn: "id", fields: fields });
 }
 
-persist(database, entityAgent, JSON.stringify(a));</code></pre>
-  <p class="sub">A decorator in Lumen is a pure function from a description of the declaration to a value — here, a <code>DbRepository</code>. That is why <code>entity</code> is an ordinary function of an ordinary type, tested by calling it, and why <code>entity.test.ts</code> exists before the compiler can run a decorator at all (spec 455 is not landed).</p>
+persist(database, agents(), JSON.stringify(a));</code></pre>
+  <p class="sub">Every operation in this README takes the result either way — <code>entityAgent</code> and <code>agents()</code> are the same record. Use this form on a Lumen build without the decorator compiler, or where the mapping is computed rather than declared: <code>agentsFull</code> in the <code>agents</code> package builds its relations from a list, which a class cannot state.</p>
+  <p class="sub">The cost is that the shape is written twice, and the two can disagree without anything saying so. That is what <code>@entity</code> removes.</p>
+  <h4>Why the decorator is a function</h4>
+  <p class="sub">A decorator in Lumen is a pure function from a description of the declaration to a value — here, a <code>DbRepository</code>. That is why <code>entity</code> is an ordinary function of an ordinary type, tested by calling it: <code>entity.test.ts</code> needs no compiler support to run, and <code>entity_live.test.ts</code> checks that the generated mapping is identical to the hand-written one and that every operation works against it.</p>
   <p class="sub">Still nothing is inferred: a field without <code>@column</code> is not mapped, a class without <code>@id</code> has no key and <code>entityProblem</code> says so. The one exception is a <code>@column("id")</code> with no type, which falls back to the declared type — the column type can always be stated outright.</p>
-  <p class="sub"><code>entity_live.test.ts</code> checks that the generated mapping is identical to the hand-written one and that every operation works against it.</p>
   </div>
   </div>
 </section>
