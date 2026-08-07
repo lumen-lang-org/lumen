@@ -998,28 +998,24 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\}
             \\
         );
-        if (options.runtime_locations) {
-            // Invalid JSON raises a catchable Lumen exception (spec 252),
-            // matching JS's SyntaxError instead of silently zeroing the value.
-            try out.appendSlice(arena,
-                \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) error{LumenThrow}!T {
-                \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch |e| {
-                \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "JSON.parse: invalid JSON ({s})", .{@errorName(e)}) catch "JSON.parse: invalid JSON";
-                \\        __lumen_throwing = true;
-                \\        return error.LumenThrow;
-                \\    };
-                \\    return parsed.value;
-                \\}
-                \\
-            );
-        } else {
-            try out.appendSlice(arena,
-                \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) T {
-                \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch return std.mem.zeroes(T);
-                \\    return parsed.value;
-                \\}
-                \\
-            );
-        }
+        // Invalid JSON raises a catchable Lumen exception (spec 252),
+        // matching JS's SyntaxError instead of silently zeroing the value.
+        //
+        // One shape in every build mode. The other one was
+        // `catch return std.mem.zeroes(T)` under --release-fast, which is the
+        // most expensive silence in this file: a malformed credential, a
+        // corrupt row or a provider's error page became a struct full of
+        // zeroes and travelled on as though it had parsed.
+        try out.appendSlice(arena,
+            \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) error{LumenThrow}!T {
+            \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "JSON.parse: invalid JSON ({s})", .{@errorName(e)}) catch "JSON.parse: invalid JSON";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
+            \\    return parsed.value;
+            \\}
+            \\
+        );
     }
 }

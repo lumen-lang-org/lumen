@@ -915,12 +915,17 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
     } else if (std.mem.eql(u8, cl.namespace, "JSON") and std.mem.eql(u8, cl.name, "parse")) {
         const result_type = cl.checked_arg_type orelse .void;
         const zig_name = types.zigName(arena, result_type) catch "void";
-        const parse_throws = em.g_options.?.runtime_locations;
-        if (parse_throws) try em.emitThrowingCallPrefix(w, arena);
+        // The last of the calls that used to throw only in some build modes.
+        // Left gated, this one broke compilation rather than just semantics:
+        // the analysis says a body containing JSON.parse can throw, so the
+        // enclosing try emitted its label — and with no break routed to it,
+        // Zig rejected the program with "unused block label". The engine's
+        // own vertex.ts is where that surfaced.
+        try em.emitThrowingCallPrefix(w, arena);
         try w.print(arena, "__jsonParse({s}, __alloc, ", .{zig_name});
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
-        if (parse_throws) try em.emitThrowingCallSuffix(w, arena);
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "sep")) {
         try w.appendSlice(arena, "@as([]const u8, \"/\")");
     } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "delimiter")) {
