@@ -478,11 +478,13 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.append(arena, ')');
         try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "appendFileSync")) {
+        try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__appendFileSync(__io, __alloc, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ", ");
         try em.emitExpr(cl.args[1], w, arena);
         try w.append(arena, ')');
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "mkdirSync")) {
         try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__mkdirSync(__io, ");
@@ -492,21 +494,27 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try w.append(arena, ')');
         try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "unlinkSync")) {
+        try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__unlinkSync(__io, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "renameSync")) {
+        try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__renameSync(__io, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ", ");
         try em.emitExpr(cl.args[1], w, arena);
         try w.append(arena, ')');
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "copyFileSync")) {
+        try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__copyFileSync(__io, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ", ");
         try em.emitExpr(cl.args[1], w, arena);
         try w.append(arena, ')');
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "cpSync")) {
         try w.appendSlice(arena, "__cpSync(__io, __alloc, ");
         try em.emitExpr(cl.args[0], w, arena);

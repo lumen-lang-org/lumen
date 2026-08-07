@@ -130,7 +130,7 @@ pub fn exprCanThrow(e: *const Expr) bool {
             // with "label not found" — which is what happens the moment a
             // function starts throwing and this line is forgotten.
             if (std.mem.eql(u8, sc.namespace, "JSON") and std.mem.eql(u8, sc.name, "parse")) break :blk true;
-            if (std.mem.eql(u8, sc.namespace, "fs") and (std.mem.eql(u8, sc.name, "readFileSync") or std.mem.eql(u8, sc.name, "writeFileSync") or std.mem.eql(u8, sc.name, "mkdirSync"))) break :blk true;
+            if (std.mem.eql(u8, sc.namespace, "fs") and (std.mem.eql(u8, sc.name, "readFileSync") or std.mem.eql(u8, sc.name, "writeFileSync") or std.mem.eql(u8, sc.name, "mkdirSync") or std.mem.eql(u8, sc.name, "unlinkSync") or std.mem.eql(u8, sc.name, "renameSync") or std.mem.eql(u8, sc.name, "copyFileSync") or std.mem.eql(u8, sc.name, "appendFileSync"))) break :blk true;
             for (sc.args) |a| if (exprCanThrow(a)) break :blk true;
             break :blk false;
         },

@@ -231,10 +231,18 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         // No direct append API on this std.Io.Dir; read the existing content (if
         // any), concatenate, and rewrite. Fine for sync, single-writer use.
         try out.appendSlice(arena,
-            \\fn __appendFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8, data: []const u8) void {
+            \\fn __appendFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8, data: []const u8) error{LumenThrow}!void {
             \\    const existing = std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(64 * 1024 * 1024)) catch "";
-            \\    const combined = std.mem.concat(alloc, u8, &.{ existing, data }) catch return;
-            \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = combined }) catch {};
+            \\    const combined = std.mem.concat(alloc, u8, &.{ existing, data }) catch {
+            \\        __lumen_err_msg = "cannot append: out of memory";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
+            \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = combined }) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot append to '{s}': {s}", .{ path, @errorName(e) }) catch "cannot append to file";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
             \\}
             \\
         );
@@ -268,24 +276,36 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
     }
     if (program.needs_unlink_sync) {
         try out.appendSlice(arena,
-            \\fn __unlinkSync(io: std.Io, path: []const u8) void {
-            \\    std.Io.Dir.cwd().deleteFile(io, path) catch {};
+            \\fn __unlinkSync(io: std.Io, path: []const u8) error{LumenThrow}!void {
+            \\    std.Io.Dir.cwd().deleteFile(io, path) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot delete '{s}': {s}", .{ path, @errorName(e) }) catch "cannot delete file";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
             \\}
             \\
         );
     }
     if (program.needs_rename_sync) {
         try out.appendSlice(arena,
-            \\fn __renameSync(io: std.Io, old_path: []const u8, new_path: []const u8) void {
-            \\    std.Io.Dir.rename(std.Io.Dir.cwd(), old_path, std.Io.Dir.cwd(), new_path, io) catch {};
+            \\fn __renameSync(io: std.Io, old_path: []const u8, new_path: []const u8) error{LumenThrow}!void {
+            \\    std.Io.Dir.rename(std.Io.Dir.cwd(), old_path, std.Io.Dir.cwd(), new_path, io) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot rename '{s}' to '{s}': {s}", .{ old_path, new_path, @errorName(e) }) catch "cannot rename";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
             \\}
             \\
         );
     }
     if (program.needs_copy_file_sync) {
         try out.appendSlice(arena,
-            \\fn __copyFileSync(io: std.Io, src_path: []const u8, dest_path: []const u8) void {
-            \\    std.Io.Dir.copyFile(std.Io.Dir.cwd(), src_path, std.Io.Dir.cwd(), dest_path, io, .{}) catch {};
+            \\fn __copyFileSync(io: std.Io, src_path: []const u8, dest_path: []const u8) error{LumenThrow}!void {
+            \\    std.Io.Dir.copyFile(std.Io.Dir.cwd(), src_path, std.Io.Dir.cwd(), dest_path, io, .{}) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot copy '{s}' to '{s}': {s}", .{ src_path, dest_path, @errorName(e) }) catch "cannot copy";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
             \\}
             \\
         );
