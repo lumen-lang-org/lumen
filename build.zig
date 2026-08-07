@@ -328,8 +328,13 @@ pub fn build(b: *std.Build) void {
 
     const conformance_cmd_478 = b.addRunArtifact(conformance_runner);
     conformance_cmd_478.step.dependOn(b.getInstallStep());
+    const conformance_cmd_481 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_481.step.dependOn(b.getInstallStep());
     conformance_cmd_478.addArg("specs/478-class-to-record/conformance/manifest.json");
     conformance_cmd_478.addArg("zig-out/bin/lumen");
+
+    conformance_cmd_481.addArg("specs/481-optional-fields-absent/conformance/manifest.json");
+    conformance_cmd_481.addArg("zig-out/bin/lumen");
 
     const conformance_step = b.step("conformance", "Run Lumen manifest conformance cases");
     conformance_step.dependOn(&conformance_cmd.step);
@@ -376,4 +381,5 @@ pub fn build(b: *std.Build) void {
     conformance_step.dependOn(&conformance_cmd_476.step);
     conformance_step.dependOn(&conformance_cmd_477.step);
     conformance_step.dependOn(&conformance_cmd_478.step);
+    conformance_step.dependOn(&conformance_cmd_481.step);
 }

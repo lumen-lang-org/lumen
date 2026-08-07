@@ -416,7 +416,24 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
                 const field_type = field.checked_type orelse return error.ParseError;
                 try decls.appendSlice(arena, "    ");
                 try emit_mod.emitFieldName(decls, arena, field.name);
-                try decls.print(arena, ": {s},\n", .{try types.zigName(arena, field_type)});
+                // An optional field carries `= null`, which is what makes it
+                // absent-able rather than merely null-able. Without the
+                // default, `JSON.parse<T>` refuses a document that omits it —
+                // std.json requires every field that has no default — so
+                // `source?: string` behaved exactly like `source: string` and
+                // the only thing `?` bought was the right to write null.
+                //
+                // That is the whole point of the mark on a stored document: a
+                // field added today has to be optional or every row written
+                // before today stops parsing. It did — a workflow graph saved
+                // before a new field existed answered "that is not a workflow
+                // graph", with the type declaration insisting it should have
+                // been fine.
+                if (field_type == .optional) {
+                    try decls.print(arena, ": {s} = null,\n", .{try types.zigName(arena, field_type)});
+                } else {
+                    try decls.print(arena, ": {s},\n", .{try types.zigName(arena, field_type)});
+                }
             }
             try decls.appendSlice(arena, "};\n");
         },

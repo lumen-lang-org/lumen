@@ -1,0 +1,13 @@
+{
+  "feature": "optional record fields may be absent from a parsed document",
+  "cases": [
+    {
+      "id": "optional.valid.absent",
+      "source": "../examples/valid/absent.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "a first - -\nb x -\nc y z"
+      }
+    }
+  ]
+}
