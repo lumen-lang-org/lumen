@@ -286,10 +286,20 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
 
     // Exception propagation (spec 245): compute which functions can throw
     // (directly or transitively through calls) so they emit as Zig error
-    // unions and their call sites unwrap/route the error. Skipped for
-    // release-fast builds (no runtime location tracking): throws stay panics.
+    // unions and their call sites unwrap/route the error.
+    //
+    // Run in EVERY build mode. It was skipped under --release-fast, tied to
+    // `runtime_locations`, and those are two different questions: that option
+    // decides whether an error carries a file and line — how readable the
+    // message is — and this decides whether an error can be caught at all.
+    // Tied together, the same program caught its exception under --debug and
+    // panicked under --release-fast, and the standard library papered over
+    // the difference by making the failing calls silent in that mode: a
+    // release binary wrote nothing into a missing directory and carried on.
+    // The comment above __lumen_throwing records the last time this
+    // conflation bit; this is the same fault one layer up.
     var throwing_fns: std.StringHashMapUnmanaged(void) = .empty;
-    if (options.runtime_locations) {
+    {
         emit_analysis.g_throwing_fns = &throwing_fns;
         emit_analysis.g_method_arena = arena;
         var changed = true;
@@ -375,7 +385,51 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
 
     var out: std.ArrayListUnmanaged(u8) = .empty;
     try out.appendSlice(arena, "const std = @import(\"std\");\n");
-    try out.appendSlice(arena, "var __sa_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);\nfn __sa() std.mem.Allocator { return __sa_arena.allocator(); }\n");
+    if (options.gc and !options.wasm) {
+        // Boehm's conservative collector stands behind every allocator the
+        // generated program has (`__sa` here, `__alloc` in main): generated
+        // code frees nothing, so unreachable memory is reclaimed by scanning
+        // registered thread stacks and the data segment for roots. Without
+        // this, a program's resident set equals every allocation it ever made
+        // — a long-running server OOMs by design. Threads the runtime spawns
+        // (fs pool, http pool, Worker.run) each call `__gcRegisterThread()`
+        // on entry: an unregistered thread touching the collector aborts the
+        // process, and re-registering is a documented no-op (GC_DUPLICATE).
+        try out.appendSlice(arena,
+            \\extern fn GC_init() void;
+            \\extern fn GC_malloc(size: usize) ?*anyopaque;
+            \\extern fn GC_memalign(alignment: usize, size: usize) ?*anyopaque;
+            \\extern fn GC_allow_register_threads() void;
+            \\extern fn GC_get_stack_base(sb: *anyopaque) c_int;
+            \\extern fn GC_register_my_thread(sb: *const anyopaque) c_int;
+            \\fn __gcAllocFn(_: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
+            \\    const a = alignment.toByteUnits();
+            \\    const p = if (a <= 8) GC_malloc(len) else GC_memalign(a, len);
+            \\    return @ptrCast(p);
+            \\}
+            \\fn __gcResizeFn(_: *anyopaque, memory: []u8, _: std.mem.Alignment, new_len: usize, _: usize) bool {
+            \\    return new_len <= memory.len;
+            \\}
+            \\fn __gcRemapFn(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
+            \\    return null;
+            \\}
+            \\fn __gcFreeFn(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {}
+            \\const __gc_vtable: std.mem.Allocator.VTable = .{ .alloc = __gcAllocFn, .resize = __gcResizeFn, .remap = __gcRemapFn, .free = __gcFreeFn };
+            \\const __gc_allocator: std.mem.Allocator = .{ .ptr = undefined, .vtable = &__gc_vtable };
+            \\fn __gcRegisterThread() void {
+            \\    var sb: [4]usize = undefined;
+            \\    _ = GC_get_stack_base(@ptrCast(&sb));
+            \\    _ = GC_register_my_thread(@ptrCast(&sb));
+            \\}
+            \\fn __sa() std.mem.Allocator { return __gc_allocator; }
+            \\
+        );
+    } else {
+        try out.appendSlice(arena, "var __sa_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);\nfn __sa() std.mem.Allocator { return __sa_arena.allocator(); }\n");
+        // Thread entries call this unconditionally; without the collector
+        // there is nothing to register with.
+        try out.appendSlice(arena, "fn __gcRegisterThread() void {}\n");
+    }
     // JS-semantics parseInt/parseFloat: skip leading whitespace, read an optional
     // sign, then consume the longest valid numeric prefix, ignoring trailing
     // garbage. parseInt honors a `0x` prefix when the radix is 16 or unspecified
@@ -920,7 +974,12 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     try runtime_os.emitOsCryptoRuntime(arena, &out, &program, options);
     if (program.uses_io) {
         try out.appendSlice(arena, "pub fn main(__init: std.process.Init) !void {\n");
-        try out.appendSlice(arena, "    __io = __init.io;\n    __alloc = __init.arena.allocator();\n");
+        try out.appendSlice(arena, "    __io = __init.io;\n");
+        if (options.gc and !options.wasm) {
+            try out.appendSlice(arena, "    GC_init();\n    GC_allow_register_threads();\n    __alloc = __gc_allocator;\n");
+        } else {
+            try out.appendSlice(arena, "    __alloc = __init.arena.allocator();\n");
+        }
         // `__lumen_color` only exists when runtime location/diagnostic globals are
         // emitted (release-fast omits them), so gate its initialization to match.
         if (options.runtime_locations) {
@@ -946,6 +1005,9 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         }
     } else {
         try out.appendSlice(arena, "pub fn main() void {\n");
+        if (options.gc and !options.wasm) {
+            try out.appendSlice(arena, "    GC_init();\n");
+        }
     }
     try out.appendSlice(arena, body.items);
     if (program.needs_thread_pool_fs or program.needs_worker) {

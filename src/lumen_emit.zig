@@ -1467,6 +1467,12 @@ pub const CompileOptions = struct {
     // under `--wasm`, falling back to the old single-connection-at-a-time
     // loop there instead.
     wasm: bool = false,
+    // Conservative GC (libgc) backing `__alloc` on native targets. A language
+    // with no free calls and no ownership annotations otherwise accretes every
+    // allocation until the process dies — a long-running server OOMs by
+    // design. Off under --wasm (no libgc there); LUMEN_NO_GC=1 restores the
+    // old grow-only arena for comparison runs.
+    gc: bool = true,
 };
 
 /// Collect the inheritance chain from a root ancestor down to `c` (inclusive).

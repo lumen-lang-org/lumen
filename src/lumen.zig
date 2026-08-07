@@ -88,6 +88,9 @@ fn humanizeDiag(code: []const u8) []const u8 {
 /// Whether diagnostics use ANSI color (stderr is a terminal and NO_COLOR is
 /// unset). Decided once at startup.
 var g_color: bool = false;
+// LUMEN_NO_GC=1 compiles without the conservative collector (the old
+// grow-only arena), read once in `main` like `g_color`.
+var g_no_gc: bool = false;
 
 /// Merged-source line origins for the file being compiled (import inlining
 /// shifts lines); empty when unavailable. Diagnostics display the origin
@@ -2458,6 +2461,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     var zig_src = compiler.compileToZigWithOptions(arena, source, path, &diag, .{
         .runtime_locations = mode.runtimeLocations(),
         .wasm = wasm,
+        .gc = !wasm and !g_no_gc,
         .warnings = &warnings,
         .line_map = expanded.line_map,
         .test_mode = action == .run_test,
@@ -2572,6 +2576,12 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         // Link C libraries: from `// @link <lib>` source pragmas and `--link` flags.
         try collectLinkLibs(arena, source, &argv);
         for (cli_libs) |lib| try appendLink(arena, &argv, lib);
+        // The conservative collector behind `__alloc` is a system library; its
+        // externs in the generated source are the signal that it is in play
+        // (absent under LUMEN_NO_GC=1 and for programs that never allocate).
+        if (std.mem.indexOf(u8, zig_src, "extern fn GC_init") != null) {
+            try argv.appendSlice(arena, &.{ "-lgc", "-lc" });
+        }
     }
     // Test mode: capture the backend's output and re-render it as concise
     // per-test results (Zig runner internals and generated-file paths stay
@@ -2883,6 +2893,7 @@ pub fn main(init: std.process.Init) !void {
     const err = &err_fw.interface;
 
     // Color diagnostics when stderr is a terminal, honoring NO_COLOR.
+    g_no_gc = init.environ_map.get("LUMEN_NO_GC") != null;
     g_color = blk: {
         if (init.environ_map.get("NO_COLOR") != null) break :blk false;
         break :blk std.Io.File.stderr().isTty(io) catch false;

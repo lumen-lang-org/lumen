@@ -12,6 +12,12 @@ const CompileOptions = @import("lumen_emit.zig").CompileOptions;
 const CompileError = @import("lumen_diag.zig").CompileError;
 
 pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), program: *const ast.Program, options: CompileOptions, decls: []const u8) CompileError!void {
+    // Kept in the signature although nothing here reads it any more: the fs
+    // runtime used to emit two shapes of every call depending on
+    // `runtime_locations`, and it now emits one. The caller passes what it
+    // passes to every other runtime emitter, and the next option this file
+    // needs will find it already here.
+    _ = options;
     if (program.needs_async_read_file) {
         // `fs.readFile` -- true async read on libxev's io_uring backend (no
         // thread pool, unlike fs.readFileSync's synchronous std.Io.Dir call or
@@ -158,27 +164,26 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
     try out.appendSlice(arena, decls);
 
     if (program.needs_read_file_sync) {
-        if (options.runtime_locations) {
-            // A missing/unreadable file raises a catchable Lumen exception
-            // (spec 253) instead of silently reading as "".
-            try out.appendSlice(arena,
-                \\fn __readFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8) error{LumenThrow}![]const u8 {
-                \\    return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(16 * 1024 * 1024)) catch |e| {
-                \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot read '{s}': {s}", .{ path, @errorName(e) }) catch "cannot read file";
-                \\        __lumen_throwing = true;
-                \\        return error.LumenThrow;
-                \\    };
-                \\}
-                \\
-            );
-        } else {
-            try out.appendSlice(arena,
-                \\fn __readFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8) []const u8 {
-                \\    return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(16 * 1024 * 1024)) catch "";
-                \\}
-                \\
-            );
-        }
+        // A missing or unreadable file raises a catchable Lumen exception
+        // (spec 253) instead of silently reading as "".
+        //
+        // NOT gated on `runtime_locations`. That option decides whether an
+        // error carries a file and line — how readable the message is — and
+        // it must not decide WHETHER a failure is reported. Gated, the same
+        // program read "" under --release-fast and threw under --debug, which
+        // is the worst kind of difference between build modes: the fast one
+        // is what ships. The comment above __lumen_throwing records the last
+        // time this conflation bit.
+        try out.appendSlice(arena,
+            \\fn __readFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8) error{LumenThrow}![]const u8 {
+            \\    return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(16 * 1024 * 1024)) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot read '{s}': {s}", .{ path, @errorName(e) }) catch "cannot read file";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
+            \\}
+            \\
+        );
     }
     if (program.needs_exists_sync) {
         try out.appendSlice(arena,
@@ -207,25 +212,20 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         );
     }
     if (program.needs_write_file_sync) {
-        if (options.runtime_locations) {
-            try out.appendSlice(arena,
-                \\fn __writeFileSync(io: std.Io, path: []const u8, data: []const u8) error{LumenThrow}!void {
-                \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data }) catch |e| {
-                \\        __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot write '{s}': {s}", .{ path, @errorName(e) }) catch "cannot write file";
-                \\        __lumen_throwing = true;
-                \\        return error.LumenThrow;
-                \\    };
-                \\}
-                \\
-            );
-        } else {
-            try out.appendSlice(arena,
-                \\fn __writeFileSync(io: std.Io, path: []const u8, data: []const u8) void {
-                \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data }) catch {};
-                \\}
-                \\
-            );
-        }
+        // Always throwing, for the reason on __readFileSync above: a write
+        // that cannot happen is a fact about the program, not a detail of the
+        // build. Silently, a --release-fast binary wrote nothing into a
+        // directory that did not exist and carried on.
+        try out.appendSlice(arena,
+            \\fn __writeFileSync(io: std.Io, path: []const u8, data: []const u8) error{LumenThrow}!void {
+            \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data }) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot write '{s}': {s}", .{ path, @errorName(e) }) catch "cannot write file";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
+            \\}
+            \\
+        );
     }
     if (program.needs_append_file_sync) {
         // No direct append API on this std.Io.Dir; read the existing content (if
@@ -240,12 +240,27 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         );
     }
     if (program.needs_mkdir_sync) {
+        // A directory that could not be made is reported, never swallowed.
+        // The silence here was the expensive one: mkdirSync makes ONE
+        // directory, so a missing parent failed, said nothing, and the next
+        // write into that path failed differently somewhere else entirely.
+        // AlreadyExists is not a failure — asking for a directory that is
+        // there is a program getting what it wanted.
         try out.appendSlice(arena,
-            \\fn __mkdirSync(io: std.Io, path: []const u8, recursive: bool) void {
+            \\fn __mkdirSync(io: std.Io, path: []const u8, recursive: bool) error{LumenThrow}!void {
             \\    if (recursive) {
-            \\        std.Io.Dir.cwd().createDirPath(io, path) catch {};
+            \\        std.Io.Dir.cwd().createDirPath(io, path) catch |e| {
+            \\            __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot make '{s}': {s}", .{ path, @errorName(e) }) catch "cannot make directory";
+            \\            __lumen_throwing = true;
+            \\            return error.LumenThrow;
+            \\        };
             \\    } else {
-            \\        std.Io.Dir.cwd().createDir(io, path, std.Io.File.Permissions.default_dir) catch {};
+            \\        std.Io.Dir.cwd().createDir(io, path, std.Io.File.Permissions.default_dir) catch |e| {
+            \\            if (e == error.PathAlreadyExists) return;
+            \\            __lumen_err_msg = std.fmt.allocPrint(__sa(), "cannot make '{s}': {s}", .{ path, @errorName(e) }) catch "cannot make directory";
+            \\            __lumen_throwing = true;
+            \\            return error.LumenThrow;
+            \\        };
             \\    }
             \\}
             \\
@@ -392,6 +407,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    path: []const u8,
             \\    promise: *LumenPromise(void),
             \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        __gcRegisterThread();
             \\        const self: *__UnlinkState = @fieldParentPtr("task", t);
             \\        std.Io.Dir.cwd().deleteFile(__io, self.path) catch {};
             \\        __fsPushDone(self, finish);
@@ -418,6 +434,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    path: []const u8,
             \\    promise: *LumenPromise(void),
             \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        __gcRegisterThread();
             \\        const self: *__MkdirState = @fieldParentPtr("task", t);
             \\        std.Io.Dir.cwd().createDir(__io, self.path, std.Io.File.Permissions.default_dir) catch {};
             \\        __fsPushDone(self, finish);
@@ -444,6 +461,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    path: []const u8,
             \\    promise: *LumenPromise(void),
             \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        __gcRegisterThread();
             \\        const self: *__RmdirState = @fieldParentPtr("task", t);
             \\        std.Io.Dir.cwd().deleteDir(__io, self.path) catch {};
             \\        __fsPushDone(self, finish);
@@ -471,6 +489,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    result: __LumenStat = undefined,
             \\    promise: *LumenPromise(__LumenStat),
             \\    fn work(t: *xev.ThreadPool.Task) void {
+            \\        __gcRegisterThread();
             \\        const self: *__StatState = @fieldParentPtr("task", t);
             \\        self.result = __statSync(__io, self.path);
             \\        __fsPushDone(self, finish);
@@ -545,6 +564,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\        promise: *LumenPromise(T),
             \\        result: T = undefined,
             \\        fn threadMain(self: *@This()) void {
+            \\            __gcRegisterThread();
             \\            self.result = self.f.call(self.f.ctx);
             \\            __workerPushDone(self, finish);
             \\        }

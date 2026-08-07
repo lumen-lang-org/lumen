@@ -422,17 +422,13 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ".len == 0)");
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "readFileSync")) {
-        if (em.g_options.?.runtime_locations) {
-            try em.emitThrowingCallPrefix(w, arena);
-            try w.appendSlice(arena, "__readFileSync(__io, __alloc, ");
-            try em.emitExpr(cl.args[0], w, arena);
-            try w.append(arena, ')');
-            try em.emitThrowingCallSuffix(w, arena);
-            return;
-        }
+        // One shape in every build mode — see __readFileSync in
+        // lumen_runtime_fs.zig for why this is not tied to runtime_locations.
+        try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__readFileSync(__io, __alloc, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "readFile")) {
         try w.appendSlice(arena, "__readFileAsync(");
         try em.emitExpr(cl.args[0], w, arena);
@@ -474,14 +470,13 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "writeFileSync")) {
-        const write_throws = em.g_options.?.runtime_locations;
-        if (write_throws) try em.emitThrowingCallPrefix(w, arena);
+        try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__writeFileSync(__io, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ", ");
         try em.emitExpr(cl.args[1], w, arena);
         try w.append(arena, ')');
-        if (write_throws) try em.emitThrowingCallSuffix(w, arena);
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "appendFileSync")) {
         try w.appendSlice(arena, "__appendFileSync(__io, __alloc, ");
         try em.emitExpr(cl.args[0], w, arena);
@@ -489,11 +484,13 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try em.emitExpr(cl.args[1], w, arena);
         try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "mkdirSync")) {
+        try em.emitThrowingCallPrefix(w, arena);
         try w.appendSlice(arena, "__mkdirSync(__io, ");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, ", ");
         if (cl.args.len == 2) try em.emitExpr(cl.args[1], w, arena) else try w.appendSlice(arena, "false");
         try w.append(arena, ')');
+        try em.emitThrowingCallSuffix(w, arena);
     } else if (std.mem.eql(u8, cl.namespace, "fs") and std.mem.eql(u8, cl.name, "unlinkSync")) {
         try w.appendSlice(arena, "__unlinkSync(__io, ");
         try em.emitExpr(cl.args[0], w, arena);

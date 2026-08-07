@@ -121,10 +121,16 @@ pub fn exprCanThrow(e: *const Expr) bool {
             break :blk false;
         },
         .static_call => |sc| blk: {
-            // JSON.parse raises on invalid input (spec 252); readFileSync /
-            // writeFileSync raise on I/O failure (spec 253).
+            // JSON.parse raises on invalid input (spec 252); the synchronous
+            // fs calls that CHANGE something raise on I/O failure (spec 253).
+            //
+            // This list and the runtime emitter are one fact stated twice: a
+            // call that throws must be named here or the try/catch around it
+            // never gets its label, and the generated Zig fails to compile
+            // with "label not found" — which is what happens the moment a
+            // function starts throwing and this line is forgotten.
             if (std.mem.eql(u8, sc.namespace, "JSON") and std.mem.eql(u8, sc.name, "parse")) break :blk true;
-            if (std.mem.eql(u8, sc.namespace, "fs") and (std.mem.eql(u8, sc.name, "readFileSync") or std.mem.eql(u8, sc.name, "writeFileSync"))) break :blk true;
+            if (std.mem.eql(u8, sc.namespace, "fs") and (std.mem.eql(u8, sc.name, "readFileSync") or std.mem.eql(u8, sc.name, "writeFileSync") or std.mem.eql(u8, sc.name, "mkdirSync"))) break :blk true;
             for (sc.args) |a| if (exprCanThrow(a)) break :blk true;
             break :blk false;
         },

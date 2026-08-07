@@ -23,7 +23,15 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
         try out.appendSlice(arena,
             \\pub const __LumenHttpResponse = struct { status: i32, body: []const u8, ok: bool, headers: *LumenMap([]const u8, []const u8) };
             \\fn __httpRequest(io: std.Io, alloc: std.mem.Allocator, url: []const u8, method: []const u8, body: []const u8, headers: *LumenMap([]const u8, []const u8)) __LumenHttpResponse {
-            \\    var client: std.http.Client = .{ .allocator = alloc, .io = io };
+            \\    // The client's *internal* allocations (CA bundle, connection pool)
+            \\    // are its own paired alloc/free business, so they use the plain
+            \\    // page allocator, never `alloc`: under the collector, `alloc` is
+            \\    // GC memory, and a GC block whose only reference lives inside a
+            \\    // non-GC struct is invisible to the mark phase — it gets reclaimed
+            \\    // mid-request and deinit tears down freed pages (a real segfault
+            \\    // this comment is the tombstone of). Response data handed back to
+            \\    // the program stays on `alloc`.
+            \\    var client: std.http.Client = .{ .allocator = std.heap.page_allocator, .io = io };
             \\    defer client.deinit();
             \\    // Loading the system CA bundle means reading and parsing a real
             \\    // certificate file from disk -- skip it entirely for plain http://
@@ -31,7 +39,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\    // every single call regardless of scheme.
             \\    const resp_headers = LumenMap([]const u8, []const u8).__init();
             \\    if (std.mem.startsWith(u8, url, "https://")) {
-            \\        client.ca_bundle.rescan(alloc, io, std.Io.Clock.now(.real, io)) catch return .{ .status = -1, .body = "", .ok = false, .headers = resp_headers };
+            \\        client.ca_bundle.rescan(std.heap.page_allocator, io, std.Io.Clock.now(.real, io)) catch return .{ .status = -1, .body = "", .ok = false, .headers = resp_headers };
             \\    }
             \\    const extra_headers = alloc.alloc(std.http.Header, headers.keys_.items.len) catch unreachable;
             \\    for (headers.keys_.items, headers.values_.items, 0..) |k, v, i| extra_headers[i] = .{ .name = k, .value = v };
@@ -182,10 +190,17 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\    // by reaching the end of the body, and a service opens one per
             \\    // request.
             \\    const pa = std.heap.page_allocator;
+            \\    _ = alloc; // internals are page-allocator managed; see the client note below
             \\    const uri = try std.Uri.parse(url);
             \\    const client = try pa.create(std.http.Client);
             \\    errdefer pa.destroy(client);
-            \\    client.* = .{ .allocator = alloc, .io = io };
+            \\    // Internal allocations stay off `alloc` for the same reason as
+            \\    // `__httpRequest`: this client struct is page-allocator memory,
+            \\    // and under the collector a GC block referenced only from here is
+            \\    // unreachable to the mark phase — collected mid-stream, then
+            \\    // deinit walks freed pages. Twice as true here: a stream lives
+            \\    // for a whole model response, minutes of collection windows.
+            \\    client.* = .{ .allocator = std.heap.page_allocator, .io = io };
             \\    errdefer client.deinit();
             \\    const extra_headers = try pa.alloc(std.http.Header, headers.keys_.items.len);
             \\    errdefer pa.free(extra_headers);
@@ -416,6 +431,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\        stream: std.Io.net.Stream,
                 \\        handler: Handler,
                 \\        fn run(t: *xev.ThreadPool.Task) void {
+                \\            __gcRegisterThread();
                 \\            const self: *@This() = @fieldParentPtr("task", t);
                 \\            defer std.heap.page_allocator.destroy(self);
                 \\            const io2 = self.io;
@@ -535,6 +551,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\        stream: std.Io.net.Stream,
                     \\        handler: Handler,
                     \\        fn run(t: *xev.ThreadPool.Task) void {
+                \\            __gcRegisterThread();
                     \\            const self: *@This() = @fieldParentPtr("task", t);
                     \\            defer std.heap.page_allocator.destroy(self);
                     \\            const io2 = self.io;
