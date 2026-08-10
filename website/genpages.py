@@ -47,7 +47,7 @@ GROUPS = [
     ("Data", ["plume", "sqlite", "pgvector"]),
     ("Servers", ["rest", "websocket", "socketio", "sse", "press", "validation"]),
     ("AI & agents", ["ai", "agents", "tracing"]),
-    ("Tooling", ["token-gate", "code-index", "args", "quickjs"]),
+    ("Tooling", ["token-gate", "code-index", "args", "quickjs", "cron"]),
     ("Small & example", ["mathx", "geo", "hello", "greeter"]),
 ]
 
