@@ -40,13 +40,22 @@ pub const Generated = struct {
 pub const Signature = struct {
     /// The declared return type, which becomes the generated constant's type.
     returns: []const u8,
+    /// What this decorator calls the type it takes. Its module declares it, and
+    /// the generated entry point parses the description into it.
+    described: []const u8,
     /// The description this decorator is handed, narrowed to the keys its own
-    /// `Description` type declares (see `narrow`).
+    /// description type declares (see `narrow`).
     description: []const u8,
 };
 
-/// The one parameter type a decorator takes, and the type its module must
-/// export for the generated entry point to parse the description into.
+/// The name a decorator's description type has when it does not say otherwise.
+///
+/// It used to be the only name allowed, and that made two decorator packages
+/// mutually exclusive: every one of them exported `Description`, so a program
+/// linking plume's `@entity` beside rest's `@controller` collided on the type
+/// name before it could run either. The name now comes from the decorator's own
+/// signature — whatever type it declares its parameter as, its module must
+/// declare — and this is only what the generated entry point falls back to.
 pub const description_type = "Description";
 
 /// Checks the bound function against the decorator signature and reports what
@@ -71,12 +80,8 @@ pub fn signature(
         return error.DecoratorFailed;
     };
 
-    var has_description = false;
     var found: ?ast.FunctionDecl = null;
     for (program.stmts) |stmt| switch (stmt) {
-        .type_decl => |t| {
-            if (std.mem.eql(u8, t.name, description_type)) has_description = true;
-        },
         .function_decl => |f| {
             if (std.mem.eql(u8, f.name, exported)) found = f;
         },
@@ -84,8 +89,18 @@ pub fn signature(
     };
 
     const f = found orelse return expected(arena, app, module_path, exported, "it declares no such function", fail);
-    if (f.params.len != 1 or !std.mem.eql(u8, f.params[0].annotation, description_type))
+    if (f.params.len != 1 or f.params[0].annotation.len == 0)
         return expected(arena, app, module_path, exported, "a decorator takes one description and nothing else", fail);
+
+    // Whatever it calls its description, its module has to declare it.
+    const described = f.params[0].annotation;
+    var has_description = false;
+    for (program.stmts) |stmt| switch (stmt) {
+        .type_decl => |t| {
+            if (std.mem.eql(u8, t.name, described)) has_description = true;
+        },
+        else => {},
+    };
     if (f.infer_return)
         return expected(arena, app, module_path, exported, "a decorator declares its return type — the constant the compiler emits has it", fail);
     if (!carriesAsJson(f.return_annotation))
@@ -99,9 +114,13 @@ pub fn signature(
     // it, and this is where saying so belongs rather than in a parse error
     // inside generated source.
     if (!has_description)
-        return expected(arena, app, module_path, exported, "its module must also export `type Description` for the description to be parsed into", fail);
+        return expected(arena, app, module_path, exported, try std.fmt.allocPrint(
+            arena,
+            "its module must also export `type {s}` for the description to be parsed into",
+            .{described},
+        ), fail);
 
-    return .{ .returns = f.return_annotation, .description = try narrow(arena, program, app.json) };
+    return .{ .returns = f.return_annotation, .described = described, .description = try narrow(arena, program, app.json, described) };
 }
 
 /// The description narrowed to what this decorator's own `Description` type
@@ -119,14 +138,14 @@ pub fn signature(
 /// Narrowing only ever removes. A key the type declares and the description
 /// does not is left missing, and the decorator fails to parse it, which is the
 /// right answer: it asked for something the compiler does not describe.
-fn narrow(arena: std.mem.Allocator, program: ast.Program, json: []const u8) ![]const u8 {
+fn narrow(arena: std.mem.Allocator, program: ast.Program, json: []const u8, described: []const u8) ![]const u8 {
     var decls: std.StringHashMapUnmanaged([]const ast.TypeField) = .empty;
     for (program.stmts) |stmt| switch (stmt) {
         .type_decl => |t| if (t.alias == null and t.fields.len > 0) try decls.put(arena, t.name, t.fields),
         else => {},
     };
     const parsed = std.json.parseFromSlice(std.json.Value, arena, json, .{}) catch return json;
-    const kept = try narrowValue(arena, &decls, parsed.value, description_type);
+    const kept = try narrowValue(arena, &decls, parsed.value, described);
     return std.json.Stringify.valueAlloc(arena, kept, .{}) catch json;
 }
 
@@ -190,7 +209,7 @@ fn expected(
 /// The program the compiler compiles to run one decorator: read the description
 /// off the command line, call the function, print what it returns. `process.argv`
 /// here is `[program, ...args]`, so the description is `argv[1]`.
-pub fn entrySource(arena: std.mem.Allocator, module_spec: []const u8, exported: []const u8) ![]const u8 {
+pub fn entrySource(arena: std.mem.Allocator, module_spec: []const u8, exported: []const u8, described: []const u8) ![]const u8 {
     return std.fmt.allocPrint(arena,
         \\// Generated by the Lumen compiler to run the '{s}' decorator (spec 455).
         \\import {{ {s}, {s} }} from "{s}";
@@ -201,7 +220,7 @@ pub fn entrySource(arena: std.mem.Allocator, module_spec: []const u8, exported: 
         \\
         \\main();
         \\
-    , .{ exported, exported, description_type, module_spec, exported, description_type });
+    , .{ exported, exported, described, module_spec, exported, described });
 }
 
 /// `@entity` on `Agent` gives `entityAgent`: deterministic, needs no hygiene
@@ -504,5 +523,5 @@ test "the generated entry point reads argv[1], calls, and prints (spec 455)" {
         \\
         \\main();
         \\
-    , try entrySource(arena, "./entity.ts", "entity"));
+    , try entrySource(arena, "./entity.ts", "entity", description_type));
 }

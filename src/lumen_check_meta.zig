@@ -361,7 +361,7 @@ fn generateDispatcher(
                         if (self.binding(rulesName) == null) continue;
                         guard = try std.fmt.allocPrint(
                             self.arena,
-                            "let __v = validationRefusal({s}, __a0.body); if (__v != \"\") {{ return badRequest(__v); }} ",
+                            "let __v = validatedBody({s}, __a0.body); if (__v.stop) {{ return __v.reply; }} ",
                             .{rulesName},
                         );
                     }

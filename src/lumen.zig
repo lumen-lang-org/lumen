@@ -964,7 +964,7 @@ fn runDecorators(
             else => return e,
         };
 
-        const value = try buildAndRun(exp, path, module_path, binding, app, sig.description);
+        const value = try buildAndRun(exp, path, module_path, binding, app, sig.description, sig.described);
         const literal = decorator.literal(arena, value, app, &fail) catch |e| switch (e) {
             error.DecoratorFailed => {
                 g_decorator_fail = .{ .file = path, .at = fail };
@@ -995,9 +995,13 @@ fn buildAndRun(
     binding: DecoratorBinding,
     app: describe.Application,
     /// The description to hand over: `app.json` narrowed to the keys the
-    /// module's own `Description` declares, so a key it never named cannot
+    /// module's own description type declares, so a key it never named cannot
     /// fail its parse.
     description: []const u8,
+    /// What that module calls the type — every decorator package used to have
+    /// to call it `Description`, which is why no two of them could be linked
+    /// into one program.
+    described: []const u8,
     // Explicit, because this calls the compiler's own entry point: an inferred
     // error set here would close a loop through everything compiling a file can
     // fail with. A failure of the decorator's module is the decorator's failure
@@ -1018,7 +1022,7 @@ fn buildAndRun(
         // decorator at once write and delete their own.
         const entry_name = try std.fmt.allocPrint(arena, ".lumen-decorator-{s}-{x}.ts", .{ binding.exported, std.Thread.getCurrentId() });
         const entry_path = try std.fs.path.join(arena, &.{ std.fs.path.dirname(module_path) orelse ".", entry_name });
-        const entry = try decorator.entrySource(arena, try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.basename(module_path)}), binding.exported);
+        const entry = try decorator.entrySource(arena, try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.basename(module_path)}), binding.exported, described);
         std.Io.Dir.cwd().writeFile(io, .{ .sub_path = entry_path, .data = entry }) catch
             return decoratorFailed(arena, path, app, "'@{s}' could not be run: {s} is not writable, and the generated entry point is written beside the module it calls", .{ app.name, displayPath(std.fs.path.dirname(module_path) orelse ".") });
         defer std.Io.Dir.cwd().deleteFile(io, entry_path) catch {};
