@@ -147,7 +147,7 @@ fn dispatcherName(self: *Checker, cname: []const u8, arg_types: []const types.Ty
 }
 
 /// A method of `cname` (or a base) that `Class.invoke` may dispatch to.
-const Candidate = struct { name: []const u8, ret: []const u8, bind: ?[]const []const u8 = null };
+const Candidate = struct { name: []const u8, ret: []const u8, bind: ?[]const []const u8 = null, guard: ?[]const u8 = null };
 
 /// The Lumen expression a parameter binds to, when it carries one of the
 /// request-binding decorators, or null when it does not.
@@ -237,6 +237,7 @@ fn generateDispatcher(
             // rather than passing it through. That is the whole of
             // @RequestBody / @PathVariable / @RequestParam / @RequestHeader.
             var bind: ?[]const []const u8 = null;
+            var guard: ?[]const u8 = null;
             if (!matches and arg_types.len == 1 and m.params.len > 0) {
                 const bs = try self.arena.alloc([]const u8, m.params.len);
                 var all = true;
@@ -250,6 +251,27 @@ fn generateDispatcher(
                 if (all) {
                     bind = bs;
                     matches = true;
+                    // @Valid beside @RequestBody: run the rules the type carries
+                    // before the handler sees anything. The constant is the one
+                    // @validated left, resolved the same way Class.decorator
+                    // resolves it, so a type with no rules simply has no guard.
+                    for (m.params) |p| {
+                        var valid = false;
+                        var body = false;
+                        for (p.decorators) |d| {
+                            if (std.mem.eql(u8, d.name, "Valid") or std.mem.eql(u8, d.name, "valid")) valid = true;
+                            if (std.mem.eql(u8, d.name, "RequestBody") or std.mem.eql(u8, d.name, "body")) body = true;
+                        }
+                        if (!valid or !body or p.annotation.len == 0) continue;
+                        const rulesName = try std.fmt.allocPrint(self.arena, "validated{s}", .{p.annotation});
+                        rulesName[9] = std.ascii.toUpper(rulesName[9]);
+                        if (self.binding(rulesName) == null) continue;
+                        guard = try std.fmt.allocPrint(
+                            self.arena,
+                            "let __v = validationRefusal({s}, __a0.body); if (__v != \"\") {{ return badRequest(__v); }} ",
+                            .{rulesName},
+                        );
+                    }
                 }
             }
             if (!matches) continue;
@@ -271,7 +293,7 @@ fn generateDispatcher(
                 for (arg_types, 0..) |at, i| ps[i] = (try types.toAnnotation(self.arena, at)) orelse "string";
                 params = ps;
             }
-            try cands.append(self.arena, .{ .name = m.name, .ret = ret, .bind = bind });
+            try cands.append(self.arena, .{ .name = m.name, .ret = ret, .bind = bind, .guard = guard });
         }
         cur = info.parent;
     }
@@ -286,7 +308,9 @@ fn generateDispatcher(
     for (params.?, 0..) |ann, i| try src.print(self.arena, ", __a{d}: {s}", .{ i, ann });
     try src.print(self.arena, "): {s} {{\n", .{cands.items[0].ret});
     for (cands.items) |c| {
-        try src.print(self.arena, "  if (__handler == \"{s}\") {{ return __self.{s}(", .{ c.name, c.name });
+        try src.print(self.arena, "  if (__handler == \"{s}\") {{ ", .{c.name});
+        if (c.guard) |g| try src.appendSlice(self.arena, g);
+        try src.print(self.arena, "return __self.{s}(", .{c.name});
         if (c.bind) |bs| {
             for (bs, 0..) |b, i| {
                 if (i > 0) try src.appendSlice(self.arena, ", ");
