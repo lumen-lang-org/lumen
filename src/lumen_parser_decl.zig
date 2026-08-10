@@ -22,9 +22,11 @@ const Expr = ast.Expr;
 const Stmt = ast.Stmt;
 const Parser = parser_mod.Parser;
 
-/// One decorator argument. Literals only: a decorator carries metadata, and an
-/// expression would have to be evaluated by a program that does not exist yet
-/// at the point the decorator runs.
+/// One decorator argument: a literal, a bare name, or a name applied to literals.
+/// Still metadata — a name travels as its name and an application flattens to the
+/// name followed by its arguments. An expression proper is refused, because it
+/// would have to be evaluated by a program that does not exist yet at the point
+/// the decorator runs.
 fn parseDecoratorArg(self: *Parser) CompileError!ast.DecoratorArg {
     switch (self.cur) {
         .str => |s| {
@@ -73,7 +75,27 @@ pub fn parseDecorators(self: *Parser) CompileError![]ast.Decorator {
         if (self.isOp('(')) {
             try self.advance();
             while (!self.isOp(')')) {
-                try args.append(self.arena, try parseDecoratorArg(self));
+                const one = try parseDecoratorArg(self);
+                try args.append(self.arena, one);
+                // `@Guard(roleAtLeast("signed-in"))` — a name applied to literals
+                // is the same metadata as `@Guard(roleAtLeast, "signed-in")`, and
+                // reads as what it is. Flattened here so nothing downstream has to
+                // know the difference: the name lands first, then its arguments.
+                if (one == .ident and self.isOp('(')) {
+                    try self.advance();
+                    while (!self.isOp(')')) {
+                        try args.append(self.arena, try parseDecoratorArg(self));
+                        if (self.isOp(',')) {
+                            try self.advance();
+                            continue;
+                        }
+                        if (!self.isOp(')')) {
+                            self.last_err = "E_DECORATOR_ARG";
+                            return error.ParseError;
+                        }
+                    }
+                    try self.expectOp(')');
+                }
                 if (self.isOp(',')) {
                     try self.advance();
                     continue;

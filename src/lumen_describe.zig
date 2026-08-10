@@ -383,9 +383,8 @@ test "a decorator argument that is not a literal is refused (spec 455)" {
     const arena = buf.allocator();
     var out: std.Io.Writer.Allocating = .init(arena);
     var diag: diag_mod.Diag = .{};
-    // An expression is still not metadata: a call and arithmetic are refused.
+    // Arithmetic is still not metadata.
     for ([_][]const u8{
-        "@entity(name())\nclass A { x: int; }\n",
         "@entity(1 + 2)\nclass A { x: int; }\n",
     }) |src| {
         try std.testing.expectError(error.ParseError, describeSource(arena, src, "a.ts", &out.writer, &diag));
@@ -393,9 +392,13 @@ test "a decorator argument that is not a literal is refused (spec 455)" {
     }
     // A bare name is a reference, not an expression — `@Guard(needsPg)`. It
     // travels to the decorator as its name, exactly as the quoted form did.
+    // A bare name is a reference; a name applied to literals is that name
+    // followed by its arguments — `@Guard(roleAtLeast("signed-in"))`.
     for ([_][]const u8{
         "@entity(TABLE)\nclass A { x: int; }\n",
         "class A {\n  @column(col)\n  x: int;\n}\n",
+        "@entity(name())\nclass A { x: int; }\n",
+        "@guard(roleAtLeast(\"signed-in\"))\nclass A { x: int; }\n",
     }) |src| {
         var one: std.Io.Writer.Allocating = .init(arena);
         try describeSource(arena, src, "a.ts", &one.writer, &diag);

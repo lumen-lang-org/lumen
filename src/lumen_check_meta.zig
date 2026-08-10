@@ -166,7 +166,26 @@ fn planStrings(self: *Checker, e: *ast.Expr) ?[]const []const u8 {
     var out: std.ArrayListUnmanaged([]const u8) = .empty;
     for (e.array.items) |it| {
         if (it.* != .str) return null;
-        out.append(self.arena, it.str) catch return null;
+        // String literals reach the AST raw, escapes and all, and the plan's
+        // expressions carry quotes: `roleAtLeast(req, \"signed-in\")`. Splicing
+        // that verbatim emits the backslashes into the generated source.
+        var un: std.ArrayListUnmanaged(u8) = .empty;
+        var i: usize = 0;
+        while (i < it.str.len) : (i += 1) {
+            if (it.str[i] == '\\' and i + 1 < it.str.len) {
+                i += 1;
+                const c = it.str[i];
+                un.append(self.arena, switch (c) {
+                    'n' => '\n',
+                    't' => '\t',
+                    'r' => '\r',
+                    else => c,
+                }) catch return null;
+                continue;
+            }
+            un.append(self.arena, it.str[i]) catch return null;
+        }
+        out.append(self.arena, un.items) catch return null;
     }
     return out.items;
 }
@@ -348,6 +367,9 @@ fn generateDispatcher(
                 }
             }
             for (m.decorators) |d| {
+                // Only when no plan drives this class: with one, the library has
+                // already decided what every guard means and written the call.
+                if (plans != null) break;
                 if (!std.mem.eql(u8, d.name, "Guard") and !std.mem.eql(u8, d.name, "guard")) continue;
                 if (d.args.len == 0) continue;
                 const fname = switch (d.args[0]) {
