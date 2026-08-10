@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>press · Packages · Lumen</title>
+<meta name="description" content="Templates for pages, in the shape EJS gave the world, minus the part a compiled language cannot have.">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/press">
+<meta property="og:url" content="https://lumen-lang.org/packages/press">
+<meta property="og:title" content="press · Packages · Lumen">
+<meta property="og:description" content="Templates for pages, in the shape EJS gave the world, minus the part a compiled language cannot have.">
+<meta name="twitter:title" content="press · Packages · Lumen">
+<meta name="twitter:description" content="Templates for pages, in the shape EJS gave the world, minus the part a compiled language cannot have.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">press</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <a href="/packages/press" class="active">press</a>
+    <a href="/packages/validation">validation</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>press</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/press">source</a></p>
+  <h2>press</h2>
+  <p class="sub">Templates for pages, in the shape EJS gave the world, minus the part a compiled language cannot have.</p>
+<pre><code class="lumen">import { view, render } from "../press/template.ts";
+
+let v = view();
+v.text.set("title", "Connected");
+v.text.set("detail", "&lt;img src=x onerror=alert(1)&gt;");
+
+render("&lt;h1&gt;&lt;%= title %&gt; to &lt;%= detail %&gt;&lt;/h1&gt;", v);
+// &lt;h1&gt;Connected to &amp;lt;img src=x onerror=alert(1)&amp;gt;&lt;/h1&gt;</code></pre>
+  <h3>Why it is not EJS</h3>
+  <p class="sub">EJS embeds JavaScript and runs it: <code>&lt;% if (user.admin) { %&gt;</code> is real code handed to <code>eval</code> at render time. Lumen compiles to a native binary and has no <code>eval</code>, so that design is not available and pretending otherwise would produce a package that could never render its own README example.</p>
+  <p class="sub">So the tags are EJS's, and what goes inside them is a name rather than an expression. Everything a page needs — a value, a choice, a list — is here; a computation is not, and belongs in the code that builds the view.</p>
+  <h3>The tags</h3>
+  <table>
+    <tr><th>tag</th><th>what it does</th></tr>
+    <tr><td><code>&lt;%= name %&gt;</code></td><td>the value, HTML-escaped</td></tr>
+    <tr><td><code>&lt;%- name %&gt;</code></td><td>the value, raw</td></tr>
+    <tr><td><code>&lt;% if name %&gt;…&lt;% else %&gt;…&lt;% end %&gt;</code></td><td>the block when the value is not empty</td></tr>
+    <tr><td><code>&lt;% each list %&gt;…&lt;% end %&gt;</code></td><td>the block once per row</td></tr>
+    <tr><td><code>&lt;%= .field %&gt;</code></td><td>inside <code>each</code>, a field of the current row</td></tr>
+    <tr><td><code>&lt;%# … %&gt;</code></td><td>nothing</td></tr>
+  </table>
+  <p class="sub">Blocks nest. A name nothing set renders empty rather than failing, because a half-rendered page is a better outage than a 500.</p>
+  <h3>Escaped by default</h3>
+  <p class="sub"><code>&lt;%=</code> escapes <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>, <code>"</code> and <code>'</code>. Raw output exists as <code>&lt;%-</code> and has to be asked for, which is the whole point: the page that made this package necessary interpolated a connector's name straight into an <code>&lt;h1&gt;</code>, so a name carrying markup was markup.</p>
+  <h3>The view</h3>
+<pre><code class="lumen">export type View = {
+  text: Map&lt;string, string&gt;,
+  lists: Map&lt;string, Map&lt;string, string&gt;[]&gt;,
+};</code></pre>
+  <p class="sub">Strings only. A number or a flag is turned into one by the caller, which keeps the renderer free of formatting opinions — <code>900</code> and <code>true</code> reach the template as text and land in the page as text.</p>
+  <h3>Checked before it renders</h3>
+  <p class="sub"><code>checkTemplate(src)</code> answers why a template will not work, or <code>""</code>:</p>
+<pre><code class="lumen">a block is opened and never closed with &lt;% end %&gt;
+an &lt;% end %&gt; closes a block that was never opened
+unknown tag &lt;% while %&gt;: expected if, else, each or end
+if needs a name: &lt;% if something %&gt;
+a tag is opened with &lt;% and never closed with %&gt;</code></pre>
+  <p class="sub">Run it once over a constant at startup rather than per request, and a broken template is a boot failure rather than a page nobody can read.</p>
+  <h3>Testing</h3>
+<pre><code>cd packages/press
+lumen test template.test.ts    # 11</code></pre>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>

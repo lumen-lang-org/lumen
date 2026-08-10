@@ -63,6 +63,8 @@
     <a href="/packages/websocket">websocket</a>
     <a href="/packages/socketio">socketio</a>
     <a href="/packages/sse">sse</a>
+    <a href="/packages/press">press</a>
+    <a href="/packages/validation">validation</a>
     <p class="docs-nav-title">AI & agents</p>
     <a href="/packages/ai">ai</a>
     <a href="/packages/agents">agents</a>
@@ -132,7 +134,8 @@ pgClose();</code></pre>
   <p class="sub">A <code>PgHit</code> carries <code>id</code>, <code>text</code>, <code>source</code>, <code>metadata</code>, <code>distance</code> and <code>score</code>. <code>distance</code> is what the database returned, so smaller is nearer; <code>score</code> is <code>1 - distance</code>, the cosine similarity that reads the familiar way.</p>
   <p class="sub">Calls that change something return a <code>PgResult</code> — <code>{ ok, rows, error }</code> — with the database's own message rather than one this package invented.</p>
   <h4>Why the names are prefixed</h4>
-  <p class="sub">Every module is inlined into one flat namespace, so two packages that both define <code>search</code> or <code>count</code> cannot be used together — and import aliasing does not help, since it renames references rather than definitions. The prefix is what lets this and the <code>ai</code> package appear in one program.</p>
+  <p class="sub">The prefix names the store rather than dodging a clash. <code>pgVectorLiteral</code> and <code>pgParseVector</code> are pgvector's own wire format, and <code>pgSearch</code> says which store is being searched when a program has more than one.</p>
+  <p class="sub">It began as a workaround — two modules exporting <code>search</code> used to be a compile error — and that reason is gone: the compiler now renames internally and importers resolve through the exporting module's table (spec 476). The names stay because they read well, not because they must.</p>
   <h3>Skipping work you have already paid for</h3>
   <p class="sub">The point of persisting vectors is not to embed the same text twice:</p>
 <pre><code class="lumen">let pending: string[] = [];

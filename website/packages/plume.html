@@ -63,6 +63,8 @@
     <a href="/packages/websocket">websocket</a>
     <a href="/packages/socketio">socketio</a>
     <a href="/packages/sse">sse</a>
+    <a href="/packages/press">press</a>
+    <a href="/packages/validation">validation</a>
     <p class="docs-nav-title">AI & agents</p>
     <a href="/packages/ai">ai</a>
     <a href="/packages/agents">agents</a>
@@ -83,14 +85,34 @@
   · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/plume">source</a></p>
   <h2>plume</h2>
   <p class="sub">An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.</p>
-  <p class="sub">Nothing is inferred. A table name, a key, every column and every SQL type is written out; plume never guesses a column from a field name or a table from a type. The mapping is a value you construct, so it can be built, inspected and tested like any other value.</p>
+  <p class="sub">Nothing is inferred. A table name, a key, every column and every SQL type is written out; plume never guesses a column from a field name or a table from a type. The mapping is an ordinary value either way — derived from a decorated class, or constructed directly — so it can be built, inspected and tested like any other value.</p>
 <pre><code class="lumen">import { Db, DbConfig } from "./driver.ts";
 import { postgres } from "./postgres.ts";
-import { field, repository, connectDatabase, createTable, persist, findById } from "./plume.ts";
+import { entity } from "./entity.ts";
+import { connectDatabase, createTable, persist, findById } from "./plume.ts";
 
-type Agent = { id: string, agentName: string, maxSteps: int, temperature: number };
+@entity("agents")
+class Agent {
+  @id @column("id", "text")            id: string;
+  @column("agent_name", "text")        agentName: string;
+  @column("max_steps", "int")          maxSteps: int;
+  @column("temperature", "float8")     temperature: number;
+}
 
 let database: Db = postgres();
+let config: DbConfig = { host: "127.0.0.1", database: "app", user: "lumen" };
+connectDatabase(database, config);
+createTable(database, entityAgent);
+
+persist(database, entityAgent,
+  "{\"id\":\"a1\",\"agentName\":\"researcher\",\"maxSteps\":5,\"temperature\":0.2}");
+
+let back: Agent = JSON.parse&lt;Agent&gt;(findById(database, entityAgent, "a1"));</code></pre>
+  <p class="sub">The class states each field once and <code>@entity</code> derives the mapping from it. The column and its SQL type are still written out, because nothing here is inferred: <code>agentName</code> does not become <code>agent_name</code> by convention, and a field without <code>@column</code> is not mapped at all.</p>
+  <p class="sub">The row goes in as JSON and comes back as the class, which is worth saying plainly: a decorated class is a mapping <em>and</em> a shape to read into, but it is not built from a record literal — <code>let a: Agent = { id: "a1", … }</code> is a type mismatch. Either write the document, as above, or keep a record type of your own beside the class and <code>JSON.stringify</code> it.</p>
+  <p class="sub">&lt;details&gt; &lt;summary&gt;Building the mapping by hand, without the decorator&lt;/summary&gt;</p>
+  <p class="sub">A mapping is an ordinary value, and the decorator only builds one. Constructing it directly is the same thing said longer, and it is what you want when the shape is decided at run time — a table name from configuration, a column list that varies — or when you are testing the mapping itself.</p>
+<pre><code class="lumen">import { field, repository } from "./plume.ts";
 
 function agents(): DbRepository {
   let fields: DbField[] = [
@@ -102,14 +124,9 @@ function agents(): DbRepository {
   return repository("agents", "id", "id", fields);
 }
 
-let config: DbConfig = { host: "127.0.0.1", database: "app", user: "lumen" };
-connectDatabase(database, config);
-createTable(database, agents());
-
-let a: Agent = { id: "a1", agentName: "researcher", maxSteps: 5, temperature: 0.2 };
-persist(database, agents(), JSON.stringify(a));
-
-let back: Agent = JSON.parse&lt;Agent&gt;(findById(database, agents(), "a1"));</code></pre>
+persist(database, agents(), JSON.stringify(a));</code></pre>
+  <p class="sub"><code>entity_live.test.ts</code> checks that the two forms produce an identical mapping and that every operation works against either.</p>
+  <p class="sub">&lt;/details&gt;</p>
   <p class="sub">A record crosses the boundary as JSON in both directions. That is what lets one set of operations serve any record type without a generated mapper per type: the database does the conversion, using functions it already has.</p>
   <h3>Databases</h3>
   <table>
@@ -265,7 +282,7 @@ sql/R__active_agents_view.sql   repeatable,  "active agents view"</code></pre>
 migrate(database, plan);</code></pre>
   <p class="sub">Adding a migration is adding a file. A single underscore is a dot in the version and a space in the description; <code>__</code> separates the two, which is why a description cannot contain one.</p>
   <p class="sub"><code>embedDir</code> reads the directory <strong>while compiling</strong> (Lumen spec 458), so the SQL is reviewable as SQL and the program is still one binary — delete <code>sql/</code> after building and it still runs. Nothing requires <code>embedDir</code>, though: <code>migrationsFrom</code> takes any list of names and contents.</p>
-  <p class="sub">A file that is not a migration — a <code>README.md</code> beside the SQL — is left out of the plan and reported by <code>migrationNameProblem</code>. It is not silently skipped: a migration named wrongly would otherwise never run and never be missed.</p>
+  <p class="sub">A file that is not a migration — a <code>README.md</code> beside the SQL — is left out of the plan and reported by <code>migrationNameViolation</code>. It is not silently skipped: a migration named wrongly would otherwise never run and never be missed.</p>
   <p class="sub">Everything after the name is still checked. Ordering is by version, so <code>10</code> runs after <code>9</code> where a name sort would get it backwards; the checksum is over the file's contents, so editing an applied <code>.sql</code> is refused exactly as editing an inline string was.</p>
   <h4>The state table</h4>
   <p class="sub"><code>plume_schema_history</code>, created on first use, is what every one of those checks reads:</p>
@@ -277,20 +294,9 @@ migrate(database, plan);</code></pre>
   <p class="sub">The files were handed over as <code>2</code>, <code>1</code>, <code>R</code>, <code>1.1</code> — the ranks show the order they actually ran in. <code>installed_rank</code> records that order, <code>checksum</code> is the CRC-32 of the file's contents, and <code>installed_on</code>, <code>execution_ms</code> and <code>success</code> round out the row. The table name is fixed rather than configurable, because two of them in one database is a way to apply everything twice.</p>
   <p class="sub">Migration bodies are your SQL, not plume's, so they are spelled for the database they run against.</p>
   <h3>The <code>@entity</code> decorator</h3>
-  <p class="sub"><code>entity.ts</code> derives a mapping from a decorated class, so the fields are stated once instead of twice:</p>
-<pre><code class="lumen">@entity("agents")
-class Agent {
-  @id @column("id", "text")
-  id: string;
-
-  @column("agent_name", "text")
-  agentName: string;
-}
-
-persist(database, entityAgent, JSON.stringify(a));</code></pre>
+  <p class="sub">The form at the top of this file, and what it rests on.</p>
   <p class="sub">A decorator in Lumen is a pure function from a description of the declaration to a value — here, a <code>DbRepository</code>. That is why <code>entity</code> is an ordinary function of an ordinary type, tested by calling it, and why <code>entity.test.ts</code> exists before the compiler can run a decorator at all (spec 455 is not landed).</p>
-  <p class="sub">Still nothing is inferred: a field without <code>@column</code> is not mapped, a class without <code>@id</code> has no key and <code>entityProblem</code> says so. The one exception is a <code>@column("id")</code> with no type, which falls back to the declared type — the column type can always be stated outright.</p>
-  <p class="sub"><code>entity_live.test.ts</code> checks that the generated mapping is identical to the hand-written one and that every operation works against it.</p>
+  <p class="sub">Still nothing is inferred: a field without <code>@column</code> is not mapped, a class without <code>@id</code> has no key and <code>entityViolation</code> says so. The one exception is a <code>@column("id")</code> with no type, which falls back to the declared type — the column type can always be stated outright.</p>
   <h3>Testing</h3>
 <pre><code>sh packages/plume/build.sh
 createdb lumenvec                       # PostgreSQL

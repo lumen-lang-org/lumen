@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>markdown · Packages · Lumen</title>
-<meta name="description" content="A small Markdown → HTML renderer, written entirely in Lumen.">
+<title>validation · Packages · Lumen</title>
+<meta name="description" content="Validation written on the fields it validates.">
 <link rel="stylesheet" href="/style.css">
-<link rel="canonical" href="https://lumen-lang.org/packages/markdown">
-<meta property="og:url" content="https://lumen-lang.org/packages/markdown">
-<meta property="og:title" content="markdown · Packages · Lumen">
-<meta property="og:description" content="A small Markdown → HTML renderer, written entirely in Lumen.">
-<meta name="twitter:title" content="markdown · Packages · Lumen">
-<meta name="twitter:description" content="A small Markdown → HTML renderer, written entirely in Lumen.">
+<link rel="canonical" href="https://lumen-lang.org/packages/validation">
+<meta property="og:url" content="https://lumen-lang.org/packages/validation">
+<meta property="og:title" content="validation · Packages · Lumen">
+<meta property="og:description" content="Validation written on the fields it validates.">
+<meta name="twitter:title" content="validation · Packages · Lumen">
+<meta name="twitter:description" content="Validation written on the fields it validates.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -42,7 +42,7 @@
 <section class="wrap">
   <div class="docs">
   <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
-    <span id="docs-nav-toggle-label">markdown</span>
+    <span id="docs-nav-toggle-label">validation</span>
     <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
   <aside class="docs-nav" id="docs-nav"><nav>
@@ -52,7 +52,7 @@
     <a href="/packages/toml">toml</a>
     <a href="/packages/dotenv">dotenv</a>
     <a href="/packages/semver">semver</a>
-    <a href="/packages/markdown" class="active">markdown</a>
+    <a href="/packages/markdown">markdown</a>
     <a href="/packages/pdf">pdf</a>
     <p class="docs-nav-title">Data</p>
     <a href="/packages/plume">plume</a>
@@ -64,7 +64,7 @@
     <a href="/packages/socketio">socketio</a>
     <a href="/packages/sse">sse</a>
     <a href="/packages/press">press</a>
-    <a href="/packages/validation">validation</a>
+    <a href="/packages/validation" class="active">validation</a>
     <p class="docs-nav-title">AI & agents</p>
     <a href="/packages/ai">ai</a>
     <a href="/packages/agents">agents</a>
@@ -81,41 +81,47 @@
     <a href="/packages/greeter">greeter</a>
   </nav></aside>
   <div class="docs-main">
-  <p class="sub"><a href="/packages">Packages</a> / <strong>markdown</strong>
-  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/markdown">source</a></p>
-  <h2>markdown</h2>
-  <p class="sub">A small <strong>Markdown → HTML</strong> renderer, written entirely in Lumen.</p>
-  <p class="sub">Unlike the FFI packages (<code>quickjs</code>, <code>sqlite</code>), markdown is <strong>pure Lumen</strong> — no C shim, no native library, nothing to install. Import it by URL and use it.</p>
-  <h3>Use</h3>
-<pre><code class="lumen">import { render } from "https://lumen-lang.org/package/std-contrib/markdown/markdown.ts";
+  <p class="sub"><a href="/packages">Packages</a> / <strong>validation</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/validation">source</a></p>
+  <h2>validation</h2>
+  <p class="sub">Validation written on the fields it validates.</p>
+<pre><code class="lumen">@validated
+class Ask {
+  @required("a site key is needed")
+  @maxLength(200, "that is not a site key")
+  siteKey: string;
 
-console.log(render("# Title\n\nSome **bold**, *italic*, `code`, and a [link](https://x.io).\n\n- one\n- two"));</code></pre>
-  <h3>API</h3>
+  @min(1, "at least one try")
+  @max(10, "ten tries is the ceiling")
+  tries: int;
+}</code></pre>
+<pre><code class="lumen">let wrong = faults(Class.decorator(new Ask(...), "validated"), req.body);
+if (wrong.length &gt; 0) { return badRequest(faultsJson(wrong)); }
+let ask = JSON.parse&lt;Ask&gt;(req.body);</code></pre>
+  <h3>A list, not a sentence</h3>
+  <p class="sub"><code>faults</code> returns every fault, each naming its field:</p>
+<pre><code>[{"field":"siteKey","said":"that is not a site key"},
+ {"field":"tries","said":"ten tries is the ceiling"}]</code></pre>
+  <p class="sub">A client fixing three mistakes makes one round trip, and a handler can branch on <code>field</code> rather than matching on prose.</p>
+  <h3>What it does not do</h3>
+  <p class="sub">Shapes. <code>JSON.parse&lt;T&gt;</code> already refuses a body that omits a declared field, sends one the type does not name, or sends the wrong kind of value, and it names the field (spec 483). This is only for what a type cannot say: how long, how many, how few.</p>
+  <p class="sub">So the two run in order — values first, because the messages are yours, then the parse, whose refusal is the library's.</p>
+  <h3>The rules</h3>
   <table>
-    <tr><th>API</th><th>Meaning</th></tr>
-    <tr><td><code>render(md: string): string</code></td><td>render a Markdown document to an HTML fragment</td></tr>
+    <tr><th>annotation</th><th>holds when</th></tr>
+    <tr><td><code>@required(said)</code></td><td>the field is present and not blank</td></tr>
+    <tr><td><code>@maxLength(n, said)</code></td><td>at most n bytes</td></tr>
+    <tr><td><code>@minLength(n, said)</code></td><td>at least n bytes, when present</td></tr>
+    <tr><td><code>@max(n, said)</code></td><td>at most n</td></tr>
+    <tr><td><code>@min(n, said)</code></td><td>at least n</td></tr>
   </table>
-  <h3>Supported syntax</h3>
-  <p class="sub">A practical subset of CommonMark:</p>
-  <ul>
-    <li>ATX headings <code>#</code> … <code>######</code></li>
-    <li>paragraphs</li>
-    <li>inline <code>**bold**</code>, <code>*italic*</code>, `<code> </code>code<code> </code><code>, </code><a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/markdown/url">text</a>`</li>
-    <li>unordered lists (<code>-</code> / <code>*</code>)</li>
-    <li>blockquotes (<code>&gt;</code>)</li>
-    <li>fenced code blocks (```<code> </code>`<code> </code>```)</li>
-    <li>horizontal rules (<code>---</code>)</li>
-  </ul>
-  <p class="sub">HTML metacharacters (<code>&amp; &lt; &gt; "</code>) are escaped. Multi-row tables, ordered lists, nested lists, and reference links are future additions.</p>
-  <h3>Performance</h3>
-  <p class="sub">markdown is fast. Rendering a typical ~3 KB document in a tight loop — renders per second, higher is better:</p>
-  <table>
-    <tr><th>Renderer</th><th>renders/sec</th></tr>
-    <tr><td><strong>markdown</strong> (this package)</td><td><strong>6,775</strong></td></tr>
-    <tr><td>markdown-it</td><td>2,020</td></tr>
-    <tr><td>marked</td><td>1,064</td></tr>
-  </table>
-  <p class="sub">About <strong>3.4× faster than markdown-it</strong> and <strong>6.4× faster than marked</strong> on the same document.</p>
+  <p class="sub">The message is optional. Without one a rule still says which field and what it wanted, so a forgotten message is a plainer sentence rather than a silent pass.</p>
+  <h3>How it reads the annotations</h3>
+  <p class="sub"><code>@validated</code> runs while compiling. It is handed every field and every annotation written on it, and leaves a <code>Rule[]</code> constant the class carries; <code>faults</code> reads that at run time through <code>Class.decorator</code>. Nothing is scanned or reflected on at run time, and nothing about the class survives into the binary that was not already there.</p>
+  <p class="sub">Arguments arrive through <code>argsText</code> (spec 484): <code>@maxLength(200, "…")</code> mixes an int and a string, and a Lumen array is homogeneous, so the description carries every argument spelled as text and this package parses back the number.</p>
+  <h3>Testing</h3>
+<pre><code>cd packages/validation
+lumen test validation.test.ts    # 7</code></pre>
   </div>
   </div>
 </section>

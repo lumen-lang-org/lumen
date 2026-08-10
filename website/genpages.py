@@ -23,7 +23,7 @@ PKGS = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent.parent / "std-con
 GROUPS = [
     ("Formats", ["csv", "toml", "dotenv", "semver", "markdown", "pdf"]),
     ("Data", ["plume", "sqlite", "pgvector"]),
-    ("Servers", ["rest", "websocket", "socketio", "sse"]),
+    ("Servers", ["rest", "websocket", "socketio", "sse", "press", "validation"]),
     ("AI & agents", ["ai", "agents", "tracing"]),
     ("Tooling", ["token-gate", "code-index", "args", "quickjs"]),
     ("Small & example", ["mathx", "geo", "hello", "greeter"]),
