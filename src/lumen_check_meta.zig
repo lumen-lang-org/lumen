@@ -361,7 +361,7 @@ fn generateDispatcher(
                         if (self.binding(rulesName) == null) continue;
                         guard = try std.fmt.allocPrint(
                             self.arena,
-                            "let __v = validatedBody({s}, __a0.body); if (__v.stop) {{ return __v.reply; }} ",
+                            "let __v = validatedBody({s}, __a0.body); if (__v.rejected) {{ return __v.reply; }} ",
                             .{rulesName},
                         );
                     }
@@ -434,7 +434,7 @@ fn generateDispatcher(
                     try std.fmt.allocPrint(self.arena, "{s}(__a0{s})", .{ fname, extra.items });
                 guard = try std.fmt.allocPrint(
                     self.arena,
-                    "{s}let __g{d} = {s}; if (__g{d}.stop) {{ return __g{d}.reply; }} ",
+                    "{s}let __g{d} = {s}; if (__g{d}.rejected) {{ return __g{d}.reply; }} ",
                     .{ before, n, call, n, n },
                 );
             }
@@ -453,7 +453,7 @@ fn generateDispatcher(
                     if (pl.guards.len > 0) {
                         var g: std.ArrayListUnmanaged(u8) = .empty;
                         for (pl.guards, 0..) |call, gi| {
-                            try g.print(self.arena, "let __g{d}_{d} = {s}; if (__g{d}_{d}.stop) {{ return __g{d}_{d}.reply; }} ", .{ cands.items.len, gi, call, cands.items.len, gi, cands.items.len, gi });
+                            try g.print(self.arena, "let __g{d}_{d} = {s}; if (__g{d}_{d}.rejected) {{ return __g{d}_{d}.reply; }} ", .{ cands.items.len, gi, call, cands.items.len, gi, cands.items.len, gi });
                         }
                         guard = g.items;
                     }
