@@ -289,6 +289,53 @@ fn generateDispatcher(
                     }
                 }
             }
+            for (m.decorators) |d| {
+                if (!std.mem.eql(u8, d.name, "Guard") and !std.mem.eql(u8, d.name, "guard")) continue;
+                if (d.args.len == 0) continue;
+                const fname = switch (d.args[0]) {
+                    .str => |v| v,
+                    else => continue,
+                };
+                if (fname.len == 0) continue;
+                const before = guard orelse "";
+                const n = cands.items.len;
+                // A guard that is a method of this class is called on the
+                // instance and takes nothing — that is how it reaches `this.db`
+                // without taking a Request, which would make it a dispatch
+                // candidate and collide with the handlers' return type.
+                var owned = false;
+                var scan: ?[]const u8 = cname;
+                while (scan) |sn| {
+                    const ci = self.classes.get(sn) orelse break;
+                    for (ci.methods) |cm| {
+                        if (std.mem.eql(u8, cm.name, fname) and cm.params.len == 0) owned = true;
+                    }
+                    scan = ci.parent;
+                }
+                // Arguments after the name are forwarded, so policy can be
+                // parameterised — @Guard("roleAtLeast", "admin") calls
+                // roleAtLeast(req, "admin"). The guard itself lives in the
+                // application, not in rest: rest owns the mechanism.
+                var extra: std.ArrayListUnmanaged(u8) = .empty;
+                for (d.args[1..]) |a| {
+                    try extra.appendSlice(self.arena, ", ");
+                    switch (a) {
+                        .str => |v| try extra.print(self.arena, "\"{s}\"", .{v}),
+                        .int => |v| try extra.print(self.arena, "{d}", .{v}),
+                        .flt => |v| try extra.print(self.arena, "{d}", .{v}),
+                        .boolean => |v| try extra.appendSlice(self.arena, if (v) "true" else "false"),
+                    }
+                }
+                const call = if (owned)
+                    try std.fmt.allocPrint(self.arena, "__self.{s}({s})", .{ fname, if (extra.items.len > 2) extra.items[2..] else "" })
+                else
+                    try std.fmt.allocPrint(self.arena, "{s}(__a0{s})", .{ fname, extra.items });
+                guard = try std.fmt.allocPrint(
+                    self.arena,
+                    "{s}let __g{d} = {s}; if (__g{d}.stop) {{ return __g{d}.reply; }} ",
+                    .{ before, n, call, n, n },
+                );
+            }
             if (!matches) continue;
             const ret = if (m.return_annotation.len > 0)
                 m.return_annotation
