@@ -162,6 +162,8 @@ fn writeHead(out: *std.Io.Writer, kind: []const u8, name: []const u8, file: []co
     try writeString(out, name);
     try out.writeAll(",\"args\":");
     try writeArgs(out, d.args);
+    try out.writeAll(",\"argsText\":");
+    try writeArgsText(out, d.args);
     try out.writeAll(",\"file\":");
     try writeString(out, file);
     try out.print(",\"line\":{d}", .{line});
@@ -175,7 +177,34 @@ fn writeDecorators(out: *std.Io.Writer, decorators: []const ast.Decorator) !void
         try writeString(out, d.name);
         try out.writeAll(",\"args\":");
         try writeArgs(out, d.args);
+        try out.writeAll(",\"argsText\":");
+        try writeArgsText(out, d.args);
         try out.writeByte('}');
+    }
+    try out.writeByte(']');
+}
+
+/// The same arguments as text, so a decorator's `Description` can receive them.
+/// `args` is heterogeneous — `@maxLength(200, "too long")` is an int beside a
+/// string — and a Lumen array is homogeneous, so no `Description` can declare a
+/// type for it. `argsText` is every argument spelled as a string, which one
+/// `string[]` field does receive; a decorator parses back whatever it needs.
+fn writeArgsText(out: *std.Io.Writer, args: []const ast.DecoratorArg) !void {
+    try out.writeByte('[');
+    for (args, 0..) |a, i| {
+        if (i > 0) try out.writeByte(',');
+        switch (a) {
+            .str => |v| try writeString(out, v),
+            .int => |v| {
+                var buf: [32]u8 = undefined;
+                try writeString(out, std.fmt.bufPrint(&buf, "{d}", .{v}) catch "0");
+            },
+            .flt => |v| {
+                var buf: [64]u8 = undefined;
+                try writeString(out, std.fmt.bufPrint(&buf, "{d}", .{v}) catch "0");
+            },
+            .boolean => |v| try writeString(out, if (v) "true" else "false"),
+        }
     }
     try out.writeByte(']');
 }
@@ -276,7 +305,7 @@ test "a decorated class describes its fields and their decorators (spec 455)" {
     var diag: diag_mod.Diag = .{};
     try describeSource(arena, src, "agent.ts", &out.writer, &diag);
     try std.testing.expectEqualStrings(
-        \\{"protocol":1,"kind":"class","name":"Agent","args":["agents",2,true],"file":"agent.ts","line":4,"fields":[{"name":"id","type":"string","decorators":[{"name":"id","args":[]},{"name":"column","args":["id","text"]}]},{"name":"agentName","type":"string","decorators":[{"name":"column","args":["agent_name","text"]}]},{"name":"steps","type":"int[]","decorators":[]}],"methods":[]}
+        \\{"protocol":1,"kind":"class","name":"Agent","args":["agents",2,true],"argsText":["agents","2","true"],"file":"agent.ts","line":4,"fields":[{"name":"id","type":"string","decorators":[{"name":"id","args":[],"argsText":[]},{"name":"column","args":["id","text"],"argsText":["id","text"]}]},{"name":"agentName","type":"string","decorators":[{"name":"column","args":["agent_name","text"],"argsText":["agent_name","text"]}]},{"name":"steps","type":"int[]","decorators":[]}],"methods":[]}
         \\
     , out.written());
 }
@@ -298,7 +327,7 @@ test "a decorated class describes its methods, their params and decorators (spec
     var diag: diag_mod.Diag = .{};
     try describeSource(arena, src, "api.ts", &out.writer, &diag);
     try std.testing.expectEqualStrings(
-        \\{"protocol":1,"kind":"class","name":"AgentApi","args":["/agents"],"file":"api.ts","line":2,"fields":[],"methods":[{"name":"find","returns":"string","params":[{"name":"id","type":"string","decorators":[{"name":"param","args":["the id"]}]}],"decorators":[{"name":"get","args":["/:id"]}]},{"name":"count","returns":"int","params":[],"decorators":[]}]}
+        \\{"protocol":1,"kind":"class","name":"AgentApi","args":["/agents"],"argsText":["/agents"],"file":"api.ts","line":2,"fields":[],"methods":[{"name":"find","returns":"string","params":[{"name":"id","type":"string","decorators":[{"name":"param","args":["the id"],"argsText":["the id"]}]}],"decorators":[{"name":"get","args":["/:id"],"argsText":["/:id"]}]},{"name":"count","returns":"int","params":[],"decorators":[]}]}
         \\
     , out.written());
 }
@@ -318,7 +347,7 @@ test "a decorated function describes its parameters and return type (spec 455)" 
     var diag: diag_mod.Diag = .{};
     try describeSource(arena, src, "tool.ts", &out.writer, &diag);
     try std.testing.expectEqualStrings(
-        \\{"protocol":1,"kind":"function","name":"search","args":["search"],"file":"tool.ts","line":2,"params":[{"name":"q","type":"string","decorators":[{"name":"describe","args":["what to look for"]}]},{"name":"limit","type":"int","decorators":[]}],"returns":"string[]"}
+        \\{"protocol":1,"kind":"function","name":"search","args":["search"],"argsText":["search"],"file":"tool.ts","line":2,"params":[{"name":"q","type":"string","decorators":[{"name":"describe","args":["what to look for"],"argsText":["what to look for"]}]},{"name":"limit","type":"int","decorators":[]}],"returns":"string[]"}
         \\
     , out.written());
 }
