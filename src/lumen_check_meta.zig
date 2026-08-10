@@ -146,6 +146,58 @@ fn dispatcherName(self: *Checker, cname: []const u8, arg_types: []const types.Ty
     return buf.items;
 }
 
+
+/// The binding plan a `@bindings` decorator left beside the class, or null.
+///
+/// The plan is ordinary Lumen data — `[{ handler, args, guards }]` — produced by
+/// `bindings()` in rest/controller.ts, which is where the vocabulary lives: that
+/// function decides that `@PathVariable("id")` means `param(req, "id")`. This
+/// reads the strings back and splices them, so adding a binder is editing Lumen
+/// rather than this file.
+const Plan = struct { handler: []const u8, args: []const []const u8, guards: []const []const u8 };
+
+fn planStrings(self: *Checker, e: *ast.Expr) ?[]const []const u8 {
+    if (e.* != .array) return null;
+    var out: std.ArrayListUnmanaged([]const u8) = .empty;
+    for (e.array.items) |it| {
+        if (it.* != .str) return null;
+        out.append(self.arena, it.str) catch return null;
+    }
+    return out.items;
+}
+
+fn planFor(self: *Checker, cname: []const u8) ?[]const Plan {
+    const cn = std.fmt.allocPrint(self.arena, "bindings{s}", .{cname}) catch return null;
+    const b = self.binding(cn) orelse return null;
+    const decl = b.decl orelse return null;
+    if (decl.init.* != .array) return null;
+    var out: std.ArrayListUnmanaged(Plan) = .empty;
+    for (decl.init.array.items) |row| {
+        if (row.* != .obj) return null;
+        var handler: []const u8 = "";
+        var args: []const []const u8 = &.{};
+        var guards: []const []const u8 = &.{};
+        for (row.obj) |f| {
+            if (std.mem.eql(u8, f.name, "handler")) {
+                if (f.value.* != .str) return null;
+                handler = f.value.str;
+            } else if (std.mem.eql(u8, f.name, "args")) {
+                args = planStrings(self, f.value) orelse return null;
+            } else if (std.mem.eql(u8, f.name, "guards")) {
+                guards = planStrings(self, f.value) orelse return null;
+            }
+        }
+        if (handler.len == 0) return null;
+        out.append(self.arena, .{ .handler = handler, .args = args, .guards = guards }) catch return null;
+    }
+    return out.items;
+}
+
+fn planOf(plans: []const Plan, name: []const u8) ?Plan {
+    for (plans) |pl| if (std.mem.eql(u8, pl.handler, name)) return pl;
+    return null;
+}
+
 /// A method of `cname` (or a base) that `Class.invoke` may dispatch to.
 const Candidate = struct { name: []const u8, ret: []const u8, bind: ?[]const []const u8 = null, guard: ?[]const u8 = null };
 
@@ -219,6 +271,7 @@ fn generateDispatcher(
 ) diag_mod.CompileError!void {
     var cands: std.ArrayListUnmanaged(Candidate) = .empty;
     var params: ?[]const []const u8 = null;
+    const plans = planFor(self, cname);
     var seen: std.StringHashMapUnmanaged(void) = .empty;
 
     var cur: ?[]const u8 = cname;
@@ -336,6 +389,19 @@ fn generateDispatcher(
                     .{ before, n, call, n, n },
                 );
             }
+            if (plans) |ps| {
+                if (planOf(ps, m.name)) |pl| {
+                    bind = pl.args;
+                    matches = true;
+                    if (pl.guards.len > 0) {
+                        var g: std.ArrayListUnmanaged(u8) = .empty;
+                        for (pl.guards, 0..) |call, gi| {
+                            try g.print(self.arena, "let __g{d}_{d} = {s}; if (__g{d}_{d}.stop) {{ return __g{d}_{d}.reply; }} ", .{ cands.items.len, gi, call, cands.items.len, gi, cands.items.len, gi });
+                        }
+                        guard = g.items;
+                    }
+                }
+            }
             if (!matches) continue;
             const ret = if (m.return_annotation.len > 0)
                 m.return_annotation
@@ -366,13 +432,20 @@ fn generateDispatcher(
     }
 
     var src: std.ArrayListUnmanaged(u8) = .empty;
-    try src.print(self.arena, "function {s}(__self: {s}, __handler: string", .{ disp, cname });
-    for (params.?, 0..) |ann, i| try src.print(self.arena, ", __a{d}: {s}", .{ i, ann });
+    const selfName = if (plans != null) "self" else "__self";
+    try src.print(self.arena, "function {s}({s}: {s}, __handler: string", .{ disp, selfName, cname });
+    for (params.?, 0..) |ann, i| {
+        if (i == 0 and plans != null) {
+            try src.print(self.arena, ", req: {s}", .{ann});
+        } else {
+            try src.print(self.arena, ", __a{d}: {s}", .{ i, ann });
+        }
+    }
     try src.print(self.arena, "): {s} {{\n", .{cands.items[0].ret});
     for (cands.items) |c| {
         try src.print(self.arena, "  if (__handler == \"{s}\") {{ ", .{c.name});
         if (c.guard) |g| try src.appendSlice(self.arena, g);
-        try src.print(self.arena, "return __self.{s}(", .{c.name});
+        try src.print(self.arena, "return {s}.{s}(", .{ selfName, c.name });
         if (c.bind) |bs| {
             for (bs, 0..) |b, i| {
                 if (i > 0) try src.appendSlice(self.arena, ", ");
