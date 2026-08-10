@@ -358,24 +358,24 @@ pub const Checker = struct {
         // arrays/containers aren't supported yet; say so instead of the
         // absurd-looking "expected `Status`, got `Status`".
         if (actual == .enum_type and expected == .named and std.mem.eql(u8, expected.named, actual.enum_type.name)) {
-            const msg2 = std.fmt.allocPrint(self.arena, "enum containers are not supported yet — `{s}[]` can be modeled as a string-literal union type (`type {s}2 = \"a\" | \"b\"`) or the backing `i32[]`", .{ actual.enum_type.name, actual.enum_type.name }) catch
+            const msg2 = std.fmt.allocPrint(self.arena, "enum containers are not supported yet — `{s}[]` can be modeled as a string-literal union type (`type {s}2 = \"a\" | \"b\"`) or the backing `i32[]` [E_TYPE_MISMATCH]", .{ actual.enum_type.name, actual.enum_type.name }) catch
                 return self.fail(line, col, "E_TYPE_MISMATCH");
             return self.fail(line, col, msg2);
         }
         // A subclass value in a superclass slot: no vtables in V1, so class
         // values are not polymorphic — explain rather than a bare mismatch.
         if (expected == .class_type and actual == .class_type and self.isSubclassOf(actual.class_type, expected.class_type)) {
-            const msg2 = std.fmt.allocPrint(self.arena, "class values are not polymorphic — a `{s}` slot cannot hold a `{s}`; declare it as `{s}`, or model the variants as a discriminated union", .{ en, an, an }) catch
+            const msg2 = std.fmt.allocPrint(self.arena, "class values are not polymorphic — a `{s}` slot cannot hold a `{s}`; declare it as `{s}`, or model the variants as a discriminated union [E_TYPE_MISMATCH]", .{ en, an, an }) catch
                 return self.fail(line, col, "E_TYPE_MISMATCH");
             return self.fail(line, col, msg2);
         }
         // A Promise<T> where T was expected is almost always a missing await.
         const forgot_await = actual == .promise_type and types.same(expected, actual.promise_type.*);
         const msg = if (forgot_await)
-            std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}` — did you forget `await`?", .{ en, an }) catch
+            std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}` — did you forget `await`? [E_TYPE_MISMATCH]", .{ en, an }) catch
                 return self.fail(line, col, "E_TYPE_MISMATCH")
         else
-            std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}`", .{ en, an }) catch
+            std.fmt.allocPrint(self.arena, "type mismatch: expected `{s}`, got `{s}` [E_TYPE_MISMATCH]", .{ en, an }) catch
                 return self.fail(line, col, "E_TYPE_MISMATCH");
         return self.fail(line, col, msg);
     }
@@ -1465,7 +1465,7 @@ pub const Checker = struct {
                 if (required == fixed_count) break :blk std.fmt.allocPrint(self.arena, "{d} argument{s}", .{ required, plural(required) }) catch "";
                 break :blk std.fmt.allocPrint(self.arena, "{d}-{d} arguments", .{ required, fixed_count }) catch "";
             };
-            const msg = std.fmt.allocPrint(self.arena, "{s} expects {s}, got {d}", .{ callee, expected, args.len }) catch "E_ARG_COUNT";
+            const msg = std.fmt.allocPrint(self.arena, "{s} expects {s}, got {d} [E_ARG_COUNT]", .{ callee, expected, args.len }) catch "E_ARG_COUNT";
             _ = self.fail(line, col, msg) catch {};
             return null;
         }
@@ -1597,7 +1597,7 @@ pub const Checker = struct {
                     var merged: std.ArrayListUnmanaged(ast.TypeField) = .empty;
                     for (stmt.type_decl.parents) |pname| {
                         const pinfo = self.type_decls.get(pname) orelse {
-                            const msg = std.fmt.allocPrint(self.arena, "`{s}` references `{s}`, but `{s}` is not a known interface or record type", .{ stmt.type_decl.name, pname, pname }) catch "E_TYPE_MISMATCH";
+                            const msg = std.fmt.allocPrint(self.arena, "`{s}` references `{s}`, but `{s}` is not a known interface or record type [E_TYPE_MISMATCH]", .{ stmt.type_decl.name, pname, pname }) catch "E_TYPE_MISMATCH";
                             return self.fail(stmt.type_decl.line, stmt.type_decl.col, msg);
                         };
                         for (pinfo.fields) |pf| {
@@ -1698,7 +1698,7 @@ pub const Checker = struct {
                 for (stmt.type_decl.fields) |f| {
                     if (isMethodField(f)) continue;
                     if (std.mem.eql(u8, baseTypeName(f.annotation), tname)) {
-                        const msg = std.fmt.allocPrint(self.arena, "record type `{s}` references itself (`{s}: {s}`) — a value record can't contain itself; use a `class` for a recursive/linked structure (its instances are heap references)", .{ tname, f.name, f.annotation }) catch "E_RECURSIVE_RECORD";
+                        const msg = std.fmt.allocPrint(self.arena, "record type `{s}` references itself (`{s}: {s}`) — a value record can't contain itself; use a `class` for a recursive/linked structure (its instances are heap references) [E_RECURSIVE_RECORD]", .{ tname, f.name, f.annotation }) catch "E_RECURSIVE_RECORD";
                         return self.fail(stmt.type_decl.line, stmt.type_decl.col, msg);
                     }
                 }

@@ -39,7 +39,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                     std.fmt.allocPrint(self.arena, "keyof {s}", .{type_name["__keyof_".len..]}) catch type_name
                 else
                     type_name;
-                const msg = std.fmt.allocPrint(self.arena, "\"{s}\" is not a valid `{s}` — expected {s}", .{ value.str, disp, opts.items }) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "\"{s}\" is not a valid `{s}` — expected {s} [E_TYPE_MISMATCH]", .{ value.str, disp, opts.items }) catch "E_TYPE_MISMATCH";
                 return self.fail(line, col, msg);
             }
             const actual_type = self.exprType(program, value, line, col) orelse return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
@@ -133,7 +133,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                         if (fi > 0) names.appendSlice(self.arena, ", ") catch {};
                         names.appendSlice(self.arena, df.name) catch {};
                     }
-                    const msg = std.fmt.allocPrint(self.arena, "object literal has unknown property '{s}' — `{s}` has: {s}", .{ pf.name, type_name, names.items }) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "object literal has unknown property '{s}' — `{s}` has: {s} [E_TYPE_MISMATCH]", .{ pf.name, type_name, names.items }) catch "E_TYPE_MISMATCH";
                     return self.fail(line, col, msg);
                 }
             }
@@ -156,7 +156,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                     ordered[i] = .{ .name = expected_field.name, .value = absent };
                 } else {
                     const tn = types.tsName(self.arena, expected_field_type) catch "?";
-                    const msg = std.fmt.allocPrint(self.arena, "object literal is missing property '{s}' (`{s}`) required by `{s}`", .{ expected_field.name, tn, type_name }) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "object literal is missing property '{s}' (`{s}`) required by `{s}` [E_TYPE_MISMATCH]", .{ expected_field.name, tn, type_name }) catch "E_TYPE_MISMATCH";
                     return self.fail(line, col, msg);
                 }
             }
@@ -199,7 +199,7 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
                             // local first — reject with that guidance rather than
                             // emit code the backend can't type.
                             if (!(value.* == .var_ref or value.* == .field)) {
-                                const msg = std.fmt.allocPrint(self.arena, "a `{s}` value coerces to `{s}` only from a variable or field — bind it to a `const` first (`const t = ...; ...: {s} = t`)", .{ actual_type.named, union_name, union_name }) catch "E_TYPE_MISMATCH";
+                                const msg = std.fmt.allocPrint(self.arena, "a `{s}` value coerces to `{s}` only from a variable or field — bind it to a `const` first (`const t = ...; ...: {s} = t`) [E_TYPE_MISMATCH]", .{ actual_type.named, union_name, union_name }) catch "E_TYPE_MISMATCH";
                                 return self.fail(line, col, msg);
                             }
                             const vfields = self.declFields(v.name);

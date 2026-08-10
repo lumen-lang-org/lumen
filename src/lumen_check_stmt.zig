@@ -200,16 +200,16 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
                 return self.fail(c.line, c.col, "custom error subclasses (`class ... extends Error`) are not supported yet — throw `new Error(\"message\")` with a distinguishing message, or return a discriminated result type (`type Result = Ok | Err`)");
             }
             if (self.generic_classes.get(pname) != null) {
-                const msg = std.fmt.allocPrint(self.arena, "extending a generic class (`{s}<...>`) is not supported yet — extend a concrete (non-generic) base class, or compose it as a field instead of subclassing", .{pname}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "extending a generic class (`{s}<...>`) is not supported yet — extend a concrete (non-generic) base class, or compose it as a field instead of subclassing [E_TYPE_MISMATCH]", .{pname}) catch "E_TYPE_MISMATCH";
                 return self.fail(c.line, c.col, msg);
             }
-            const msg = std.fmt.allocPrint(self.arena, "class `{s}` extends `{s}`, but `{s}` is not a known class", .{ c.name, pname, pname }) catch "E_TYPE_MISMATCH";
+            const msg = std.fmt.allocPrint(self.arena, "class `{s}` extends `{s}`, but `{s}` is not a known class [E_TYPE_MISMATCH]", .{ c.name, pname, pname }) catch "E_TYPE_MISMATCH";
             return self.fail(c.line, c.col, msg);
         }
         var cur: ?[]const u8 = pname;
         while (cur) |name| {
             if (std.mem.eql(u8, name, c.name)) {
-                const msg = std.fmt.allocPrint(self.arena, "class `{s}` cannot inherit from itself (inheritance cycle)", .{c.name}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "class `{s}` cannot inherit from itself (inheritance cycle) [E_TYPE_MISMATCH]", .{c.name}) catch "E_TYPE_MISMATCH";
                 return self.fail(c.line, c.col, msg);
             }
             cur = (self.classes.get(name) orelse break).parent;
@@ -224,7 +224,7 @@ pub fn checkClass(self: *Checker, program: *ast.Program, c: *ast.ClassDecl) Comp
             if (self.resolveField(c.name, req.name) != null) continue;
             if (self.resolveMethod(c.name, req.name) != null) continue;
             if (self.resolveAccessor(c.name, req.name, .getter) != null) continue;
-            const msg = std.fmt.allocPrint(self.arena, "class '{s}' is missing member '{s}' required by interface `{s}`", .{ c.name, req.name, iface }) catch "E_MISSING_MEMBER";
+            const msg = std.fmt.allocPrint(self.arena, "class '{s}' is missing member '{s}' required by interface `{s}` [E_MISSING_MEMBER]", .{ c.name, req.name, iface }) catch "E_MISSING_MEMBER";
             return self.fail(c.line, c.col, msg);
         }
     }
@@ -660,7 +660,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     const bind = self.bindingPtr(b.name) orelse
                         return self.undefined_(b.name, d.line, d.col);
                     if (!bind.mutable) {
-                        const msg = std.fmt.allocPrint(self.arena, "cannot assign to '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable", .{ b.name, b.name }) catch "E_CONST_ASSIGNMENT";
+                        const msg = std.fmt.allocPrint(self.arena, "cannot assign to '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable [E_CONST_ASSIGNMENT]", .{ b.name, b.name }) catch "E_CONST_ASSIGNMENT";
                         return self.fail(d.line, d.col, msg);
                     }
                     const elem_t: types.Type = switch (src_type) {
@@ -669,7 +669,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                             (types.arrayElem(src_type) orelse return self.fail(d.line, d.col, "E_TYPE_MISMATCH"))
                         else {
                             const tn = types.tsName(self.arena, src_type) catch "?";
-                            const msg = std.fmt.allocPrint(self.arena, "array destructuring needs an array or tuple, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                            const msg = std.fmt.allocPrint(self.arena, "array destructuring needs an array or tuple, got `{s}` [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                             return self.fail(d.line, d.col, msg);
                         },
                     };
@@ -710,7 +710,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 const elems = src_type.tuple_type;
                 if (d.bindings.len != elems.len) {
                     const tn = types.tsName(self.arena, src_type) catch "tuple";
-                    const msg = std.fmt.allocPrint(self.arena, "destructuring pattern has {d} name{s} but `{s}` has {d} element{s}", .{ d.bindings.len, if (d.bindings.len == 1) "" else "s", tn, elems.len, if (elems.len == 1) "" else "s" }) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "destructuring pattern has {d} name{s} but `{s}` has {d} element{s} [E_TYPE_MISMATCH]", .{ d.bindings.len, if (d.bindings.len == 1) "" else "s", tn, elems.len, if (elems.len == 1) "" else "s" }) catch "E_TYPE_MISMATCH";
                     // Error recovery: still bind what lines up so later uses
                     // don't cascade into undefined-variable noise.
                     for (d.bindings, 0..) |*b, i| {
@@ -739,7 +739,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             } else {
                 if (!types.isArray(src_type)) {
                     const tn = types.tsName(self.arena, src_type) catch "?";
-                    const msg = std.fmt.allocPrint(self.arena, "array destructuring needs an array or tuple, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "array destructuring needs an array or tuple, got `{s}` [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                     return self.fail(d.line, d.col, msg);
                 }
                 const elem = types.arrayElem(src_type) orelse return self.fail(d.line, d.col, "E_TYPE_MISMATCH");
@@ -774,7 +774,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             const found_binding = self.bindingPtr(assignment.name) orelse
                 return self.undefined_(assignment.name, assignment.line, assignment.col);
             if (!found_binding.mutable) {
-                const msg = std.fmt.allocPrint(self.arena, "cannot assign to '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable", .{ assignment.name, assignment.name }) catch "E_CONST_ASSIGNMENT";
+                const msg = std.fmt.allocPrint(self.arena, "cannot assign to '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable [E_CONST_ASSIGNMENT]", .{ assignment.name, assignment.name }) catch "E_CONST_ASSIGNMENT";
                 return self.fail(assignment.line, assignment.col, msg);
             }
             // A statement-body arrow captures outer bindings by value, so it
@@ -1083,7 +1083,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 iter_type.set_type.*
             else {
                 const tn = types.tsName(self.arena, iter_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "`for...of` needs an array, string, Set, or Map — got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "`for...of` needs an array, string, Set, or Map — got `{s}` [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                 return self.fail(loop.line, loop.col, msg);
             };
             loop.elem_type = elem_type;
@@ -1114,7 +1114,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                 program.uses_io = true; // the index->string uses __alloc
             } else {
                 const tn = types.tsName(self.arena, iter_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "`for...in` needs a record or array, got `{s}` — to iterate values use `for...of`", .{tn}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "`for...in` needs a record or array, got `{s}` — to iterate values use `for...of` [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                 return self.fail(loop.line, loop.col, msg);
             }
             try self.pushScope();
@@ -1336,7 +1336,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                     if (mc.obj.* == .var_ref) {
                         if (self.bindingPtr(mc.obj.var_ref.name)) |b| if (types.isArray(b.ty)) {
                             if (!b.mutable) {
-                                const msg = std.fmt.allocPrint(self.arena, "`{s}` reassigns '{s}' (arrays are immutable values in Lumen) — declare it with `let`, not `const`", .{ mc.name, mc.obj.var_ref.name }) catch "E_CONST_ASSIGNMENT";
+                                const msg = std.fmt.allocPrint(self.arena, "`{s}` reassigns '{s}' (arrays are immutable values in Lumen) — declare it with `let`, not `const` [E_CONST_ASSIGNMENT]", .{ mc.name, mc.obj.var_ref.name }) catch "E_CONST_ASSIGNMENT";
                                 return self.fail(expr_stmt.line, expr_stmt.col, msg);
                             }
                             spread_src = clonePureRecv(self.arena, mc.obj);
@@ -1419,7 +1419,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             // string message at runtime; anything else names its type.
             if (!types.same(.error_obj, thrown_type) and !types.isStringLike(thrown_type)) {
                 const tn = types.tsName(self.arena, thrown_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "can only throw an Error or a string, got `{s}` — write `throw new Error(...)`", .{tn}) catch "E_THROW_TYPE";
+                const msg = std.fmt.allocPrint(self.arena, "can only throw an Error or a string, got `{s}` — write `throw new Error(...)` [E_THROW_TYPE]", .{tn}) catch "E_THROW_TYPE";
                 return self.fail(throw_stmt.line, throw_stmt.col, msg);
             }
         },

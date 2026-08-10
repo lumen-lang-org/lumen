@@ -39,6 +39,7 @@ const lumen_version = "0.1.0-dev";
 fn humanizeDiag(code: []const u8) []const u8 {
     const eq = std.mem.eql;
     if (eq(u8, code, "E_TYPE_MISMATCH")) return "type mismatch [E_TYPE_MISMATCH]";
+    if (eq(u8, code, "E_POSSIBLY_NULL")) return "value may be null [E_POSSIBLY_NULL]";
     if (eq(u8, code, "E_ARG_COUNT")) return "wrong number of arguments [E_ARG_COUNT]";
     if (eq(u8, code, "E_TYPE_ARG_COUNT")) return "wrong number of type arguments [E_TYPE_ARG_COUNT]";
     if (eq(u8, code, "E_MISSING_RETURN")) return "not all code paths return a value [E_MISSING_RETURN]";

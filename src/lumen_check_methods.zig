@@ -104,7 +104,7 @@ pub fn arrayMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type:
         }
         if (!types.isArray(elem)) {
             const tn = types.tsName(self.arena, obj_type) catch "?";
-            const msg = std.fmt.allocPrint(self.arena, "`.flat()` needs an array of arrays, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+            const msg = std.fmt.allocPrint(self.arena, "`.flat()` needs an array of arrays, got `{s}` [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
             _ = self.fail(line, col, msg) catch {};
             return null;
         }

@@ -154,7 +154,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 };
                 if (!b.mutable) {
-                    const msg = std.fmt.allocPrint(self.arena, "cannot modify '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable", .{ id.target.var_ref.name, id.target.var_ref.name }) catch "E_CONST_ASSIGNMENT";
+                    const msg = std.fmt.allocPrint(self.arena, "cannot modify '{s}' — it was declared with `const`; use `let {s} = ...` to make it mutable [E_CONST_ASSIGNMENT]", .{ id.target.var_ref.name, id.target.var_ref.name }) catch "E_CONST_ASSIGNMENT";
                     _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
@@ -192,7 +192,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             // statically, so `x instanceof C` is a compile-time bool.
             const t = self.exprType(program, io.value, line, col) orelse return null;
             if (self.classes.get(io.class_name) == null) {
-                const msg = std.fmt.allocPrint(self.arena, "`instanceof` needs a class name, `{s}` is not a class", .{io.class_name}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "`instanceof` needs a class name, `{s}` is not a class [E_TYPE_MISMATCH]", .{io.class_name}) catch "E_TYPE_MISMATCH";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -226,7 +226,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             const operand_type = self.exprType(program, inner, line, col) orelse return null;
             if (operand_type != .promise_type) {
                 const tn = types.tsName(self.arena, operand_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "`await` needs a Promise, got `{s}` — only `async` functions return a Promise", .{tn}) catch "E_AWAIT_NOT_PROMISE";
+                const msg = std.fmt.allocPrint(self.arena, "`await` needs a Promise, got `{s}` — only `async` functions return a Promise [E_AWAIT_NOT_PROMISE]", .{tn}) catch "E_AWAIT_NOT_PROMISE";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -290,7 +290,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (!types.isNumeric(left_type) or !types.same(left_type, right_type)) {
                 const ln = types.tsName(self.arena, left_type) catch "?";
                 const rn = types.tsName(self.arena, right_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "operator '{c}' cannot combine `{s}` and `{s}`", .{ if (bin.op == 'L') '<' else if (bin.op == 'R') '>' else if (bin.op == 'P') '*' else bin.op, ln, rn }) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "operator '{c}' cannot combine `{s}` and `{s}` [E_TYPE_MISMATCH]", .{ if (bin.op == 'L') '<' else if (bin.op == 'R') '>' else if (bin.op == 'P') '*' else bin.op, ln, rn }) catch "E_TYPE_MISMATCH";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -431,13 +431,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (!types.same(left_type, right_type)) {
                 const ln = types.tsName(self.arena, left_type) catch "?";
                 const rn = types.tsName(self.arena, right_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "cannot compare `{s}` and `{s}` — both sides of `{s}` must be the same type", .{ ln, rn, cmp.op }) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "cannot compare `{s}` and `{s}` — both sides of `{s}` must be the same type [E_TYPE_MISMATCH]", .{ ln, rn, cmp.op }) catch "E_TYPE_MISMATCH";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
             if (!std.mem.eql(u8, cmp.op, "==") and !std.mem.eql(u8, cmp.op, "!=") and !types.isNumeric(left_type)) {
                 const ln = types.tsName(self.arena, left_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "`{s}` needs numeric operands, got `{s}`", .{ cmp.op, ln }) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "`{s}` needs numeric operands, got `{s}` [E_TYPE_MISMATCH]", .{ cmp.op, ln }) catch "E_TYPE_MISMATCH";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -755,7 +755,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             const left_type = self.exprType(program, c.l, line, col) orelse return null;
             if (left_type != .optional) {
                 const tn = types.tsName(self.arena, left_type) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "left side of `??` is `{s}`, which can never be null — remove the `??`", .{tn}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "left side of `??` is `{s}`, which can never be null — remove the `??` [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -1057,7 +1057,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     std.fmt.allocPrint(self.arena, "'{s}' (`{s}`)", .{ field.obj.var_ref.name, tn }) catch "value"
                 else
                     std.fmt.allocPrint(self.arena, "value of type `{s}`", .{tn}) catch "value";
-                const msg = std.fmt.allocPrint(self.arena, "{s} may be null — check `!= null` before reading '.{s}', or use optional chaining `?.{s}`", .{ subject, field.name, field.name }) catch "possibly null";
+                const msg = std.fmt.allocPrint(self.arena, "{s} may be null — check `!= null` before reading '.{s}', or use optional chaining `?.{s}` [E_POSSIBLY_NULL]", .{ subject, field.name, field.name }) catch "possibly null";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -1337,7 +1337,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 return null;
             }
             const info = self.classes.get(ne.class_name) orelse {
-                const msg = std.fmt.allocPrint(self.arena, "'new' needs a class, but `{s}` is not a class", .{ne.class_name}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "'new' needs a class, but `{s}` is not a class [E_TYPE_MISMATCH]", .{ne.class_name}) catch "E_TYPE_MISMATCH";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             };
@@ -1575,7 +1575,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     std.fmt.allocPrint(self.arena, "'{s}' (`{s}`)", .{ mc.obj.var_ref.name, tn }) catch "value"
                 else
                     std.fmt.allocPrint(self.arena, "value of type `{s}`", .{tn}) catch "value";
-                const msg = std.fmt.allocPrint(self.arena, "{s} may be null — check `!= null` before calling '.{s}()'", .{ subject, mc.name }) catch "possibly null";
+                const msg = std.fmt.allocPrint(self.arena, "{s} may be null — check `!= null` before calling '.{s}()' [E_POSSIBLY_NULL]", .{ subject, mc.name }) catch "possibly null";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -1776,7 +1776,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 }
                 const elem_type = types.arrayElem(obj_type) orelse {
                     const tn = types.tsName(self.arena, obj_type) catch "?";
-                    const msg = std.fmt.allocPrint(self.arena, "cannot index `{s}` — indexing needs an array, string, or tuple", .{tn}) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "cannot index `{s}` — indexing needs an array, string, or tuple [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                     _ = self.fail(line, col, msg) catch {};
                     return null;
                 };
@@ -1800,13 +1800,13 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (!oc.optional_chain) {
                 if (callee_type != .func_type) {
                     const tn = types.tsName(self.arena, callee_type) catch "?";
-                    const msg = std.fmt.allocPrint(self.arena, "cannot call a value of type `{s}` — only functions are callable", .{tn}) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "cannot call a value of type `{s}` — only functions are callable [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                     _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
                 const sig = callee_type.func_type;
                 if (oc.args.len != sig.params.len) {
-                    const msg = std.fmt.allocPrint(self.arena, "this function value expects {d} argument{s}, got {d}", .{ sig.params.len, if (sig.params.len == 1) "" else "s", oc.args.len }) catch "E_ARG_COUNT";
+                    const msg = std.fmt.allocPrint(self.arena, "this function value expects {d} argument{s}, got {d} [E_ARG_COUNT]", .{ sig.params.len, if (sig.params.len == 1) "" else "s", oc.args.len }) catch "E_ARG_COUNT";
                     _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
@@ -2225,14 +2225,14 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 }
                 if (call.args.len != 1) {
-                    const msg = std.fmt.allocPrint(self.arena, "'Object.{s}' expects 1 argument", .{call.name}) catch "E_ARITY";
+                    const msg = std.fmt.allocPrint(self.arena, "'Object.{s}' expects 1 argument [E_ARITY]", .{call.name}) catch "E_ARITY";
                     _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
                 const at = self.exprType(program, call.args[0], line, col) orelse return null;
                 if (at != .named) {
                     const tn = types.tsName(self.arena, at) catch "?";
-                    const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs a record type, got `{s}`", .{ call.name, tn }) catch "E_TYPE_MISMATCH";
+                    const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs a record type, got `{s}` [E_TYPE_MISMATCH]", .{ call.name, tn }) catch "E_TYPE_MISMATCH";
                     _ = self.fail(line, col, msg) catch {};
                     return null;
                 }
@@ -2249,19 +2249,19 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     // value, or of `[key, value]` tuples).
                     const fn_name = call.name;
                     if (decl.fields.len == 0) {
-                        const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs a record with at least one field", .{fn_name}) catch "E_EMPTY_RECORD";
+                        const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs a record with at least one field [E_EMPTY_RECORD]", .{fn_name}) catch "E_EMPTY_RECORD";
                         _ = self.fail(line, col, msg) catch {};
                         return null;
                     }
                     const elem = decl.fields[0].checked_type orelse (self.typeFromAnnotation(decl.fields[0].annotation, line, col) catch null) orelse {
-                        const msg = std.fmt.allocPrint(self.arena, "Object.{s}: could not resolve the field type", .{fn_name}) catch "E_TYPE_MISMATCH";
+                        const msg = std.fmt.allocPrint(self.arena, "Object.{s}: could not resolve the field type [E_TYPE_MISMATCH]", .{fn_name}) catch "E_TYPE_MISMATCH";
                         _ = self.fail(line, col, msg) catch {};
                         return null;
                     };
                     for (decl.fields[1..]) |f| {
                         const ft = f.checked_type orelse (self.typeFromAnnotation(f.annotation, line, col) catch null) orelse continue;
                         if (!types.same(elem, ft)) {
-                            const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs all fields to share one type — mixed field types have no single array element type", .{fn_name}) catch "E_TYPE_MISMATCH";
+                            const msg = std.fmt.allocPrint(self.arena, "Object.{s} needs all fields to share one type — mixed field types have no single array element type [E_TYPE_MISMATCH]", .{fn_name}) catch "E_TYPE_MISMATCH";
                             _ = self.fail(line, col, msg) catch {};
                             return null;
                         }

@@ -1051,7 +1051,7 @@ pub fn promiseCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
             const it_ty = self.exprType(program, it, line, col) orelse return null;
             if (it_ty != .promise_type) {
                 const tn = types.tsName(self.arena, it_ty) catch "?";
-                const msg = std.fmt.allocPrint(self.arena, "Promise.all elements must be promises, got `{s}`", .{tn}) catch "E_TYPE_MISMATCH";
+                const msg = std.fmt.allocPrint(self.arena, "Promise.all elements must be promises, got `{s}` [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
                 _ = self.fail(line, col, msg) catch {};
                 return null;
             }
@@ -1065,7 +1065,7 @@ pub fn promiseCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
         }
         const arr_ty = types.arrayOf(inner.?) orelse {
             const tn = types.tsName(self.arena, inner.?) catch "?";
-            const msg = std.fmt.allocPrint(self.arena, "Promise.all cannot collect `Promise<{s}>` — the resolved type has no array form", .{tn}) catch "E_TYPE_MISMATCH";
+            const msg = std.fmt.allocPrint(self.arena, "Promise.all cannot collect `Promise<{s}>` — the resolved type has no array form [E_TYPE_MISMATCH]", .{tn}) catch "E_TYPE_MISMATCH";
             _ = self.fail(line, col, msg) catch {};
             return null;
         };
@@ -1077,7 +1077,7 @@ pub fn promiseCallType(self: *Checker, program: *ast.Program, call: *ast.StaticC
         program.needs_async = true;
         return .{ .promise_type = p };
     }
-    const msg = std.fmt.allocPrint(self.arena, "Promise.{s} is not supported yet — only Promise.resolve(v) and Promise.all([...]); use `async`/`await` for composition", .{call.name}) catch "E_UNSUPPORTED_STD";
+    const msg = std.fmt.allocPrint(self.arena, "Promise.{s} is not supported yet — only Promise.resolve(v) and Promise.all([...]); use `async`/`await` for composition [E_UNSUPPORTED_STD]", .{call.name}) catch "E_UNSUPPORTED_STD";
     _ = self.fail(line, col, msg) catch {};
     return null;
 }
