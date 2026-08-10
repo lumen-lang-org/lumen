@@ -157,6 +157,14 @@ const Candidate = struct { name: []const u8, ret: []const u8, bind: ?[]const []c
 /// and `header` resolve because every module is flattened into one program and
 /// `rest/server.ts` declares them there.
 fn bindingFor(self: *Checker, p: ast.FunctionParam, req: []const u8) !?[]const u8 {
+    // An undecorated `Request` parameter binds to the request itself, so a
+    // handler may take both — `save(req: Request, @Valid @RequestBody ask: Ask)`.
+    // Without this the whole method stops being a candidate the moment one
+    // parameter is the request, and it silently loses its @Valid rules.
+    if (p.decorators.len == 0) {
+        if (std.mem.eql(u8, p.annotation, "Request")) return req;
+        return null;
+    }
     for (p.decorators) |d| {
         const first: []const u8 = if (d.args.len > 0) switch (d.args[0]) {
             .str => |v| v,
