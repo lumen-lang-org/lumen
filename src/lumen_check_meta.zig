@@ -147,7 +147,48 @@ fn dispatcherName(self: *Checker, cname: []const u8, arg_types: []const types.Ty
 }
 
 /// A method of `cname` (or a base) that `Class.invoke` may dispatch to.
-const Candidate = struct { name: []const u8, ret: []const u8 };
+const Candidate = struct { name: []const u8, ret: []const u8, bind: ?[]const []const u8 = null };
+
+/// The Lumen expression a parameter binds to, when it carries one of the
+/// request-binding decorators, or null when it does not.
+///
+/// The dispatcher is generated as source, so binding is a matter of writing the
+/// call the handler would otherwise have written by hand. `param`, `queryParam`
+/// and `header` resolve because every module is flattened into one program and
+/// `rest/server.ts` declares them there.
+fn bindingFor(self: *Checker, p: ast.FunctionParam, req: []const u8) !?[]const u8 {
+    for (p.decorators) |d| {
+        const first: []const u8 = if (d.args.len > 0) switch (d.args[0]) {
+            .str => |v| v,
+            else => "",
+        } else "";
+        const second: []const u8 = if (d.args.len > 1) switch (d.args[1]) {
+            .str => |v| v,
+            else => "",
+        } else "";
+        const named = if (first.len > 0) first else p.name;
+        const wants_int = std.mem.eql(u8, p.annotation, "int") or std.mem.eql(u8, p.annotation, "i32");
+
+        if (std.mem.eql(u8, d.name, "PathVariable") or std.mem.eql(u8, d.name, "path")) {
+            const raw = try std.fmt.allocPrint(self.arena, "param({s}, \"{s}\")", .{ req, named });
+            return if (wants_int) try std.fmt.allocPrint(self.arena, "parseInt({s}, 10) ?? 0", .{raw}) else raw;
+        }
+        if (std.mem.eql(u8, d.name, "RequestParam") or std.mem.eql(u8, d.name, "query")) {
+            const raw = try std.fmt.allocPrint(self.arena, "queryParam({s}, \"{s}\", \"{s}\")", .{ req, named, second });
+            return if (wants_int) try std.fmt.allocPrint(self.arena, "parseInt({s}, 10) ?? 0", .{raw}) else raw;
+        }
+        if (std.mem.eql(u8, d.name, "RequestHeader") or std.mem.eql(u8, d.name, "header")) {
+            return try std.fmt.allocPrint(self.arena, "header({s}, \"{s}\")", .{ req, named });
+        }
+        if (std.mem.eql(u8, d.name, "RequestBody") or std.mem.eql(u8, d.name, "body")) {
+            if (std.mem.eql(u8, p.annotation, "string")) {
+                return try std.fmt.allocPrint(self.arena, "{s}.body", .{req});
+            }
+            return try std.fmt.allocPrint(self.arena, "JSON.parse<{s}>({s}.body)", .{ p.annotation, req });
+        }
+    }
+    return null;
+}
 
 /// Build, parse, declare and queue the dispatcher. Generated rather than
 /// hand-built as an AST because the thing generated is ordinary Lumen — a chain
@@ -175,9 +216,8 @@ fn generateDispatcher(
             // fall through to it.
             if (seen.get(m.name) != null) continue;
             try seen.put(self.arena, m.name, {});
-            if (m.params.len != arg_types.len) continue;
-            var matches = true;
-            for (m.params, arg_types) |p, at| {
+            var matches = m.params.len == arg_types.len;
+            if (matches) for (m.params, arg_types) |p, at| {
                 if (p.is_rest or p.default != null or p.annotation.len == 0) {
                     matches = false;
                     break;
@@ -189,6 +229,27 @@ fn generateDispatcher(
                 if (!types.same(pt, at)) {
                     matches = false;
                     break;
+                }
+            };
+            // A method whose parameters carry request-binding decorators is a
+            // candidate even though its signature is not the dispatched one:
+            // the dispatcher binds each parameter out of the single request
+            // rather than passing it through. That is the whole of
+            // @RequestBody / @PathVariable / @RequestParam / @RequestHeader.
+            var bind: ?[]const []const u8 = null;
+            if (!matches and arg_types.len == 1 and m.params.len > 0) {
+                const bs = try self.arena.alloc([]const u8, m.params.len);
+                var all = true;
+                for (m.params, 0..) |p, bi| {
+                    const b = (try bindingFor(self, p, "__a0")) orelse {
+                        all = false;
+                        break;
+                    };
+                    bs[bi] = b;
+                }
+                if (all) {
+                    bind = bs;
+                    matches = true;
                 }
             }
             if (!matches) continue;
@@ -203,11 +264,14 @@ fn generateDispatcher(
                 return self.fail(line, col, msg);
             }
             if (params == null) {
-                const ps = try self.arena.alloc([]const u8, m.params.len);
-                for (m.params, 0..) |p, i| ps[i] = p.annotation;
+                // From the dispatched argument types, not from the method's own
+                // parameters: a bound method's parameters are what it wants,
+                // while the dispatcher is always called with the request.
+                const ps = try self.arena.alloc([]const u8, arg_types.len);
+                for (arg_types, 0..) |at, i| ps[i] = (try types.toAnnotation(self.arena, at)) orelse "string";
                 params = ps;
             }
-            try cands.append(self.arena, .{ .name = m.name, .ret = ret });
+            try cands.append(self.arena, .{ .name = m.name, .ret = ret, .bind = bind });
         }
         cur = info.parent;
     }
@@ -223,9 +287,16 @@ fn generateDispatcher(
     try src.print(self.arena, "): {s} {{\n", .{cands.items[0].ret});
     for (cands.items) |c| {
         try src.print(self.arena, "  if (__handler == \"{s}\") {{ return __self.{s}(", .{ c.name, c.name });
-        for (params.?, 0..) |_, i| {
-            if (i > 0) try src.appendSlice(self.arena, ", ");
-            try src.print(self.arena, "__a{d}", .{i});
+        if (c.bind) |bs| {
+            for (bs, 0..) |b, i| {
+                if (i > 0) try src.appendSlice(self.arena, ", ");
+                try src.appendSlice(self.arena, b);
+            }
+        } else {
+            for (params.?, 0..) |_, i| {
+                if (i > 0) try src.appendSlice(self.arena, ", ");
+                try src.print(self.arena, "__a{d}", .{i});
+            }
         }
         try src.appendSlice(self.arena, "); }\n");
     }
