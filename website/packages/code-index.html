@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>code-index · Packages · Lumen</title>
-<meta name="description" content="Compact codebase symbol index (cidx) for AI navigation — the aider-repomap / ctags idea in pure Lumen. An assistant reads one map line or queries one…">
+<meta name="description" content="Codebase symbol index (cidx): map/find/refs/search/rank, persistent cache, 8 languages — AI navigation, no vector DB.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/code-index">
 <meta property="og:url" content="https://lumen-lang.org/packages/code-index">
 <meta property="og:title" content="code-index · Packages · Lumen">
-<meta property="og:description" content="Compact codebase symbol index (cidx) for AI navigation — the aider-repomap / ctags idea in pure Lumen. An assistant reads one map line or queries one…">
+<meta property="og:description" content="Codebase symbol index (cidx): map/find/refs/search/rank, persistent cache, 8 languages — AI navigation, no vector DB.">
 <meta name="twitter:title" content="code-index · Packages · Lumen">
-<meta name="twitter:description" content="Compact codebase symbol index (cidx) for AI navigation — the aider-repomap / ctags idea in pure Lumen. An assistant reads one map line or queries one…">
+<meta name="twitter:description" content="Codebase symbol index (cidx): map/find/refs/search/rank, persistent cache, 8 languages — AI navigation, no vector DB.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -141,8 +141,6 @@ const syms = outlineSource(fs.readFileSync("src/app.ts"), "ts");</code></pre>
 ./cidx map src/
 ./cidx find exprType src/</code></pre>
   <p class="sub">Pairs with <a href="/packages/token-gate"><code>token-gate</code></a>: <code>cidx</code> answers "where is X" in one 50-token call; <code>tkg</code> compresses everything else.</p>
-  <h3>Tests</h3>
-<pre><code>lumen test packages/code-index/code-index.ts</code></pre>
   </div>
   </div>
 </section>

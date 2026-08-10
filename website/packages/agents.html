@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>agents · Packages · Lumen</title>
-<meta name="description" content="The schema for a set of agents: what each one is, which model it runs on, which prompt it uses, which MCP servers it may reach, and which agents it…">
+<meta name="description" content="Agents, prompts, models, MCP links and sub-agents as database rows — run, evaluated and reconfigured over HTTP without a restart.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/agents">
 <meta property="og:url" content="https://lumen-lang.org/packages/agents">
 <meta property="og:title" content="agents · Packages · Lumen">
-<meta property="og:description" content="The schema for a set of agents: what each one is, which model it runs on, which prompt it uses, which MCP servers it may reach, and which agents it…">
+<meta property="og:description" content="Agents, prompts, models, MCP links and sub-agents as database rows — run, evaluated and reconfigured over HTTP without a restart.">
 <meta name="twitter:title" content="agents · Packages · Lumen">
-<meta name="twitter:description" content="The schema for a set of agents: what each one is, which model it runs on, which prompt it uses, which MCP servers it may reach, and which agents it…">
+<meta name="twitter:description" content="Agents, prompts, models, MCP links and sub-agents as database rows — run, evaluated and reconfigured over HTTP without a restart.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -63,8 +63,6 @@
     <a href="/packages/websocket">websocket</a>
     <a href="/packages/socketio">socketio</a>
     <a href="/packages/sse">sse</a>
-    <a href="/packages/press">press</a>
-    <a href="/packages/validation">validation</a>
     <p class="docs-nav-title">AI & agents</p>
     <a href="/packages/ai">ai</a>
     <a href="/packages/agents" class="active">agents</a>
@@ -118,34 +116,6 @@ PUT    /providers/:provider/key  {"apiKey":"sk-..."} — stored encrypted
 DELETE /providers/:provider/key</code></pre>
   <p class="sub">A key can be written and named; it can never be read back. Nothing in this module returns an envelope or a plaintext, so a listing endpoint cannot leak one by accident, and <code>configured</code> answers the only question a caller actually has.</p>
   <p class="sub">The server refuses to start without a usable <code>LUMEN_MASTER_KEY</code>, rather than serving with credentials it cannot open and failing every provider call later, far from the cause.</p>
-  <h4>More than one person, if a proxy says so</h4>
-  <p class="sub">There are no users here, no roles and no login. There is one column — a thread's <code>owner</code> — and one opaque tag, which a proxy in front sets as an <code>X-USER</code> header. Every <code>/threads/:id/...</code> route resolves the id through <code>ownedThread</code>, the sidebar filters on <code>owner</code> in SQL, and a thread belonging to somebody else answers <strong>404</strong>, the same as one that never existed.</p>
-  <p class="sub">It is off unless you say otherwise:</p>
-<pre><code>AGENTS_TRUST_PROXY_AUTH=on     # anything but 1/true/yes/on is off</code></pre>
-  <p class="sub">Unset — the default, and what every deployment has run so far — the header is not read at all. Not parsed, not compared. Nothing is scoped, nothing is stamped, and the behaviour is what it was before the column existed.</p>
-  <p class="sub">Set, the header is the whole of the identity, so <strong><code>:8100</code> must not be reachable by anything but that proxy</strong>. Whoever can send an <code>X-USER</code> chooses who they are. Firewall first; turn this on second. The tag is the <code>uuid</code> of a JSON X-USER document if it is one, and otherwise the header verbatim — so an nginx with basic-auth in front, setting <code>X-USER: alice</code>, is a working multi-user deployment.</p>
-  <p class="sub">A JSON document the engine cannot read a <code>uuid</code> out of — an anonymous user, a renamed field — is <strong>401 at the door</strong>, not a caller with no tag. The proxy said it authenticated somebody it cannot name, and the only other answer would be to guess, which used to mean handing over everything owned by nobody.</p>
-  <p class="sub">Rows written before the gate went on carry <code>owner = ''</code> and belong to nobody: the filter is exact equality, never <code>'' OR tag</code>, because the other reading hands the whole of the box's history to whoever authenticates first. Claiming them is deliberate — <code>scenarios/backfill_owner.py</code>.</p>
-  <p class="sub">One exception, on purpose: <code>/preview/:token</code> is a capability. Whoever holds the link reads that conversation's artifacts, owner or not. That is what makes a link shareable with someone who has no account, and <code>POST /threads/:id/artifacts/:slot/rotate</code> is how you take it back.</p>
-  <h4>The ceilings, and who may knock</h4>
-  <p class="sub">Three byte caps, all of them defaulting to the number they were when they were constants — set none of these and nothing changes:</p>
-<pre><code>AGENTS_ARTIFACT_BYTES_MAX=524288     # one artifact body (joule.sh runs 29360128 — see TELEGRAM-FILES.md)
-AGENTS_THREAD_BYTES_MAX=104857600    # one thread's artifacts, every version
-AGENTS_UPLOAD_BYTES_MAX=1048576      # one workspace file</code></pre>
-  <p class="sub">The upload cap is new rather than moved: <code>POST /threads/:id/files</code> had none, and neither did the model's own <code>write_file</code>. Both go through <code>putFile</code>, so one number closes all three doors, <code>pull</code> from the corpus included. Anything unreadable — <code>512MB</code>, <code>0</code>, a stray quote — is the default, because this is read while the process starts and a typo in a unit file should not be a dead engine. The engine enforces the same limits for everyone; per-tenant quotas belong to a control plane, fed by <code>/usage</code> below.</p>
-<pre><code>AGENTS_API_TOKEN=               # unset: no token wanted, as today</code></pre>
-  <p class="sub">Set, every route wants <code>Authorization: Bearer &lt;token&gt;</code> and answers 401 without one — before the router matches, so an unauthorised caller cannot even map the paths. Defense in depth and nothing more: the firewall is what isolates <code>:8100</code>. It matters because with the trust gate on, reaching the port at all means choosing an identity with no forgery required, and firewall-only means one missed rule is the whole breach.</p>
-  <p class="sub"><code>/healthz</code> is the one route it never covers — a probe that needs the secret cannot tell "the engine is down" from "the secret is wrong".</p>
-<pre><code class="lumen">GET /healthz    {"version":"0.2.0","migration":"76","docker":true}
-GET /usage?owner=u-alice
-                {"owner":"u-alice","bytes":12288,"inputTokens":40,"outputTokens":9}</code></pre>
-  <p class="sub">There is no summary <code>ok</code> in the health document. The process refuses to start on a schema it could not migrate and refuses to start without a usable master key, so an answer at all means the two fatal things are fine; docker being down degrades scripts and nothing else. A boolean over facts of different weights has to lie about one of them.</p>
-  <p class="sub"><code>/usage</code> is generic accounting — no plan, no quota, no price. Bytes are the owner's artifact versions, exactly, from the byte column each one already carries; workspace files are not counted, because summing them means asking SQL for a length, which counts characters and would under-report every non-ASCII upload. Tokens are summed from the run rows, which is why runs carry <code>input_tokens</code> and <code>output_tokens</code> at all — every run had those numbers in hand and dropped them. Both go out as JSON numbers straight from the database's own sum, never parsed: an <code>int</code> here is i32, and two billion tokens is a month.</p>
-  <p class="sub"><code>?owner=</code> is a filter and never an escalation. A scoped caller asking about a tag it does not hold gets the same 404 a thread it does not own gets.</p>
-  <h4>Collecting abandoned opens, if you ask for it</h4>
-<pre><code>AGENTS_SWEEP_IDLE_MS=           # unset: nothing is ever deleted</code></pre>
-  <p class="sub">Nothing in this engine has ever deleted a thread row, and unset it still does not. Set to a number of milliseconds, a background thread deletes threads older than that which hold <em>nothing at all</em> — no turn, no artifact, no step, no uploaded file and no run — and waits the same interval between passes. The last two clauses are the ones an "empty means no turns" reading gets wrong: a thread opened by dropping a file in has no turn until the first question, and a thread whose first round failed at the provider has only its <code>runs</code> row while the person is still looking at the error with Retry in front of them.</p>
-  <p class="sub">It is not on a request path and will not be. A read that deletes rows is, under scoping, one person's sidebar deleting somebody else's conversations.</p>
   <h3>Talking to what the rows describe</h3>
   <p class="sub"><code>mcp.ts</code> mounts an MCP server from its row, and <code>provider.ts</code> calls a model from its row. Neither file names a server or a model.</p>
 <pre><code class="lumen">mounting  demo-mcp at http://127.0.0.1:8200
@@ -307,35 +277,13 @@ can overlap or skip records when the database answers in any order.</code></pre>
   </ul>
   <p class="sub">And what the model says it produces is checked against what it returned, so a mismatch is a sentence rather than a wire error about column widths.</p>
   <p class="sub">The query vector is bound, not interpolated: it came from a provider's reply and is data like any other. <code>distance</code> is returned so a caller can decide what is too far, rather than trusting the ranking blindly.</p>
-  <h3>Testing</h3>
-<pre><code>cd packages/agents
-lumen test schema.test.ts     # 10, against SQLite
-lumen test scan.test.ts       # 16, reading a document no type can declare
-lumen test wire.test.ts       # 18, the three providers' tool formats
-lumen test mcp.test.ts        # 3, the refusals — the live half is an example
-lumen test tools.test.ts      # 8, which tools an agent gets, and why not
-lumen test delegate.test.ts   # 13, children as tools, cycles, the depth limit
-lumen test evals.test.ts      # 19, datasets, judges, and route checks
-lumen test runlog.test.ts     # 9, what a run leaves behind, and whose it is
-lumen test api.test.ts        # 26, what the door refuses — scoping, and the bearer lock
-lumen test caps.test.ts       # 4, what an operator may say about the ceilings
-lumen test usage.test.ts      # 7, whose bytes and whose tokens
-lumen test workspace.test.ts  # 18, names, the byte cap, and the three file tools
-lumen test provider.test.ts   # 5, provider selection and refusals
-lumen test credentials.test.ts # 13, encryption at rest
-lumen test run.test.ts        # 11, every refusal on the run path
-lumen test knowledge.test.ts  # 11, what retrieval refuses before embedding</code></pre>
-  <p class="sub">The live halves are <code>examples/mount-mcp.ts</code>, <code>examples/call-model.ts</code> and <code>examples/run-with-tools.ts</code>. A test that needs a credential or a listening port is a test that gets skipped, so those stay examples and the refusals stay tests.</p>
-  <p class="sub">Requires <code>sh ../plume/build.sh</code> first.</p>
   <h3>The console</h3>
-  <p class="sub">A web frontend for this package lives in <code>app/</code>: a Lit element built on <a href="https://www.npmjs.com/package/@nuraly/lumenui">LumenUI</a>'s <code>&lt;nr-chatbot&gt;</code>, served by <a href="https://www.npmjs.com/package/@nuraly/lumenjs">LumenJS</a>, talking to the API above through one origin. The console is its own server, so <code>/api</code> and <code>/preview</code> are forwarded by the app rather than by an nginx in front of it — one place those rules live, in <code>app/server/api-proxy.ts</code>.</p>
-  <p class="sub">Run everything — database, API, indexer, console — with one command:</p>
+  <p class="sub">A web frontend for this package lives in <code>app/</code>: a Lit element built on <a href="https://www.npmjs.com/package/@nuraly/lumenui">LumenUI</a>'s <code>&lt;nr-chatbot&gt;</code>, served by Vite, talking to the API above through one origin.</p>
+  <p class="sub">Run everything — database, API, console — with one command:</p>
 <pre><code>cd packages/agents
 cp .env.example .env      # set LUMEN_MASTER_KEY (openssl rand -hex 16)
-cd app
 docker compose up --build</code></pre>
-  <p class="sub">Console on <code>http://localhost:8080</code>, the API behind it on <code>/api</code>, PostgreSQL with pgvector underneath so documents and retrieval work. It publishes to loopback: nobody signs in to this deployment, so whoever reaches the port is the operator. <code>app/compose.yaml</code> says what to change to expose it, and what to put in front of it when you do.</p>
-  <p class="sub">One image, <code>ghcr.io/nuralyio/agents-console</code>, serves every deployment. The <code>AUTH</code> variable is read once at boot and chooses between three: <code>none</code> is the box above; <code>builtin</code> gives the console its own sign-in and its own user store; <code>proxy</code> trusts an <code>X-USER</code> set by an authenticating gateway in front. Nothing under <code>app/src/</code> knows which one it is running under — see <code>app/CLAUDE.md</code>, and <code>GATEWAY.md</code> for the hosted arrangement.</p>
+  <p class="sub">Console on <code>http://localhost:8080</code>, the API behind it on <code>/api</code>, PostgreSQL with pgvector underneath so documents and retrieval work.</p>
   <p class="sub">The console has a chat surface per conversation, a workspace panel over the thread's files, a <strong>Knowledge</strong> page — folder rail, the folder's sources, and upload, where typing a new path <em>is</em> how a folder is created, since a scope exists by carrying documents — and a settings overlay reached from the account block: agents (an edit form per agent), models, prompt versions, MCP servers, provider keys and tracing.</p>
   <h4>One PUT per resource</h4>
   <p class="sub">A row is edited by sending the row. There is no route per attribute: the rules that must hold — exactly one default agent, exactly one enabled embedding model — live in the row's own PUT, so they hold whichever way the row is written. A rule enforced at one door and not another is not enforced.</p>
@@ -346,16 +294,6 @@ PUT  /servers/:id         the whole MCP server row</code></pre>
   <h4>Indexing is a queue</h4>
   <p class="sub">Uploading a document writes a job and answers <code>202</code> — the work is taken, not done. A worker drains the queue: <code>agents-indexer</code>, its own process in the compose file, because embedding a corpus is one model call per chunk and must not compete with serving requests. Two workers can run against one database; the claim is a single <code>UPDATE … FOR UPDATE SKIP LOCKED</code>, so they never take the same job.</p>
   <p class="sub">The queue is a table rather than a broker. PostgreSQL is already required for documents, so a job table adds no service — and the rows are the journal the console renders, which a broker would not keep. <code>GET /jobs</code> is that journal; <code>GET /documents?scope=</code> puts queued and failed rows above the indexed ones, so a file you just dropped is visible instead of looking lost.</p>
-  <h4>End-to-end tests</h4>
-  <p class="sub"><code>app/e2e</code> drives the console with Playwright against a live API — it starts no fake, because a suite checking its own fake is checking its own fake:</p>
-<pre><code>cd packages/agents/app
-npx playwright test              # needs the API and `npm run dev` running</code></pre>
-  <p class="sub">The knowledge specs skip themselves when the API is on sqlite: it answers "documents need PostgreSQL (pgvector)", and reporting correct behaviour as a failure teaches people to ignore the suite.</p>
-  <p class="sub">For development against a locally running API:</p>
-<pre><code>cd packages/agents/app
-npm install
-npm run dev               # http://localhost:5173, /api proxied to :8100</code></pre>
-  <p class="sub">The app is plain npm/TypeScript and is not part of the URL-import catalog; CI's <code>packages/*/*.ts</code> glob is one level deep on purpose, so the TypeScript here is never handed to the Lumen compiler. Keep it that way — both languages use <code>.ts</code>.</p>
   </div>
   </div>
 </section>

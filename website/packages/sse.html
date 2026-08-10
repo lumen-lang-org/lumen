@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>sse · Packages · Lumen</title>
-<meta name="description" content="Server-sent events: one-way push over an HTTP response that never ends.">
+<meta name="description" content="Server-sent events: one-way push over an HTTP response that never ends, with resumption.">
 <link rel="stylesheet" href="/style.css">
 <link rel="canonical" href="https://lumen-lang.org/packages/sse">
 <meta property="og:url" content="https://lumen-lang.org/packages/sse">
 <meta property="og:title" content="sse · Packages · Lumen">
-<meta property="og:description" content="Server-sent events: one-way push over an HTTP response that never ends.">
+<meta property="og:description" content="Server-sent events: one-way push over an HTTP response that never ends, with resumption.">
 <meta name="twitter:title" content="sse · Packages · Lumen">
-<meta name="twitter:description" content="Server-sent events: one-way push over an HTTP response that never ends.">
+<meta name="twitter:description" content="Server-sent events: one-way push over an HTTP response that never ends, with resumption.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -109,13 +109,6 @@ browser: error → reconnect → token|"Hel"|id=7</code></pre>
   <p class="sub"><code>serveEvents</code> puts its body in a top-level function rather than the closure it wants to be, because writing it inline makes the native backend reject the generated code — it reports "likely a Lumen compiler bug; please report it".</p>
   <p class="sub"><strong>The trigger is not understood.</strong> A closure that captures and calls a parameter compiles fine, and so does one doing it inside <code>net.createServer</code>'s callback. Both were tried after the fact, and both disprove the tidy explanation this file used to carry. Something narrower is at fault and nobody has reduced it.</p>
   <p class="sub">This is recorded as an open bug rather than a design decision, because a plausible-sounding rationale for a workaround is worse than no rationale: it stops the next person looking.</p>
-  <h3>Testing</h3>
-<pre><code>cd packages/sse
-lumen test sse.test.ts     # 17
-
-lumen run events-demo.ts &amp;
-curl -sN http://127.0.0.1:9010/events    # the raw frames
-python3 /tmp/ssecheck.py                 # a real browser's EventSource</code></pre>
   </div>
   </div>
 </section>

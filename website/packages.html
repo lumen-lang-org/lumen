@@ -57,35 +57,36 @@ console.log(greet("world"));   // Hello, world!</code></pre>
   redirects to the package's repository; the raw GitHub URL works too.</p>
 
   <h3>Catalog</h3>
+  <!-- catalog:start -->
   <table>
     <tr><th>Package</th><th>What it does</th></tr>
     <tr>
       <td><a href="/packages/agents">agents</a></td>
-      <td>Agents, prompts, models, MCP links and sub-agents as database rows — run and reconfigured over HTTP without a restart.</td>
+      <td>Agents, prompts, models, MCP links and sub-agents as database rows — run, evaluated and reconfigured over HTTP without a restart.</td>
     </tr>
     <tr>
       <td><a href="/packages/ai">ai</a></td>
-      <td>Typed helpers for OpenAI-compatible chat APIs.</td>
+      <td>Typed AI helpers for OpenAI-compatible chat APIs: RAG, conversation memory with context compression, structured output, a live tool-calling agent loop, and an MCP client (HTTP, stdio, SSE).</td>
     </tr>
     <tr>
       <td><a href="/packages/args">args</a></td>
-      <td>Command-line flag and option parsing: <code>hasFlag</code>, <code>optionValue</code>, positional arguments.</td>
+      <td>Command-line flag and option parsing (hasFlag, optionValue, positional).</td>
     </tr>
     <tr>
       <td><a href="/packages/code-index">code-index</a></td>
-      <td>Codebase symbol index (<code>cidx</code>) — map, find, refs, search and rank over 8 languages, no vector database.</td>
+      <td>Codebase symbol index (cidx): map/find/refs/search/rank, persistent cache, 8 languages — AI navigation, no vector DB.</td>
     </tr>
     <tr>
       <td><a href="/packages/csv">csv</a></td>
-      <td>CSV parser and stringifier — quoted fields, CRLF, row helpers, flat arrays.</td>
+      <td>CSV parser/stringifier with quoted fields, CRLF, row helpers, and flat arrays.</td>
     </tr>
     <tr>
       <td><a href="/packages/dotenv">dotenv</a></td>
-      <td><code>.env</code> parser for key/value config strings.</td>
+      <td>.env parser for key/value config strings.</td>
     </tr>
     <tr>
       <td><a href="/packages/geo">geo</a></td>
-      <td>2D point helpers, <code>distanceSq</code>, <code>manhattan</code>.</td>
+      <td>2D point helpers: distanceSq, manhattan.</td>
     </tr>
     <tr>
       <td><a href="/packages/greeter">greeter</a></td>
@@ -93,35 +94,35 @@ console.log(greet("world"));   // Hello, world!</code></pre>
     </tr>
     <tr>
       <td><a href="/packages/hello">hello</a></td>
-      <td>Minimal <code>greet</code> function; the canonical URL-import example.</td>
+      <td>Minimal greet function; canonical URL-import example.</td>
     </tr>
     <tr>
       <td><a href="/packages/markdown">markdown</a></td>
-      <td>Pure-Lumen Markdown &rarr; HTML renderer (no FFI) — <code>render(md)</code>.</td>
+      <td>Pure-Lumen Markdown -&gt; HTML renderer (no FFI); render(md).</td>
     </tr>
     <tr>
       <td><a href="/packages/mathx">mathx</a></td>
-      <td>Integer math helpers, <code>gcd</code>, <code>lcm</code>, <code>ipow</code>, <code>isPrime</code>, <code>clampInt</code>.</td>
+      <td>Integer math helpers: gcd, lcm, ipow, isPrime, clampInt.</td>
     </tr>
     <tr>
       <td><a href="/packages/pdf">pdf</a></td>
-      <td>Text and metadata from PDF files, via Poppler.</td>
+      <td>PDF text and metadata via Poppler: layout mode, page ranges, document info.</td>
     </tr>
     <tr>
       <td><a href="/packages/pgvector">pgvector</a></td>
-      <td>Persistent vector store: PostgreSQL with pgvector — embeddings in, nearest neighbours out.</td>
+      <td>Persistent vector store on PostgreSQL + pgvector via FFI: upsert, cosine search, distance bounds.</td>
     </tr>
     <tr>
       <td><a href="/packages/plume">plume</a></td>
-      <td>Object mapper and migrations for PostgreSQL, SQLite and MySQL — data-mapper style, checksummed migration history.</td>
+      <td>Typed data-mapper and migration tool over PostgreSQL, SQLite and MySQL via FFI: explicit field/column mapping, projections, relations, checksummed migrations, transactions.</td>
     </tr>
     <tr>
       <td><a href="/packages/quickjs">quickjs</a></td>
-      <td>Embed a JavaScript sandbox via FFI; set, eval, and read values across the boundary.</td>
+      <td>Embed a QuickJS JavaScript sandbox via FFI; set/eval/get values across the boundary.</td>
     </tr>
     <tr>
       <td><a href="/packages/rest">rest</a></td>
-      <td>Router and HTTP server — decorated controllers, a checked route table, JSON replies.</td>
+      <td>Router and HTTP server: decorated controllers, a route table checked at startup, JSON replies.</td>
     </tr>
     <tr>
       <td><a href="/packages/semver">semver</a></td>
@@ -129,11 +130,11 @@ console.log(greet("world"));   // Hello, world!</code></pre>
     </tr>
     <tr>
       <td><a href="/packages/socketio">socketio</a></td>
-      <td>A socket.io server the official browser client connects to — Engine.IO and Socket.IO framing over websocket.</td>
+      <td>A socket.io server the official browser client connects to: Engine.IO and Socket.IO framing over websocket.</td>
     </tr>
     <tr>
       <td><a href="/packages/sqlite">sqlite</a></td>
-      <td>Typed SQLite access through the C FFI — open, exec, and query int/text values.</td>
+      <td>Typed SQLite access via FFI; open/exec/query int and text over a C shim.</td>
     </tr>
     <tr>
       <td><a href="/packages/sse">sse</a></td>
@@ -141,21 +142,22 @@ console.log(greet("world"));   // Hello, world!</code></pre>
     </tr>
     <tr>
       <td><a href="/packages/token-gate">token-gate</a></td>
-      <td>Token-optimizing command proxy (<code>tkg</code>) — per-command handlers, a savings ledger, a Claude Code hook.</td>
+      <td>Token-optimizing command proxy (tkg): per-command handlers for git/ls/find/du/grep/tables/linters/tests, savings ledger, Claude Code hook.</td>
     </tr>
     <tr>
       <td><a href="/packages/toml">toml</a></td>
-      <td>TOML parser and stringifier — sections, dotted keys, typed values, simple arrays.</td>
+      <td>Practical TOML parser/stringifier for sections, dotted keys, typed values, and simple arrays.</td>
     </tr>
     <tr>
       <td><a href="/packages/tracing">tracing</a></td>
-      <td>OpenTelemetry traces for AI runs over OTLP/HTTP — six backends, JSON and protobuf, spans, generations and usage.</td>
+      <td>OpenTelemetry traces for AI runs over OTLP/HTTP: spans, generations, tools, token usage — six backends, Langfuse-compatible.</td>
     </tr>
     <tr>
       <td><a href="/packages/websocket">websocket</a></td>
-      <td>RFC 6455 frames, handshake, server and client — a real browser connects, exchanges and closes clean.</td>
+      <td>RFC 6455 websockets: handshake, frames, server and client — a browser connects, exchanges and closes clean.</td>
     </tr>
   </table>
+  <!-- catalog:end -->
   <p class="note">Each name links to the package's own page — what it does, its API,
   the decisions inside it, and how it is tested. <code>quickjs</code>, <code>sqlite</code>
   and <code>pdf</code> link native libraries through the C FFI, so they are built locally

@@ -1,16 +1,32 @@
 #!/usr/bin/env python3
 """Generate one website page per std-contrib package from its README.
 
-    python3 website/genpages.py [path-to-std-contrib/packages]
+    python3 website/genpages.py [path-to-std-contrib/packages] [--check]
 
-Output goes to website/packages/<name>.html. Run it when a README changes;
-the pages are committed, so the site still has no build step.
+Output goes to website/packages/<name>.html, and the catalog table in
+packages.html is rewritten from std-contrib's index.json. Run it when a README
+changes; the pages are committed, so the site still has no build step.
+`--check` writes nothing and exits non-zero if the committed pages are stale,
+which is what CI runs.
 
 The READMEs use a known subset: ATX headings, tables, fenced code, unordered
-lists, paragraphs, inline bold/italic/code/links. Nothing else appears in any
-of them (checked), so nothing else is handled.
+lists, paragraphs, inline bold/italic/code/links. Anything outside it is an
+error naming the file and line, rather than a page that silently drops or
+mangles the content.
+
+A README section fenced by
+
+    <!-- website:skip -->
+    ## Testing
+    …
+    <!-- /website:skip -->
+
+is for contributors and does not reach the site. That is how `lumen test` runs
+and repo-relative build steps stay in the README without appearing on a page
+whose reader never cloned the repository.
 """
 import html
+import json
 import re
 import sys
 from pathlib import Path
@@ -18,7 +34,13 @@ from pathlib import Path
 # The std-contrib checkout to read READMEs from: first argument, or a sibling
 # checkout of this repository.
 HERE = Path(__file__).resolve().parent
-PKGS = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent.parent / "std-contrib" / "packages"
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+CHECK = "--check" in sys.argv[1:]
+PKGS = Path(ARGS[0]) if ARGS else HERE.parent.parent / "std-contrib" / "packages"
+# The catalog is the one source of a package's one-line summary: it feeds each
+# page's meta description and the table on packages.html, so the two cannot
+# disagree.
+INDEX = PKGS.parent / "index.json"
 
 GROUPS = [
     ("Formats", ["csv", "toml", "dotenv", "semver", "markdown", "pdf"]),
@@ -160,13 +182,49 @@ def inline(text: str, name: str) -> str:
     return re.sub(r"\x00(\d+)\x00", lambda m: f"<code>{spans[int(m.group(1))]}</code>", text)
 
 
-def render(md: str, name: str):
+def unhandled(line: str) -> str:
+    """Why this line is outside the subset the renderer handles, or ""."""
+    if re.match(r"^\s*\d+\. ", line):
+        return "an ordered list"
+    if line.startswith(">"):
+        return "a blockquote"
+    if line.startswith("    ") and line.strip():
+        return "an indented code block (use a fence)"
+    if re.match(r"^(=+|-{2,})\s*$", line):
+        return "a setext heading underline (use #)"
+    if re.match(r"^\s*!\[", line):
+        return "an image"
+    if re.match(r"^\s*<(?!!--)", line):
+        return "raw HTML"
+    return ""
+
+
+def render(md: str, name: str, where: str = ""):
     lines = md.split("\n")
     out = []
     i = 0
     first_para = ""
     while i < len(lines):
         line = lines[i]
+
+        # A contributor-only section: dropped whole, fence included.
+        if line.strip() == "<!-- website:skip -->":
+            i += 1
+            while i < len(lines) and lines[i].strip() != "<!-- /website:skip -->":
+                i += 1
+            if i == len(lines):
+                raise SystemExit(f"{where}: <!-- website:skip --> is never closed")
+            i += 1
+            continue
+
+        # Any other comment is a note to a reader of the README, not content.
+        if line.strip().startswith("<!--") and line.strip().endswith("-->"):
+            i += 1
+            continue
+
+        why = unhandled(line)
+        if why:
+            raise SystemExit(f"{where}:{i + 1}: {why} is not handled: {line.strip()[:60]}")
 
         if line.startswith("```"):
             lang = line[3:].strip()
@@ -243,6 +301,10 @@ def render(md: str, name: str):
         # a paragraph: gather until a blank or a block opener
         para = []
         while i < len(lines) and lines[i].strip() != "" and not re.match(r"^(#|```|\||- )", lines[i]):
+            # A setext underline reads as prose to the gatherer above, so the
+            # heading would silently become a paragraph.
+            if re.match(r"^(=+|-{2,})\s*$", lines[i]):
+                raise SystemExit(f"{where}:{i + 1}: a setext heading is not handled (use #)")
             para.append(lines[i].strip())
             i += 1
         text = inline(html.escape(" ".join(para), quote=False), name)
@@ -253,21 +315,86 @@ def render(md: str, name: str):
     return "\n".join(out), first_para
 
 
+def catalog() -> dict:
+    """Each package's one-line summary, from std-contrib's index.json.
+
+    A package with a directory and no entry is an error: the catalog is what
+    the site, the root README and the package manager all read, so a package
+    missing from it is a package that exists three-quarters of the way.
+    """
+    entries = json.loads(INDEX.read_text())["packages"]
+    summaries = {e["name"]: e["summary"] for e in entries}
+    dirs = {p.name for p in PKGS.iterdir() if (p / "README.md").exists()}
+    missing = sorted(dirs - set(summaries))
+    stale = sorted(set(summaries) - dirs)
+    if missing:
+        raise SystemExit(f"{INDEX}: no entry for {', '.join(missing)}")
+    if stale:
+        raise SystemExit(f"{INDEX}: entry for {', '.join(stale)}, which has no package")
+    # A package absent from GROUPS renders a page nothing links to, which is
+    # the one kind of drift a reader finds before we do.
+    grouped = {n for _, names in GROUPS for n in names}
+    ungrouped = sorted(set(summaries) - grouped)
+    if ungrouped:
+        raise SystemExit(f"genpages.py: add {', '.join(ungrouped)} to GROUPS for the sidebar")
+    return summaries
+
+
+def catalogTable(summaries: dict) -> str:
+    """The catalog table on packages.html, alphabetical as the page has it."""
+    rows = ["  <table>", "    <tr><th>Package</th><th>What it does</th></tr>"]
+    for n in sorted(summaries):
+        rows.append(f'    <tr>\n      <td><a href="/packages/{n}">{n}</a></td>\n'
+                    f'      <td>{html.escape(summaries[n], quote=False)}</td>\n    </tr>')
+    rows.append("  </table>")
+    return "\n".join(rows)
+
+
+def emit(path: Path, text: str, stale: list) -> None:
+    """Write, or under --check record that the committed file is out of date."""
+    if CHECK:
+        if not path.exists() or path.read_text() != text:
+            stale.append(str(path.relative_to(HERE.parent)))
+        return
+    path.write_text(text)
+
+
 def main():
-    OUT.mkdir(exist_ok=True)
+    summaries = catalog()
+    stale = []
+    if not CHECK:
+        OUT.mkdir(exist_ok=True)
     written = []
     for pkg in sorted(PKGS.iterdir()):
         readme = pkg / "README.md"
         if not readme.exists():
             continue
         name = pkg.name
-        body, desc = render(readme.read_text(), name)
-        desc = html.escape(desc.replace("\n", " ").strip(), quote=True)
+        body, first = render(readme.read_text(), name, where=str(readme))
+        # The catalog's summary is written for this job; the first paragraph is
+        # only a fallback for a package the catalog has not reached yet.
+        desc = html.escape((summaries.get(name) or first).replace("\n", " ").strip(), quote=True)
         if len(desc) > 155:
             desc = desc[:152].rsplit(" ", 1)[0] + "…"
         page = SHELL.format(name=name, desc=desc, body=body, sidebar=sidebar(name))
-        (OUT / f"{name}.html").write_text(page)
+        emit(OUT / f"{name}.html", page, stale)
         written.append(name)
+
+    # The catalog table, so packages.html is not a third hand-kept list.
+    listing = HERE / "packages.html"
+    text = listing.read_text()
+    fenced = re.sub(r"(?s)(<!-- catalog:start -->\n).*?(\n\s*<!-- catalog:end -->)",
+                    lambda m: m.group(1) + catalogTable(summaries) + m.group(2), text)
+    if fenced == text and "<!-- catalog:start -->" not in text:
+        raise SystemExit(f"{listing}: no <!-- catalog:start --> … <!-- catalog:end --> region")
+    emit(listing, fenced, stale)
+
+    if CHECK:
+        if stale:
+            print("stale, regenerate with genpages.py:\n  " + "\n  ".join(stale))
+            raise SystemExit(1)
+        print(f"{len(written)} pages up to date")
+        return
     print(f"{len(written)} pages: {', '.join(written)}")
 
 

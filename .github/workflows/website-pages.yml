@@ -1,0 +1,62 @@
+name: website-pages
+# The package pages under website/packages/ are generated from std-contrib's
+# READMEs and committed, so serving the site needs no build step. Nothing made
+# anyone re-run the generator, so pages drifted behind the READMEs they came
+# from. This regenerates them and opens a pull request when the committed
+# output is stale, which turns "remember to run genpages.py" into a review.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['website/genpages.py']
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out std-contrib beside it
+        uses: actions/checkout@v4
+        with:
+          repository: lumen-lang-org/std-contrib
+          path: std-contrib
+
+      - name: Are the committed pages current?
+        id: check
+        run: |
+          if python3 website/genpages.py std-contrib/packages --check; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Regenerate
+        if: steps.check.outputs.stale == 'true'
+        run: python3 website/genpages.py std-contrib/packages
+
+      - name: Open a pull request
+        if: steps.check.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          branch="website/regenerate-pages"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add website/packages website/packages.html
+          git commit -m "website: regenerate package pages from std-contrib READMEs"
+          git push -f -u origin "$branch"
+          # One open pull request at a time: a force-push updates it in place.
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --head "$branch" --base main \
+              --title "website: regenerate package pages" \
+              --body "The committed pages under \`website/packages/\` were behind the std-contrib READMEs they are generated from. Regenerated with \`website/genpages.py\`."
+          fi
