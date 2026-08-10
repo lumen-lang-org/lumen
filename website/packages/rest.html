@@ -90,7 +90,7 @@ class AgentController {
   @get("/")       list(req: Request): Reply { ... }
   @get("/:id")    find(req: Request): Reply { ... }
   @post("/")      create(req: Request): Reply { ... }
-  @del("/:id")    remove(req: Request): Reply { ... }
+  @delete("/:id") remove(req: Request): Reply { ... }
 }</code></pre>
   <p class="sub">The compiler runs <code>controller</code> while compiling and leaves the route table behind as a constant — no scanning, no registration at startup:</p>
 <pre><code class="lumen">let controllerAgentController: Route[] = [
@@ -99,7 +99,7 @@ class AgentController {
   { method: "POST",   pattern: "/agents",     handler: "create" },
   { method: "DELETE", pattern: "/agents/:id", handler: "remove" },
 ];</code></pre>
-  <p class="sub">The verbs are <code>@get</code>, <code>@post</code>, <code>@put</code>, <code>@patch</code>, <code>@del</code> and <code>@head</code>. <code>@del</code>, not <code>@delete</code> — <code>delete</code> is a reserved word. It is the one place the language shows through, and that beats something cleverer. The list itself is <code>httpMethodOf</code> in <code>controller.ts</code>, so adding <code>@options</code> is editing that function rather than the language: the compiler knows the decorator protocol, never the vocabulary.</p>
+  <p class="sub">The verbs are <code>@get</code>, <code>@post</code>, <code>@put</code>, <code>@patch</code>, <code>@delete</code> and <code>@head</code>. <code>@del</code> still works and means the same thing, for code written when this package believed <code>delete</code> was unavailable — it is not: a decorator is an ordinary imported name, and <code>delete</code> is only special to the lexer when deciding whether a following <code>/</code> opens a regex. The list itself is <code>httpMethodOf</code> in <code>controller.ts</code>, so adding <code>@options</code> is editing that function rather than the language: the compiler knows the decorator protocol, never the vocabulary.</p>
   <h3>Serving</h3>
 <pre><code class="lumen">let mounts: Mount[] = [
   new AgentController(db),
