@@ -18,6 +18,7 @@
 //! every call site to remember its own `try`.
 
 const std = @import("std");
+const dump_dispatch = false;
 const ast = @import("lumen_ast.zig");
 const types = @import("lumen_types.zig");
 const diag_mod = @import("lumen_diag.zig");
@@ -438,9 +439,17 @@ fn generateDispatcher(
                 );
             }
             if (plans) |ps| {
+                // The plan IS the dispatch table. A method it does not name is not a
+                // route, however well its parameters happen to match — `owned(req)`
+                // and friends are helpers, and gathering them would bind arguments
+                // the plan never described.
                 if (planOf(ps, m.name)) |pl| {
                     bind = pl.args;
                     matches = true;
+                    // The plan owns every guard, including the @Valid one — an
+                    // empty list means this handler has none, not that whatever
+                    // the scan above built should survive.
+                    guard = null;
                     if (pl.guards.len > 0) {
                         var g: std.ArrayListUnmanaged(u8) = .empty;
                         for (pl.guards, 0..) |call, gi| {
@@ -448,7 +457,7 @@ fn generateDispatcher(
                         }
                         guard = g.items;
                     }
-                }
+                } else continue;
             }
             if (!matches) continue;
             const ret = if (m.return_annotation.len > 0)
@@ -509,6 +518,7 @@ fn generateDispatcher(
     }
     try src.print(self.arena, "  throw new Error(\"{s} has no method named \\\"\" + __handler + \"\\\"\");\n}}\n", .{cname});
 
+    if (dump_dispatch) std.debug.print("--- {s}\n{s}\n", .{ disp, src.items });
     var p = try parser_mod.Parser.init(self.arena, src.items);
     const prog = p.parseProgram() catch return self.fail(line, col, "a dispatcher for `Class.invoke` could not be built");
     if (prog.stmts.len != 1 or prog.stmts[0] != .function_decl) return self.fail(line, col, "a dispatcher for `Class.invoke` could not be built");
