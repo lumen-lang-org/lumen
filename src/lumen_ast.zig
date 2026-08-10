@@ -30,6 +30,12 @@ pub const DecoratorArg = union(enum) {
     int: i64,
     flt: f64,
     boolean: bool,
+    // A bare name — `@Guard(needsPg)`. Metadata still: it travels to the
+    // decorator as the name, exactly as the quoted form did, so nothing about
+    // the protocol changes. What it buys is that the checker resolves it, so a
+    // typo is reported at the decorator rather than surfacing later as an
+    // undefined variable inside generated code.
+    ident: []const u8,
 };
 
 /// `@name` or `@name(literal, ...)` written before a class, a class member, a

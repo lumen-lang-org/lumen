@@ -44,6 +44,8 @@ fn parseDecoratorArg(self: *Parser) CompileError!ast.DecoratorArg {
                 try self.advance();
                 return .{ .boolean = std.mem.eql(u8, id, "true") };
             }
+            try self.advance();
+            return .{ .ident = id };
         },
         else => {},
     }

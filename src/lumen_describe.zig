@@ -195,6 +195,7 @@ fn writeArgsText(out: *std.Io.Writer, args: []const ast.DecoratorArg) !void {
         if (i > 0) try out.writeByte(',');
         switch (a) {
             .str => |v| try writeString(out, v),
+            .ident => |v| try writeString(out, v),
             .int => |v| {
                 var buf: [32]u8 = undefined;
                 try writeString(out, std.fmt.bufPrint(&buf, "{d}", .{v}) catch "0");
@@ -215,6 +216,7 @@ fn writeArgs(out: *std.Io.Writer, args: []const ast.DecoratorArg) !void {
         if (i > 0) try out.writeByte(',');
         switch (a) {
             .str => |s| try writeString(out, s),
+            .ident => |v| try writeString(out, v),
             .int => |v| try out.print("{d}", .{v}),
             .flt => |v| try out.print("{d}", .{v}),
             .boolean => |v| try out.writeAll(if (v) "true" else "false"),
@@ -381,14 +383,22 @@ test "a decorator argument that is not a literal is refused (spec 455)" {
     const arena = buf.allocator();
     var out: std.Io.Writer.Allocating = .init(arena);
     var diag: diag_mod.Diag = .{};
+    // An expression is still not metadata: a call and arithmetic are refused.
     for ([_][]const u8{
-        "@entity(TABLE)\nclass A { x: int; }\n",
         "@entity(name())\nclass A { x: int; }\n",
         "@entity(1 + 2)\nclass A { x: int; }\n",
-        "class A {\n  @column(col)\n  x: int;\n}\n",
     }) |src| {
         try std.testing.expectError(error.ParseError, describeSource(arena, src, "a.ts", &out.writer, &diag));
         try std.testing.expectEqualStrings("E_DECORATOR_ARG", diag.msg);
+    }
+    // A bare name is a reference, not an expression — `@Guard(needsPg)`. It
+    // travels to the decorator as its name, exactly as the quoted form did.
+    for ([_][]const u8{
+        "@entity(TABLE)\nclass A { x: int; }\n",
+        "class A {\n  @column(col)\n  x: int;\n}\n",
+    }) |src| {
+        var one: std.Io.Writer.Allocating = .init(arena);
+        try describeSource(arena, src, "a.ts", &one.writer, &diag);
     }
 }
 

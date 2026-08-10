@@ -119,6 +119,11 @@ fn invokeMethod(self: *Checker, program: *ast.Program, e: *ast.Expr, call: *ast.
 
     const disp = dispatcherName(self, cname, arg_types) catch return null;
     if (self.funcs.get(disp) == null) {
+        // The dispatcher's own refusals carry the message worth reading — no
+        // method to dispatch to, two return types, a guard naming nothing.
+        // Swallowing them left the caller to report a type mismatch inside
+        // mount's body instead, which points at the library rather than at
+        // whatever the author wrote.
         generateDispatcher(self, disp, cname, arg_types, line, col) catch |err| {
             if (err == error.OutOfMemory) return null;
             return null;
@@ -347,9 +352,29 @@ fn generateDispatcher(
                 if (d.args.len == 0) continue;
                 const fname = switch (d.args[0]) {
                     .str => |v| v,
+                    .ident => |v| v,
                     else => continue,
                 };
                 if (fname.len == 0) continue;
+                // Resolve the name here, at the decorator, so a typo is reported
+                // where it was written. Left to the generated code, it surfaces
+                // as an undefined variable inside a library file the author
+                // never opened.
+                if (d.args[0] == .ident) {
+                    var known = self.funcs.get(fname) != null or self.binding(fname) != null;
+                    if (!known) {
+                        var look: ?[]const u8 = cname;
+                        while (look) |ln| {
+                            const ci = self.classes.get(ln) orelse break;
+                            for (ci.methods) |cm| if (std.mem.eql(u8, cm.name, fname)) { known = true; };
+                            look = ci.parent;
+                        }
+                    }
+                    if (!known) {
+                        const msg = try std.fmt.allocPrint(self.arena, "`{s}` names no guard: `{s}` is not a function here, nor a method of `{s}`", .{ d.name, fname, cname });
+                        return self.fail(d.line, d.col, msg);
+                    }
+                }
                 const before = guard orelse "";
                 const n = cands.items.len;
                 // A guard that is a method of this class is called on the
@@ -374,6 +399,7 @@ fn generateDispatcher(
                     try extra.appendSlice(self.arena, ", ");
                     switch (a) {
                         .str => |v| try extra.print(self.arena, "\"{s}\"", .{v}),
+                        .ident => |v| try extra.print(self.arena, "{s}", .{v}),
                         .int => |v| try extra.print(self.arena, "{d}", .{v}),
                         .flt => |v| try extra.print(self.arena, "{d}", .{v}),
                         .boolean => |v| try extra.appendSlice(self.arena, if (v) "true" else "false"),
