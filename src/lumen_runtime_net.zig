@@ -1007,9 +1007,50 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
         // corrupt row or a provider's error page became a struct full of
         // zeroes and travelled on as though it had parsed.
         try out.appendSlice(arena,
+            \\fn __jsonBlame(comptime T: type, alloc: std.mem.Allocator, text: []const u8) ?[]const u8 {
+            \\    const info = @typeInfo(T);
+            \\    if (info != .@"struct") return null;
+            \\    const doc = std.json.parseFromSlice(std.json.Value, alloc, text, .{}) catch return null;
+            \\    defer doc.deinit();
+            \\    if (doc.value != .object) return null;
+            \\    const obj = doc.value.object;
+            \\    inline for (info.@"struct".fields) |f| {
+            \\        const optional = @typeInfo(f.type) == .optional or f.default_value_ptr != null;
+            \\        if (!optional and !obj.contains(f.name)) {
+            \\            return std.fmt.allocPrint(alloc, "JSON.parse: the field \"{s}\" is required and was not sent", .{f.name}) catch null;
+            \\        }
+            \\    }
+            \\    var it = obj.iterator();
+            \\    while (it.next()) |kv| {
+            \\        var known = false;
+            \\        inline for (info.@"struct".fields) |f| {
+            \\            if (std.mem.eql(u8, f.name, kv.key_ptr.*)) known = true;
+            \\        }
+            \\        if (!known) {
+            \\            return std.fmt.allocPrint(alloc, "JSON.parse: the field \"{s}\" is not one this accepts", .{kv.key_ptr.*}) catch null;
+            \\        }
+            \\    }
+            \\    inline for (info.@"struct".fields) |f| {
+            \\        if (obj.get(f.name)) |got| {
+            \\            const want: ?[]const u8 = switch (@typeInfo(f.type)) {
+            \\                .bool => if (got != .bool) "a true or false" else null,
+            \\                .int => if (got != .integer) "a whole number" else null,
+            \\                .float => if (got != .float and got != .integer) "a number" else null,
+            \\                .pointer => |p| if (p.size == .slice and p.child == u8 and got != .string) "a string" else null,
+            \\                else => null,
+            \\            };
+            \\            if (want) |w| {
+            \\                return std.fmt.allocPrint(alloc, "JSON.parse: the field \"{s}\" wants {s}", .{ f.name, w }) catch null;
+            \\            }
+            \\        }
+            \\    }
+            \\    return null;
+            \\}
+            \\
             \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) error{LumenThrow}!T {
             \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch |e| {
-            \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "JSON.parse: invalid JSON ({s})", .{@errorName(e)}) catch "JSON.parse: invalid JSON";
+            \\        __lumen_err_msg = __jsonBlame(T, alloc, text) orelse
+            \\            (std.fmt.allocPrint(alloc, "JSON.parse: invalid JSON ({s})", .{@errorName(e)}) catch "JSON.parse: invalid JSON");
             \\        __lumen_throwing = true;
             \\        return error.LumenThrow;
             \\    };

@@ -1,0 +1,13 @@
+{
+  "feature": "483-json-parse-names-the-field",
+  "cases": [
+    {
+      "id": "json-blame.valid.named-field",
+      "source": "../examples/valid/named-field.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "JSON.parse: the field \"secret\" is required and was not sent\nJSON.parse: the field \"typo\" is not one this accepts\nJSON.parse: the field \"enabled\" wants a true or false\nparsed k\nJSON.parse: invalid JSON (SyntaxError)"
+      }
+    }
+  ]
+}
