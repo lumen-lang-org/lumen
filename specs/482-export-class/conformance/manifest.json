@@ -1,0 +1,13 @@
+{
+  "feature": "482-export-class",
+  "cases": [
+    {
+      "id": "export-class.valid.across-modules",
+      "source": "../examples/valid/across-modules.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "hello world\nbumped 15\nnamed joule\nenum members differ"
+      }
+    }
+  ]
+}

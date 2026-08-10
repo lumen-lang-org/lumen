@@ -340,15 +340,25 @@ fn parseNamedExportDecl(trimmed: []const u8) ?NamedExport {
         // An `export type` alias binds no runtime value; it flows into the flat
         // program as a plain `type` declaration and is erased by the emitter.
         "export type ",
+        // Multi-line declarations (spec 482). Only the line that opens one is
+        // seen here: `export ` comes off it and the indented body flows through
+        // untouched, because this pass is line-oriented. `scanTopLevelDecls`
+        // already lists all three and already tracks their bodies by brace
+        // depth, so namespacing and renaming need nothing further.
+        "export class ",
+        "export interface ",
+        "export enum ",
     };
     for (decls) |prefix| {
         if (!std.mem.startsWith(u8, trimmed, prefix)) continue;
         const decl = trimmed["export ".len..];
         const rest = trimmed[prefix.len..];
-        // Name runs up to the first `(`, `:`, `=`, `<`, or whitespace. `<` stops
-        // a generic parameter list (`export type Box<T> = …`) from becoming part
-        // of the exported name.
-        const end = std.mem.indexOfAny(u8, rest, "(:=< \t") orelse rest.len;
+        // Name runs up to the first `(`, `:`, `=`, `<`, `{`, `;`, or whitespace.
+        // `<` stops a generic parameter list (`export type Box<T> = …`) from
+        // becoming part of the exported name; `{` does the same for a body
+        // opened with no space before it, as `export class C{` may be. The set
+        // is `scanTopLevelDecls`'s, so the two passes agree on where a name ends.
+        const end = std.mem.indexOfAny(u8, rest, "(:=<{; \t") orelse rest.len;
         const name = std.mem.trim(u8, rest[0..end], " \t");
         if (name.len == 0) return null;
         return .{ .name = name, .decl = decl };
@@ -3184,6 +3194,14 @@ test "exported declaration names stop at a generic parameter list (spec 451)" {
         .{ .line = "export function identity<T>(x: T): T {", .name = "identity", .decl = "function identity<T>(x: T): T {" },
         .{ .line = "export const ANSWER: int = 42;", .name = "ANSWER", .decl = "const ANSWER: int = 42;" },
         .{ .line = "export let count = 0;", .name = "count", .decl = "let count = 0;" },
+        // Multi-line forms (spec 482). Only the opening line reaches here; the
+        // body flows through the line-oriented pass untouched.
+        .{ .line = "export class BannerApi {", .name = "BannerApi", .decl = "class BannerApi {" },
+        .{ .line = "export class Counter<T> {", .name = "Counter", .decl = "class Counter<T> {" },
+        // No space before the body, which is why `{` ends a name.
+        .{ .line = "export class Tight{", .name = "Tight", .decl = "class Tight{" },
+        .{ .line = "export interface Named {", .name = "Named", .decl = "interface Named {" },
+        .{ .line = "export enum Colour {", .name = "Colour", .decl = "enum Colour {" },
     };
     for (cases) |c| {
         const got = parseNamedExportDecl(c.line) orelse return error.TestExpectedEqual;
@@ -3192,8 +3210,8 @@ test "exported declaration names stop at a generic parameter list (spec 451)" {
     }
     // Not declaration-bearing export forms.
     try std.testing.expect(parseNamedExportDecl("export { a, b };") == null);
-    try std.testing.expect(parseNamedExportDecl("export interface I {") == null);
     try std.testing.expect(parseNamedExportDecl("type Point = { x: int };") == null);
+    try std.testing.expect(parseNamedExportDecl("class Local {") == null);
 }
 
 test "embed( inside a string, comment, template or regex is text, not a call (spec 458)" {
