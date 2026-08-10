@@ -1008,7 +1008,8 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
         // zeroes and travelled on as though it had parsed.
         try out.appendSlice(arena,
             \\fn __jsonBlame(comptime T: type, alloc: std.mem.Allocator, text: []const u8) ?[]const u8 {
-            \\    const info = @typeInfo(T);
+            \\    const S = switch (@typeInfo(T)) { .pointer => |pt| pt.child, .optional => |o| o.child, else => T };
+            \\    const info = @typeInfo(S);
             \\    if (info != .@"struct") return null;
             \\    const doc = std.json.parseFromSlice(std.json.Value, alloc, text, .{}) catch return null;
             \\    defer doc.deinit();
