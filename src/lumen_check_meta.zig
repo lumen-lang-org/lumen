@@ -188,6 +188,13 @@ fn bindingFor(self: *Checker, p: ast.FunctionParam, req: []const u8) !?[]const u
         if (std.mem.eql(u8, d.name, "RequestHeader") or std.mem.eql(u8, d.name, "header")) {
             return try std.fmt.allocPrint(self.arena, "header({s}, \"{s}\")", .{ req, named });
         }
+        // A named resolver: @From("owner") binds owner(req). The whole of a
+        // user-defined binder, because the dispatcher already writes arbitrary
+        // expressions — a resolver is any function taking the request.
+        if (std.mem.eql(u8, d.name, "From") or std.mem.eql(u8, d.name, "from")) {
+            if (first.len == 0) return null;
+            return try std.fmt.allocPrint(self.arena, "{s}({s})", .{ first, req });
+        }
         if (std.mem.eql(u8, d.name, "RequestBody") or std.mem.eql(u8, d.name, "body")) {
             if (std.mem.eql(u8, p.annotation, "string")) {
                 return try std.fmt.allocPrint(self.arena, "{s}.body", .{req});
