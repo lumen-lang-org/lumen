@@ -63,6 +63,8 @@
     <a href="/packages/websocket">websocket</a>
     <a href="/packages/socketio">socketio</a>
     <a href="/packages/sse">sse</a>
+    <a href="/packages/press">press</a>
+    <a href="/packages/validation">validation</a>
     <p class="docs-nav-title">AI & agents</p>
     <a href="/packages/ai">ai</a>
     <a href="/packages/agents">agents</a>
@@ -72,6 +74,7 @@
     <a href="/packages/code-index">code-index</a>
     <a href="/packages/args">args</a>
     <a href="/packages/quickjs">quickjs</a>
+    <a href="/packages/cron">cron</a>
     <p class="docs-nav-title">Small & example</p>
     <a href="/packages/mathx">mathx</a>
     <a href="/packages/geo">geo</a>
@@ -88,7 +91,7 @@ class AgentController {
   @get("/")       list(req: Request): Reply { ... }
   @get("/:id")    find(req: Request): Reply { ... }
   @post("/")      create(req: Request): Reply { ... }
-  @del("/:id")    remove(req: Request): Reply { ... }
+  @delete("/:id") remove(req: Request): Reply { ... }
 }</code></pre>
   <p class="sub">The compiler runs <code>controller</code> while compiling and leaves the route table behind as a constant — no scanning, no registration at startup:</p>
 <pre><code class="lumen">let controllerAgentController: Route[] = [
@@ -97,22 +100,85 @@ class AgentController {
   { method: "POST",   pattern: "/agents",     handler: "create" },
   { method: "DELETE", pattern: "/agents/:id", handler: "remove" },
 ];</code></pre>
-  <p class="sub"><code>@del</code>, not <code>@delete</code> — <code>delete</code> is a reserved word. It is the one place the language shows through, and that beats something cleverer.</p>
+  <p class="sub">The verbs are <code>@get</code>, <code>@post</code>, <code>@put</code>, <code>@patch</code>, <code>@delete</code> and <code>@head</code>. <code>@del</code> still works and means the same thing, for code written when this package believed <code>delete</code> was unavailable — it is not: a decorator is an ordinary imported name, and <code>delete</code> is only special to the lexer when deciding whether a following <code>/</code> opens a regex. The list itself is <code>httpMethodOf</code> in <code>controller.ts</code>, so adding <code>@options</code> is editing that function rather than the language: the compiler knows the decorator protocol, never the vocabulary.</p>
   <h3>Serving</h3>
+<pre><code class="lumen">let mounts: Mount[] = [
+  new AgentController(db),
+  new ModelController(db),
+];
+
+let problem = listen(8080, mounts);
+if (problem != "") { console.error(problem); }</code></pre>
+  <p class="sub">That is the whole call site, and it is the whole of what <code>main</code> used to be. The same shape in <code>packages/agents</code> ran to about 390 lines: a loop per controller copying that controller's routes into one shared table while rewriting every handler name with a prefix — <code>"h" + r.handler</code>, <code>"d" + r.handler</code>, <code>"ks" + r.handler</code> — invented at the call site so that four classes could each have a <code>list</code> without overwriting one another; then some seventy <code>bound.set("hlist", (req) =&gt; { try { … } catch { … } })</code> lambdas; then <code>serve</code>. That program was longer than the API it served, its prefixes were a namespace maintained by attention, and a single <code>try</code> left out of a single lambda took the whole process down. None of it is written now, so none of it can be got wrong now.</p>
+  <h4>What <code>mount</code> does</h4>
+  <p class="sub"><code>listen</code> takes <code>Mount[]</code>, and a <code>Mount</code> is a controller's name, the routes its decorator left behind, and the one way in:</p>
+<pre><code class="lumen">export type Mount = {
+  controller: string,
+  routes: Route[],
+  call: (handler: string, req: Request) =&gt; Reply,
+};</code></pre>
+  <p class="sub"><code>mount</code> builds one. It is said once, generically, for every controller there will ever be, because three things the compiler already knows about a class are reachable as values (Lumen spec 477):</p>
+<pre><code class="lumen">export function mount&lt;T&gt;(c: T): Mount {
+  let m: Mount = {
+    controller: Class.nameOf(c),                  // "AgentController"
+    routes: Class.decorator(c, "controller"),     // the Route[] @controller left
+    call: (handler: string, req: Request) =&gt; {
+      try { return Class.invoke(c, handler, req); }   // c.list(req), by name
+      catch (e) { return badRequest("the request could not be handled: " + e.message); }
+    },
+  };
+  return m;
+}</code></pre>
+  <p class="sub">Read that and the natural conclusion is that something looks a class up at run time. Nothing does, and none of the three survives into the binary. There is no reflection here and there is still no runtime type information in a native Lumen binary; all three are resolved while checking and rewritten in place. <code>Class.nameOf(c)</code> becomes the string literal <code>"AgentController"</code>. <code>Class.decorator(c, "controller")</code> becomes a reference to <code>controllerAgentController</code>, the constant <code>@controller</code> already produced, typed as the <code>Route[]</code> that constant is declared to be. <code>Class.invoke(c, handler, req)</code> becomes a call to a dispatcher the compiler generates once per class — a chain of <code>if (handler == "list") { return c.list(req); }</code> over the methods whose parameter types match, ending in a throw for a name no method has. <code>mount</code> is generic precisely so the substitution happens per controller, at specialization, before the body is checked.</p>
+  <h4>What a mountable class may not have</h4>
+  <p class="sub">One constraint follows from how that dispatcher is built, and it is worth knowing before you meet it as a type error. <code>Class.invoke(c, handler, req)</code> gathers <strong>every</strong> method of the class whose parameter list is exactly <code>(Request)</code> — not only the decorated ones, since the decorator is not what it consults — and those methods have to agree on a return type. So a helper like</p>
+<pre><code class="lumen">keyOf(req: Request): string { return param(req, "id"); }</code></pre>
+  <p class="sub">sitting undecorated beside the handlers makes the class unmountable: it takes a <code>Request</code> like a handler and returns a <code>string</code> where the handlers return <code>Reply</code>. It never becomes a route — the decorator reads verbs, and this has none — but it is still a candidate for dispatch.</p>
+  <p class="sub">Either give the helper a different parameter list, or lift it out of the class as a free function, which is never a candidate. <code>examples/agents-controller.ts</code> does the second. The diagnostic today is a bare <code>type mismatch</code> pointing inside <code>server.ts</code> at <code>mount</code>'s own body rather than at your class, so it is worth recognising by shape.</p>
+  <h4>Why the call site does not write <code>mount</code></h4>
+  <p class="sub"><code>[new AgentController(db), new ModelController(db)]</code> is not a <code>Mount[]</code>, and it is not any array: arrays are homogeneous, there are no trait objects, and two classes share no type. So the erasure to one record has to happen per element, at the call site. Writing it is what <code>mount(…)</code> was, once per line, carrying no information beyond "this is an instance, boxed".</p>
+  <p class="sub">A value of class type appearing where a <strong>named record type</strong> is expected now goes through the one generic function that makes that record — a declaration <code>f&lt;T&gt;(c: T): R</code> over a single parameter of its own type parameter (Lumen spec 478). <code>mount</code> is that function for <code>Mount</code>, so the array elements become <code>mount(new AgentController(db))</code> before anything else sees them. Nothing that compiled before changes meaning: a class instance was never assignable to a record, so every site this fires on is a site that was a type error. The rule can only turn errors into programs.</p>
+  <p class="sub">Writing <code>mount(…)</code> yourself still compiles and means exactly the same thing. It stays exported for a program that wants the record for its own reasons — a test that dispatches without a socket, say.</p>
+  <p class="sub">A class in the list carrying no <code>@controller</code> is a compile error naming that class, reported at the call that asked for it rather than at the library line that wrote <code>Class.decorator</code> for every class there will ever be:</p>
+<pre><code class="lumen">api.ts:14:7: error: `NotAController` carries no `@controller`, so there is no
+             `controllerNotAController` to read
+  14 |   let problem = listen(8123, [new AgentApi(), new NotAController()]);
+    |       ^~~~~~~</code></pre>
+  <h4>The single <code>try</code> is the point</h4>
+  <p class="sub">This is the part to understand, because it is why per-handler <code>try</code>s are gone rather than merely tidied away.</p>
+  <p class="sub">A <code>throw</code> in this language does not propagate out of a lambda. Spec 245's fixpoint pass works out which functions can throw, and it cannot see through a function value, so a callee reached that way is emitted as non-throwing and the throw panics at the handler. A <code>try</code> wrapped around a handler <em>reached through a function value</em> therefore never runs. That is not a theoretical shape: <code>serve</code> has always held such a <code>try</code>, and it has never once caught a handler's own throw.</p>
+  <p class="sub"><code>Class.invoke</code> lowers to direct method calls, which spec 245 and spec 247 do propagate a throw through. So the <code>try</code> inside <code>mount</code> is the first one on this path that can work, and because there is exactly one path from a request to a method, it guards every handler of every controller. No call site can forget it, because no call site names a handler.</p>
+  <p class="sub">The failure this closes is a specific one. <code>JSON.parse&lt;T&gt;</code> throws when a PUT body omits a field the record declares. Each of about sixty hand-written bindings needed its own <code>try</code> to survive that; one was missing, and a partial body on that one route took the whole server down. Now a handler that throws is answered 400 — the request the router could not make sense of is the request's fault — and the server is still serving. A handler failing for its own reasons should still return <code>problem(500, …)</code> rather than throw.</p>
+  <h4>Handler names are qualified by their class</h4>
+  <p class="sub">Each mount is matched against its own routes, so <code>AgentController.list</code> and <code>ModelController.list</code> never share a keyspace and there is nothing for a program to disambiguate. Where a name has to be shown, it is qualified with the name the compiler gave the class, never with a prefix a program chose:</p>
+<pre><code class="lumen">let table = mountedRoutes(mounts);   // Route[], handlers qualified
+// route  GET /agents/:id -&gt; AgentController.find</code></pre>
+  <p class="sub"><code>mountedRoutes</code> is for logging and for the message <code>mountProblem</code> gives. Dispatch never uses it.</p>
+  <h4>What <code>listen</code> refuses before it binds</h4>
+  <p class="sub"><code>mountProblem</code> runs first, and <code>listen</code> returns its message rather than listening. It checks each controller's own routes with <code>tableProblem</code>, naming the controller:</p>
+<pre><code class="lumen">ShadowApi: the route GET /agents/new can never match: GET /agents/:id comes
+first and matches the same paths</code></pre>
+  <p class="sub">and then it checks that no two controllers claim one method and path:</p>
+<pre><code class="lumen">AgentApi.list and ArchiveApi.list both serve GET /agents</code></pre>
+  <p class="sub">That second check is new, and it is worth saying what it replaces: nothing. Two controllers overlapping used to be silent, because the first mount simply won and the second was dead code that looked live.</p>
+  <p class="sub">A route with no handler is no longer one of the ways to fail. The routes come from the decorator, which derived them from the class's own methods, and the dispatch comes from that same class, so the two cannot disagree.</p>
+  <p class="sub">One overlap is still not caught: a route in one controller that <em>shadows</em> rather than duplicates a route in another — <code>GET /agents/:id</code> in one class and <code>GET /agents/new</code> in a second — is a conflict <code>tableProblem</code> refuses within a single controller but neither check sees across two. The earlier mount wins, quietly. Keeping one path prefix in one class avoids it entirely, which is what a <code>@controller</code> prefix is for.</p>
+  <h4>Serving a table you wrote yourself</h4>
+  <p class="sub"><code>serve(port, table, handlers)</code> is unchanged and still works. A program that wrote its own bindings keeps them, and nothing here asks it to move:</p>
 <pre><code class="lumen">let bound = new Map&lt;string, Handler&gt;();
 bound.set("list", listAgents);
 bound.set("find", findAgent);
 
-let problem = serve(8080, controllerAgentController, bound);
-if (problem != "") { console.error(problem); }</code></pre>
-  <p class="sub">The binding is written out because a decorator cannot call a method: there is no reflection here and there will not be, since the product is a native binary with no runtime type information. What that buys is that <code>serve</code> checks the table against the bindings <strong>before it listens</strong> — a route naming a handler nothing bound is a startup failure naming the route, not a 500 a user finds.</p>
-  <p class="sub">Handlers close over what they need, which is the dependency inversion: nothing reaches for a global, and a test builds the same handlers against a different <code>Db</code>.</p>
+let problem = serve(8080, table, bound);</code></pre>
+  <p class="sub"><code>bindingProblem</code> checks the table against the bindings before it listens, so a route naming a handler nothing bound is a startup failure naming the route rather than a 500 a user finds. What it cannot do is guard the handlers: each binding still has to hold its own <code>try</code>, inside its own lambda, which is the only place one works, and forgetting one is still fatal.</p>
+  <p class="sub"><strong>A new program should reach for <code>listen</code>.</strong> <code>serve</code> is the right answer only for a table that was not derived from a class — one built by hand with <code>route</code> and <code>routes</code>, or read from somewhere — where there is no class for <code>Class.*</code> to know anything about.</p>
   <h3>Without a decorator</h3>
   <p class="sub">The table is an ordinary value; the decorator only derives one.</p>
 <pre><code class="lumen">let table = routes([
   route("GET",  "/agents",     "list"),
   route("GET",  "/agents/:id", "find"),
 ]);</code></pre>
+  <p class="sub"><code>match(table, method, target)</code> is the whole router, and it is a pure function over strings — no import, no socket, nothing about HTTP — which is why every routing question in this package is answerable by a test that calls a function.</p>
   <h3>Catching the rest of a path</h3>
   <p class="sub">A pattern's <strong>last</strong> segment may be <code>*name</code>, which stands for the whole rest of the path — one segment or more, joined with <code>/</code>, each segment decoded on its own.</p>
 <pre><code class="lumen">let table = routes([
@@ -122,21 +188,36 @@ if (problem != "") { console.error(problem); }</code></pre>
   <p class="sub">A catch-all is always the last resort: any route that matches without one wins, whatever order the table is written in. So <code>/files/:box/v/:n</code> still answers <code>/files/b1/v/3</code> even if the catch-all is written above it, and you never have to reason about placement to keep an exact route alive.</p>
   <p class="sub">The capture is reported, not vetted. <code>..</code> and an encoded <code>%2F</code> arrive as sent and read as ordinary path text, so a handler that resolves one against a filesystem or key space owns that check itself.</p>
   <h3>What it refuses, at startup</h3>
+  <p class="sub">Both <code>mountProblem</code> and <code>bindingProblem</code> run <code>tableProblem</code> first, so these hold whichever way a program serves:</p>
   <ul>
     <li><strong>A shadowed route.</strong> <code>/agents/:id</code> written before <code>/agents/new</code> makes the second unreachable — a <code>:param</code> matches any literal. Named at startup rather than found as a 404 later.</li>
     <li><strong>A <code>*name</code> that is not the last segment.</strong> Nothing after a catch-all could ever be reached, so the pattern does not mean what it looks like.</li>
     <li><strong>A pattern that does not start with <code>/</code></strong>, one naming a parameter twice — <code>:</code> and <code>*</code> share one namespace, since a handler reads a parameter by name — or a <code>:</code> or <code>*</code> with no name.</li>
     <li><strong>An empty table</strong>, and a route naming no handler.</li>
   </ul>
+  <p class="sub">Then each adds the check its own shape makes possible:</p>
+  <ul>
+    <li><code>listen</code> refuses <strong>two mounted controllers claiming one method and path</strong>, which is otherwise silent: the first one mounted quietly wins.</li>
+    <li><code>serve</code> refuses <strong>a route naming a handler nothing bound</strong>, which cannot arise under <code>listen</code> because routes and dispatch come from the same class.</li>
+  </ul>
   <h3>What it answers</h3>
   <ul>
     <li>A path nobody claims: <strong>404</strong>, as JSON.</li>
-    <li>A path claimed under another method: <strong>405</strong>, with the <code>Allow</code> header it owes. That is a distinction a client acts on, and it needs the difference between "no such thing" and "not that way".</li>
-    <li>An unbound handler that somehow reached dispatch: <strong>500</strong>, rather than taking the server down.</li>
+    <li>A path claimed under another method: <strong>405</strong>, with the <code>Allow</code> header it owes. That is a distinction a client acts on, and it needs the difference between "no such thing" and "not that way". Under <code>listen</code> the header is collected across every mount, so a path split between two controllers still reports both.</li>
+    <li>A handler that throws: <strong>400</strong>, from the <code>try</code> inside <code>mount</code>.</li>
+    <li>Under <code>serve</code> only, an unbound handler that somehow reached dispatch: <strong>500</strong>, rather than taking the server down.</li>
   </ul>
   <h3>Reading a request</h3>
   <p class="sub"><code>param(req, "id")</code>, <code>queryParam(req, "limit", "10")</code>, <code>header(req, name)</code> — case-insensitive, since the server lowercases what it receives — and <code>bearerToken(req)</code>, which every API grows and every one writes differently.</p>
-  <p class="sub"><code>ok</code>, <code>created</code>, <code>noContent</code>, <code>json</code>, <code>problem</code>, <code>notFound</code>, <code>badRequest</code> build replies. An error is a JSON document, because a client parsing the body should not have to guess whether it got JSON or a sentence.</p>
+  <p class="sub"><code>ok</code>, <code>created</code>, <code>accepted</code>, <code>noContent</code>, <code>json</code>, <code>problem</code>, <code>notFound</code> and <code>badRequest</code> build replies, over <code>reply(status, body, contentType)</code> for anything that is not JSON.</p>
+  <p class="sub">Those take a body that is already text. <strong><code>okJson</code>, <code>createdJson</code> and <code>jsonOf(status, value)</code> take the value itself</strong> and serialise it once:</p>
+<pre><code class="lumen">type JobView = { id: string, source: string, chunks: int, failed: bool };
+
+@get("/")
+list(req: Request): Reply {
+  return okJson(pendingJobs(this.db).map(view));
+}</code></pre>
+  <p class="sub">A handler that builds its body by concatenation is doing three jobs: choosing the shape, escaping the values and remembering the commas. Only the first is its own. <code>JSON.stringify</code> lives here, once, instead of at every route that has to get the quoting right — and a record literal cannot infer a generic type parameter, so the call site names its type, which is what decides the fields that ship rather than the author remembering which to concatenate. An error is a JSON document, because a client parsing the body should not have to guess whether it got JSON or a sentence. <code>accepted</code> is its own function rather than a 201 with a different number: answering 201 for work merely queued tells a client the resource exists when it does not yet.</p>
   <h3>Dependency inversion</h3>
   <p class="sub">A controller takes what it needs through its constructor. Nothing reaches for a global, so a test builds one against a different database and the same code runs.</p>
 <pre><code class="lumen">@controller("/agents")
@@ -153,12 +234,13 @@ class AgentController {
 }</code></pre>
 <pre><code class="lumen">function main(): void {
   let agents = store(openDatabase(), agentsMapping());
-  let api = new AgentController(agents);
-  ...
+  let mounts: Mount[] = [new AgentController(agents)];
+  listen(8080, mounts);
 }</code></pre>
-  <p class="sub">There is no <code>@inject</code>, no auto-wiring and no lifetime management. <code>main</code> builds the dependencies and hands them over. With no reflection there is no honest way to do more, and that being visible is better than dressing it up.</p>
+  <p class="sub">There is no <code>@inject</code>, no auto-wiring and no lifetime management, and spec 478 adds none: it converts an instance the program already constructed, and never constructs one or scans for one. <code>main</code> builds the dependencies and hands them over, where a reader can see what each controller was given. With no reflection there is no honest way to do more, and that being visible is better than dressing it up.</p>
   <h3>Status</h3>
-  <p class="sub"><code>@controller</code> needs the decorator compiler (Lumen spec 455, merged) and the method descriptions it reads (spec 459, merged). <code>examples/agents-api.ts</code> is a full REST API over a <code>plume</code>-mapped table, written with a plain route table; <code>examples/agents-controller.ts</code> is the same API as a controller.</p>
+  <p class="sub"><code>@controller</code> needs the decorator compiler (Lumen spec 455, merged) and the method descriptions it reads (spec 459, merged). <code>listen</code> and <code>mount</code> need class metadata as values (spec 477, merged); dropping the word <code>mount</code> from the call site needs class-to-record conversion (spec 478, merged).</p>
+  <p class="sub"><code>examples/agents-controller.ts</code> is a full REST API over a <code>plume</code>-mapped table, written as a controller and served with <code>listen</code>. <code>examples/agents-api.ts</code> is the same API as a plain route table served with <code>serve</code>, kept because that path is still supported and still worth having an example of.</p>
   <p class="sub"><strong>Not yet safe under concurrency.</strong> <code>http.createServer</code> dispatches each request to a worker thread, and a <code>plume</code> connection shared across threads has its result set overwritten by whichever request runs next — a POST followed by a read of the same id can report not found. Thread-local connections are in progress. Until then these examples are correct only for sequential traffic.</p>
   </div>
   </div>

@@ -63,6 +63,8 @@
     <a href="/packages/websocket">websocket</a>
     <a href="/packages/socketio">socketio</a>
     <a href="/packages/sse">sse</a>
+    <a href="/packages/press">press</a>
+    <a href="/packages/validation">validation</a>
     <p class="docs-nav-title">AI & agents</p>
     <a href="/packages/ai">ai</a>
     <a href="/packages/agents">agents</a>
@@ -72,6 +74,7 @@
     <a href="/packages/code-index">code-index</a>
     <a href="/packages/args">args</a>
     <a href="/packages/quickjs">quickjs</a>
+    <a href="/packages/cron">cron</a>
     <p class="docs-nav-title">Small & example</p>
     <a href="/packages/mathx">mathx</a>
     <a href="/packages/geo">geo</a>
@@ -293,7 +296,7 @@ sql/R__active_agents_view.sql   repeatable,  "active agents view"</code></pre>
 migrate(database, plan);</code></pre>
   <p class="sub">Adding a migration is adding a file. A single underscore is a dot in the version and a space in the description; <code>__</code> separates the two, which is why a description cannot contain one.</p>
   <p class="sub"><code>embedDir</code> reads the directory <strong>while compiling</strong> (Lumen spec 458), so the SQL is reviewable as SQL and the program is still one binary — delete <code>sql/</code> after building and it still runs. Nothing requires <code>embedDir</code>, though: <code>migrationsFrom</code> takes any list of names and contents.</p>
-  <p class="sub">A file that is not a migration — a <code>README.md</code> beside the SQL — is left out of the plan and reported by <code>migrationNameProblem</code>. It is not silently skipped: a migration named wrongly would otherwise never run and never be missed.</p>
+  <p class="sub">A file that is not a migration — a <code>README.md</code> beside the SQL — is left out of the plan and reported by <code>migrationNameViolation</code>. It is not silently skipped: a migration named wrongly would otherwise never run and never be missed.</p>
   <p class="sub">Everything after the name is still checked. Ordering is by version, so <code>10</code> runs after <code>9</code> where a name sort would get it backwards; the checksum is over the file's contents, so editing an applied <code>.sql</code> is refused exactly as editing an inline string was.</p>
   <h4>The state table</h4>
   <p class="sub"><code>plume_schema_history</code>, created on first use, is what every one of those checks reads:</p>
@@ -325,7 +328,7 @@ persist(database, agents(), JSON.stringify(a));</code></pre>
   <p class="sub">The cost is that the shape is written twice, and the two can disagree without anything saying so. That is what <code>@entity</code> removes.</p>
   <h4>Why the decorator is a function</h4>
   <p class="sub">A decorator in Lumen is a pure function from a description of the declaration to a value — here, a <code>DbRepository</code>. That is why <code>entity</code> is an ordinary function of an ordinary type, tested by calling it: <code>entity.test.ts</code> needs no compiler support to run, and <code>entity_live.test.ts</code> checks that the generated mapping is identical to the hand-written one and that every operation works against it.</p>
-  <p class="sub">Still nothing is inferred: a field without <code>@column</code> is not mapped, a class without <code>@id</code> has no key and <code>entityProblem</code> says so. The one exception is a <code>@column("id")</code> with no type, which falls back to the declared type — the column type can always be stated outright.</p>
+  <p class="sub">Still nothing is inferred: a field without <code>@column</code> is not mapped, a class without <code>@id</code> has no key and <code>entityViolation</code> says so. The one exception is a <code>@column("id")</code> with no type, which falls back to the declared type — the column type can always be stated outright.</p>
   </div>
   </div>
 </section>
