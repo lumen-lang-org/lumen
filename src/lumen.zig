@@ -490,6 +490,111 @@ fn braceDelta(line: []const u8) i32 {
     return depth;
 }
 
+/// Where fetched modules are put: beside the entry, laid out by the URL they
+/// came from, so a build reads local files and a person can see what arrived
+/// from where. Per project on purpose — one project's cache never decides
+/// another project's build, and `rm -rf` is a clean slate.
+const PACKAGE_DIR = ".lumen-packages";
+
+/// `https://host/a/b.ts` -> `.lumen-packages/host/a/b.ts`, and back.
+///
+/// The mapping is reversible because relative imports inside a fetched module
+/// resolve against its *local* directory, landing on siblings that have not
+/// been fetched yet. Turning that path back into a URL is what lets them be.
+fn packagePathFor(arena: std.mem.Allocator, url: []const u8) ![]const u8 {
+    const scheme = "https://";
+    if (!std.mem.startsWith(u8, url, scheme)) return error.InvalidImport;
+    const after = url[scheme.len..];
+    if (after.len == 0 or std.mem.indexOfScalar(u8, after, '/') == null) return error.InvalidImport;
+    if (std.mem.indexOf(u8, after, "..") != null) return error.InvalidImport;
+    return std.fmt.allocPrint(arena, "{s}/{s}", .{ PACKAGE_DIR, after });
+}
+
+fn urlForPackagePath(arena: std.mem.Allocator, path: []const u8) ?[]const u8 {
+    const prefix = PACKAGE_DIR ++ "/";
+    const at = std.mem.indexOf(u8, path, prefix) orelse return null;
+    const rest = path[at + prefix.len ..];
+    if (rest.len == 0) return null;
+    return std.fmt.allocPrint(arena, "https://{s}", .{rest}) catch null;
+}
+
+/// The working copy of a package that is open on disk, if there is one.
+///
+/// Not "which repo am I in": someone editing `agents` and `plume` on one branch
+/// needs the local `plume` even though the entry lives in `agents`. So this
+/// looks for the package by name in any `packages/` directory from the working
+/// directory upward, which is what having it checked out already says.
+///
+/// A URL is expected to name a package as `…/package/<name>/<rest>`; anything
+/// else is left to be fetched.
+fn openCheckoutFor(arena: std.mem.Allocator, io: std.Io, url: []const u8) ?[]const u8 {
+    const marker = "/package/";
+    const at = std.mem.indexOf(u8, url, marker) orelse return null;
+    const after = url[at + marker.len ..];
+    if (after.len == 0) return null;
+
+    // Which segment names the package is the host's business, not ours:
+    // `/package/std-contrib/validation/validation.ts` puts a collection first,
+    // another host may not. So every split is tried — the one that matches a
+    // directory actually on disk is the answer, and a URL naming nothing local
+    // simply falls through to being fetched.
+    var up: []const u8 = ".";
+    var hops: u8 = 0;
+    while (hops < 8) : (hops += 1) {
+        var from: usize = 0;
+        while (std.mem.indexOfScalarPos(u8, after, from, '/')) |slash| {
+            from = slash + 1;
+            const name = after[0..slash];
+            const rest = after[slash + 1 ..];
+            if (name.len == 0 or rest.len == 0) continue;
+            const leaf = std.mem.lastIndexOfScalar(u8, name, '/');
+            const pkg = if (leaf) |l| name[l + 1 ..] else name;
+            if (pkg.len == 0) continue;
+            const candidate = std.fmt.allocPrint(arena, "{s}/packages/{s}/{s}", .{ up, pkg, rest }) catch return null;
+            if (std.Io.Dir.cwd().access(io, candidate, .{})) |_| {
+                return std.fs.path.resolve(arena, &.{candidate}) catch candidate;
+            } else |_| {}
+        }
+        up = std.fmt.allocPrint(arena, "{s}/..", .{up}) catch return null;
+    }
+    return null;
+}
+
+/// A URL as a local file: the working tree where the package is open, a fetched
+/// copy where it is not.
+///
+/// Everything downstream then reads local files, which is what makes a repeat
+/// build offline and what lets a decorator arrive as an ordinary local module
+/// rather than being refused for coming over https.
+fn resolveUrlToLocal(arena: std.mem.Allocator, io: std.Io, url: []const u8) ![]const u8 {
+    if (openCheckoutFor(arena, io, url)) |local| return local;
+
+    const dest = try packagePathFor(arena, url);
+    if (std.Io.Dir.cwd().access(io, dest, .{})) |_| {
+        return dest;
+    } else |_| {}
+
+    const bytes = try fetchUrl(arena, io, url);
+    if (std.fs.path.dirname(dest)) |parent| {
+        std.Io.Dir.cwd().createDirPath(io, parent) catch return error.FetchFailed;
+    }
+    var file = std.Io.Dir.cwd().createFile(io, dest, .{}) catch return error.FetchFailed;
+    defer file.close(io);
+    var buf: [4096]u8 = undefined;
+    var w = file.writer(io, &buf);
+    w.interface.writeAll(bytes) catch return error.FetchFailed;
+    w.interface.flush() catch return error.FetchFailed;
+    return dest;
+}
+
+/// A module under `.lumen-packages` that is not there yet came from a relative
+/// import inside a fetched file. Fetch it from the URL the path encodes.
+fn ensurePackageFile(arena: std.mem.Allocator, io: std.Io, path: []const u8) void {
+    if (std.Io.Dir.cwd().access(io, path, .{})) |_| return else |_| {}
+    const url = urlForPackagePath(arena, path) orelse return;
+    _ = resolveUrlToLocal(arena, io, url) catch return;
+}
+
 /// Fetches a module's source over HTTPS at build time.
 fn fetchUrl(arena: std.mem.Allocator, io: std.Io, url: []const u8) ![]const u8 {
     var client: std.http.Client = .{ .allocator = arena, .io = io };
@@ -903,7 +1008,6 @@ fn runDecorators(
     path: []const u8,
     key: []const u8,
     dir: []const u8,
-    is_url: bool,
     source: []const u8,
     apps: []const describe.Application,
     decorator_lines: *std.AutoHashMapUnmanaged(u32, void),
@@ -940,10 +1044,16 @@ fn runDecorators(
     var generated: std.ArrayListUnmanaged(decorator.Generated) = .empty;
     for (apps) |app| {
         const binding = bindings.get(app.name) orelse return decoratorFailed(arena, path, app, "'@{s}' is not imported — a decorator is an ordinary imported function, so add `import {{ {s} }} from \"./…\";`", .{ app.name, app.name });
-        if (is_url or std.mem.startsWith(u8, binding.spec, "https://"))
-            return decoratorFailed(arena, path, app, "'@{s}' comes from {s}: a decorator is compiled and run from a local file, so it cannot be fetched over https", .{ app.name, binding.spec });
-
-        const module_path = try std.fs.path.resolve(arena, &.{ dir, binding.spec });
+        // A decorator is compiled and run, so it has to be a local file. It no
+        // longer has to be *written* as one: a URL is resolved to the working
+        // tree where that package is open, or to a fetched copy, and what
+        // arrives is an ordinary local module. Only a URL that cannot be
+        // resolved is refused.
+        const module_path = if (std.mem.startsWith(u8, binding.spec, "https://"))
+            resolveUrlToLocal(arena, io, binding.spec) catch
+                return decoratorFailed(arena, path, app, "'@{s}' comes from {s}, which could not be resolved to a local file", .{ app.name, binding.spec })
+        else
+            try std.fs.path.resolve(arena, &.{ dir, binding.spec });
 
         // A decorator module that reaches the file it decorates cannot be
         // compiled: that file is not finished until this decorator has run.
@@ -1115,7 +1225,7 @@ const Expander = struct {
 /// definition moves. Every other rename lands on the *importer's* own text.
 fn appendExpandedSource(
     exp: *Expander,
-    path: []const u8,
+    path_in: []const u8,
     import_kind: ?ImportSpec.Kind,
     avoid: []const []const u8,
     depth: u8,
@@ -1124,6 +1234,18 @@ fn appendExpandedSource(
     const io = exp.io;
     const out = exp.out;
     if (depth > 16) return error.InvalidImport;
+    // A URL becomes a local file before anything else looks at it: the working
+    // tree where the package is open, a fetched copy where it is not. From here
+    // down the compiler only ever reads local files.
+    var path = path_in;
+    if (std.mem.startsWith(u8, path, "https://")) {
+        path = resolveUrlToLocal(arena, io, path) catch {
+            setImportDetail(arena, "cannot find module '{s}'", .{displayPath(path_in)});
+            return error.ImportReadFailed;
+        };
+    } else {
+        ensurePackageFile(arena, io, path);
+    }
     const is_url = std.mem.startsWith(u8, path, "https://");
     const key = try canonicalModuleKey(arena, path);
     const id = moduleIdentity(arena, io, key, is_url);
@@ -1252,7 +1374,7 @@ fn appendExpandedSource(
     if (std.mem.indexOfScalar(u8, source, '@') != null) {
         var describe_diag: compiler.Diag = .{};
         const apps = describe.collect(arena, source, displayPath(path), &describe_diag) catch &.{};
-        if (apps.len > 0) generated = try runDecorators(exp, path, key, dir, is_url, source, apps, &decorator_lines);
+        if (apps.len > 0) generated = try runDecorators(exp, path, key, dir, source, apps, &decorator_lines);
     }
     var pending: usize = 0;
     var brace_depth: i32 = 0;
