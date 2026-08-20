@@ -490,6 +490,159 @@ fn braceDelta(line: []const u8) i32 {
     return depth;
 }
 
+const PACKAGE_DIR = ".lumen-packages";
+
+fn packagePathFor(arena: std.mem.Allocator, url: []const u8) ![]const u8 {
+    const scheme = "https://";
+    if (!std.mem.startsWith(u8, url, scheme)) return error.InvalidImport;
+    const after = url[scheme.len..];
+    if (after.len == 0 or std.mem.indexOfScalar(u8, after, '/') == null) return error.InvalidImport;
+    if (std.mem.indexOf(u8, after, "..") != null) return error.InvalidImport;
+    return std.fmt.allocPrint(arena, "{s}/{s}", .{ PACKAGE_DIR, after });
+}
+
+fn urlForPackagePath(arena: std.mem.Allocator, path: []const u8) ?[]const u8 {
+    const prefix = PACKAGE_DIR ++ "/";
+    const at = std.mem.indexOf(u8, path, prefix) orelse return null;
+    const rest = path[at + prefix.len ..];
+    if (rest.len == 0) return null;
+    return std.fmt.allocPrint(arena, "https://{s}", .{rest}) catch null;
+}
+
+var g_no_local: bool = false;
+
+var g_explain_imports: bool = false;
+
+var g_explained: std.ArrayListUnmanaged([]const u8) = .empty;
+
+fn explainResolution(arena: std.mem.Allocator, io: std.Io, url: []const u8, local: []const u8, how: []const u8) void {
+    if (!g_explain_imports) return;
+    for (g_explained.items) |seen| if (std.mem.eql(u8, seen, url)) return;
+    g_explained.append(arena, url) catch {};
+    var buf: [2048]u8 = undefined;
+    var w: std.Io.File.Writer = .init(.stderr(), io, &buf);
+    w.interface.print("lumen: {s} -> {s} [{s}]\n", .{ url, local, how }) catch {};
+    w.interface.flush() catch {};
+}
+
+fn skipScanDir(name: []const u8) bool {
+    if (name.len == 0 or name[0] == '.') return true;
+    const skip = [_][]const u8{ "node_modules", "zig-out", "zig-cache", "packages", "target", "dist" };
+    for (skip) |s| if (std.mem.eql(u8, name, s)) return true;
+    return false;
+}
+
+fn addCheckoutIfPresent(
+    arena: std.mem.Allocator,
+    io: std.Io,
+    root: []const u8,
+    pkg: []const u8,
+    rest: []const u8,
+    found: *std.ArrayListUnmanaged([]const u8),
+    seen: *std.ArrayListUnmanaged(std.Io.File.INode),
+) void {
+    const candidate = std.fmt.allocPrint(arena, "{s}/packages/{s}/{s}", .{ root, pkg, rest }) catch return;
+    const stat = std.Io.Dir.cwd().statFile(io, candidate, .{}) catch return;
+    if (stat.kind != .file) return;
+    for (seen.items) |inode| if (inode == stat.inode) return;
+    seen.append(arena, stat.inode) catch {};
+    found.append(arena, candidate) catch {};
+}
+
+fn repoRootFrom(arena: std.mem.Allocator, io: std.Io, start_dir: []const u8) ?[]const u8 {
+    var up: []const u8 = start_dir;
+    var hops: u8 = 0;
+    while (hops < 8) : (hops += 1) {
+        const git = std.fmt.allocPrint(arena, "{s}/.git", .{up}) catch return null;
+        if (std.Io.Dir.cwd().access(io, git, .{})) |_| return up else |_| {}
+        const pkgs = std.fmt.allocPrint(arena, "{s}/packages", .{up}) catch return null;
+        if (std.Io.Dir.cwd().access(io, pkgs, .{})) |_| return up else |_| {}
+        up = std.fmt.allocPrint(arena, "{s}/..", .{up}) catch return null;
+    }
+    return null;
+}
+
+fn openCheckoutFor(arena: std.mem.Allocator, io: std.Io, url: []const u8, start_dir: []const u8) error{AmbiguousPackage}!?[]const u8 {
+    if (g_no_local) return null;
+    const marker = "/package/";
+    const at = std.mem.indexOf(u8, url, marker) orelse return null;
+    const after = url[at + marker.len ..];
+    if (after.len == 0) return null;
+    const root = repoRootFrom(arena, io, start_dir) orelse return null;
+    const beside = std.fmt.allocPrint(arena, "{s}/..", .{root}) catch return null;
+
+    var found: std.ArrayListUnmanaged([]const u8) = .empty;
+    var seen: std.ArrayListUnmanaged(std.Io.File.INode) = .empty;
+    var from: usize = 0;
+    while (std.mem.indexOfScalarPos(u8, after, from, '/')) |slash| {
+        from = slash + 1;
+        const name = after[0..slash];
+        const rest = after[slash + 1 ..];
+        if (name.len == 0 or rest.len == 0) continue;
+        const leaf = std.mem.lastIndexOfScalar(u8, name, '/');
+        const pkg = if (leaf) |l| name[l + 1 ..] else name;
+        if (pkg.len == 0) continue;
+
+        addCheckoutIfPresent(arena, io, root, pkg, rest, &found, &seen);
+
+        if (std.Io.Dir.cwd().openDir(io, beside, .{ .iterate = true })) |opened| {
+            var dir = opened;
+            defer dir.close(io);
+            var it = dir.iterate();
+            while (it.next(io) catch null) |entry| {
+                if (entry.kind != .directory) continue;
+                if (skipScanDir(entry.name)) continue;
+                const child = std.fmt.allocPrint(arena, "{s}/{s}", .{ beside, entry.name }) catch continue;
+                addCheckoutIfPresent(arena, io, child, pkg, rest, &found, &seen);
+            }
+        } else |_| {}
+    }
+
+    if (found.items.len > 1) {
+        var list: std.ArrayListUnmanaged(u8) = .empty;
+        for (found.items) |item| {
+            list.appendSlice(arena, "\n  ") catch {};
+            list.appendSlice(arena, item) catch {};
+        }
+        setImportDetail(arena, "{s} is provided by more than one checkout, so which one to build is not decided:{s}\n  set LUMEN_NO_LOCAL=1 to ignore local checkouts and build the fetched copy", .{ url, list.items });
+        return error.AmbiguousPackage;
+    }
+    if (found.items.len == 1) return found.items[0];
+    return null;
+}
+
+fn resolveUrlToLocal(arena: std.mem.Allocator, io: std.Io, url: []const u8) ![]const u8 {
+    if (try openCheckoutFor(arena, io, url, ".")) |local| {
+        explainResolution(arena, io, url, local, "local checkout");
+        return local;
+    }
+
+    const dest = try packagePathFor(arena, url);
+    if (std.Io.Dir.cwd().access(io, dest, .{})) |_| {
+        explainResolution(arena, io, url, dest, "cached");
+        return dest;
+    } else |_| {}
+
+    const bytes = try fetchUrl(arena, io, url);
+    if (std.fs.path.dirname(dest)) |parent| {
+        std.Io.Dir.cwd().createDirPath(io, parent) catch return error.FetchFailed;
+    }
+    var file = std.Io.Dir.cwd().createFile(io, dest, .{}) catch return error.FetchFailed;
+    defer file.close(io);
+    var buf: [4096]u8 = undefined;
+    var w = file.writer(io, &buf);
+    w.interface.writeAll(bytes) catch return error.FetchFailed;
+    w.interface.flush() catch return error.FetchFailed;
+    explainResolution(arena, io, url, dest, "fetched");
+    return dest;
+}
+
+fn ensurePackageFile(arena: std.mem.Allocator, io: std.Io, path: []const u8) void {
+    if (std.Io.Dir.cwd().access(io, path, .{})) |_| return else |_| {}
+    const url = urlForPackagePath(arena, path) orelse return;
+    _ = resolveUrlToLocal(arena, io, url) catch return;
+}
+
 /// Fetches a module's source over HTTPS at build time.
 fn fetchUrl(arena: std.mem.Allocator, io: std.Io, url: []const u8) ![]const u8 {
     var client: std.http.Client = .{ .allocator = arena, .io = io };
@@ -903,7 +1056,6 @@ fn runDecorators(
     path: []const u8,
     key: []const u8,
     dir: []const u8,
-    is_url: bool,
     source: []const u8,
     apps: []const describe.Application,
     decorator_lines: *std.AutoHashMapUnmanaged(u32, void),
@@ -940,10 +1092,11 @@ fn runDecorators(
     var generated: std.ArrayListUnmanaged(decorator.Generated) = .empty;
     for (apps) |app| {
         const binding = bindings.get(app.name) orelse return decoratorFailed(arena, path, app, "'@{s}' is not imported — a decorator is an ordinary imported function, so add `import {{ {s} }} from \"./…\";`", .{ app.name, app.name });
-        if (is_url or std.mem.startsWith(u8, binding.spec, "https://"))
-            return decoratorFailed(arena, path, app, "'@{s}' comes from {s}: a decorator is compiled and run from a local file, so it cannot be fetched over https", .{ app.name, binding.spec });
-
-        const module_path = try std.fs.path.resolve(arena, &.{ dir, binding.spec });
+        const module_path = if (std.mem.startsWith(u8, binding.spec, "https://"))
+            resolveUrlToLocal(arena, io, binding.spec) catch
+                return decoratorFailed(arena, path, app, "'@{s}' comes from {s}: {s}", .{ app.name, binding.spec, g_import_detail orelse "it could not be resolved to a local file" })
+        else
+            try std.fs.path.resolve(arena, &.{ dir, binding.spec });
 
         // A decorator module that reaches the file it decorates cannot be
         // compiled: that file is not finished until this decorator has run.
@@ -1115,7 +1268,7 @@ const Expander = struct {
 /// definition moves. Every other rename lands on the *importer's* own text.
 fn appendExpandedSource(
     exp: *Expander,
-    path: []const u8,
+    path_in: []const u8,
     import_kind: ?ImportSpec.Kind,
     avoid: []const []const u8,
     depth: u8,
@@ -1124,6 +1277,16 @@ fn appendExpandedSource(
     const io = exp.io;
     const out = exp.out;
     if (depth > 16) return error.InvalidImport;
+    var path = path_in;
+    if (std.mem.startsWith(u8, path, "https://")) {
+        path = resolveUrlToLocal(arena, io, path) catch |e| {
+            if (e != error.AmbiguousPackage)
+                setImportDetail(arena, "cannot find module '{s}'", .{displayPath(path_in)});
+            return error.ImportReadFailed;
+        };
+    } else {
+        ensurePackageFile(arena, io, path);
+    }
     const is_url = std.mem.startsWith(u8, path, "https://");
     const key = try canonicalModuleKey(arena, path);
     const id = moduleIdentity(arena, io, key, is_url);
@@ -1252,7 +1415,7 @@ fn appendExpandedSource(
     if (std.mem.indexOfScalar(u8, source, '@') != null) {
         var describe_diag: compiler.Diag = .{};
         const apps = describe.collect(arena, source, displayPath(path), &describe_diag) catch &.{};
-        if (apps.len > 0) generated = try runDecorators(exp, path, key, dir, is_url, source, apps, &decorator_lines);
+        if (apps.len > 0) generated = try runDecorators(exp, path, key, dir, source, apps, &decorator_lines);
     }
     var pending: usize = 0;
     var brace_depth: i32 = 0;
@@ -2909,6 +3072,8 @@ pub fn main(init: std.process.Init) !void {
 
     // Color diagnostics when stderr is a terminal, honoring NO_COLOR.
     g_no_gc = init.environ_map.get("LUMEN_NO_GC") != null;
+    g_no_local = init.environ_map.get("LUMEN_NO_LOCAL") != null;
+    g_explain_imports = init.environ_map.get("LUMEN_EXPLAIN_IMPORTS") != null;
     g_color = blk: {
         if (init.environ_map.get("NO_COLOR") != null) break :blk false;
         break :blk std.Io.File.stderr().isTty(io) catch false;
@@ -3338,4 +3503,84 @@ test "a missing embed target is a diagnostic naming the path (spec 458)" {
     diag = .{};
     try std.testing.expectError(error.EmbedFailed, embedTestSource(arena, &tmp, "let f = embedDir(\"./gone\");", &diag));
     try std.testing.expectEqualStrings("cannot embed \"./gone\": no such file [E_EMBED]", diag.msg);
+}
+
+test "a package open on disk resolves a URL to the working tree, and one file reached twice is one checkout (spec 486)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.createDirPath(io, "repo/packages/validation");
+    try tmp.dir.writeFile(io, .{ .sub_path = "repo/packages/validation/validation.ts", .data = "export function validated() {}" });
+
+    const start = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/repo", .{tmp.sub_path});
+    const got = try openCheckoutFor(arena, io, "https://lumen-lang.org/package/std-contrib/validation/validation.ts", start);
+    try std.testing.expect(got != null);
+    try std.testing.expect(std.mem.endsWith(u8, got.?, "packages/validation/validation.ts"));
+}
+
+test "two checkouts offering one package is a refusal that names both (spec 486)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.createDirPath(io, "repo/packages/plume");
+    try tmp.dir.writeFile(io, .{ .sub_path = "repo/packages/plume/plume.ts", .data = "export function q() {}" });
+    try tmp.dir.createDirPath(io, "other/packages/plume");
+    try tmp.dir.writeFile(io, .{ .sub_path = "other/packages/plume/plume.ts", .data = "export function q() {}" });
+
+    const start = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/repo", .{tmp.sub_path});
+    g_import_detail = null;
+    try std.testing.expectError(error.AmbiguousPackage, openCheckoutFor(arena, io, "https://lumen-lang.org/package/std-contrib/plume/plume.ts", start));
+    const said = g_import_detail orelse return error.TestExpectedDetail;
+    try std.testing.expect(std.mem.indexOf(u8, said, "repo/packages/plume/plume.ts") != null);
+    try std.testing.expect(std.mem.indexOf(u8, said, "other/packages/plume/plume.ts") != null);
+    g_import_detail = null;
+}
+
+test "a URL a checkout does not provide is left to be fetched (spec 486)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.createDirPath(io, "repo/packages/validation");
+    try tmp.dir.writeFile(io, .{ .sub_path = "repo/packages/validation/validation.ts", .data = "export function validated() {}" });
+
+    const start = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/repo", .{tmp.sub_path});
+    const got = try openCheckoutFor(arena, io, "https://example.com/package/someone/elsewhere/thing.ts", start);
+    try std.testing.expect(got == null);
+}
+
+test "a kept copy sits at a path that maps back to the URL it came from (spec 486)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+
+    const url = "https://lumen-lang.org/package/std-contrib/validation/validation.ts";
+    const kept = try packagePathFor(arena, url);
+    try std.testing.expectEqualStrings(".lumen-packages/lumen-lang.org/package/std-contrib/validation/validation.ts", kept);
+    const back = urlForPackagePath(arena, kept) orelse return error.TestExpectedUrl;
+    try std.testing.expectEqualStrings(url, back);
+
+    const nested = try packagePathFor(arena, "https://example.com/one.ts");
+    try std.testing.expectEqualStrings(".lumen-packages/example.com/one.ts", nested);
+}
+
+test "a URL that is not https, names no file, or climbs out of the cache is refused (spec 486)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+
+    try std.testing.expectError(error.InvalidImport, packagePathFor(arena, "http://lumen-lang.org/a.ts"));
+    try std.testing.expectError(error.InvalidImport, packagePathFor(arena, "https://lumen-lang.org"));
+    try std.testing.expectError(error.InvalidImport, packagePathFor(arena, "https://lumen-lang.org/../../etc/passwd"));
 }

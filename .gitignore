@@ -17,3 +17,5 @@ zig-pkg/
 # source) -- fetched on demand by the compiler, not vendored
 .lumen-wasmlink-*.a
 .lumen-libxev-*/
+
+.lumen-packages/
