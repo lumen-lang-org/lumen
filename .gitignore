@@ -17,3 +17,7 @@ zig-pkg/
 # source) -- fetched on demand by the compiler, not vendored
 .lumen-wasmlink-*.a
 .lumen-libxev-*/
+
+# Modules fetched from a URL, laid out by URL. A cache, never a source of
+# truth: delete it and the next build refetches what it needs.
+.lumen-packages/
