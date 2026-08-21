@@ -431,7 +431,8 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                 \\        stream: std.Io.net.Stream,
                 \\        handler: Handler,
                 \\        fn run(t: *xev.ThreadPool.Task) void {
-                \\            __gcRegisterThread();
+                \\            const __gc_fresh = __gcRegisterThread();
+                \\            defer __gcUnregisterThread(__gc_fresh);
                 \\            const self: *@This() = @fieldParentPtr("task", t);
                 \\            defer std.heap.page_allocator.destroy(self);
                 \\            const io2 = self.io;
@@ -551,7 +552,8 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
                     \\        stream: std.Io.net.Stream,
                     \\        handler: Handler,
                     \\        fn run(t: *xev.ThreadPool.Task) void {
-                \\            __gcRegisterThread();
+                    \\            const __gc_fresh = __gcRegisterThread();
+                    \\            defer __gcUnregisterThread(__gc_fresh);
                     \\            const self: *@This() = @fieldParentPtr("task", t);
                     \\            defer std.heap.page_allocator.destroy(self);
                     \\            const io2 = self.io;

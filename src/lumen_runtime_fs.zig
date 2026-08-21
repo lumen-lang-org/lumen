@@ -427,7 +427,8 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    path: []const u8,
             \\    promise: *LumenPromise(void),
             \\    fn work(t: *xev.ThreadPool.Task) void {
-            \\        __gcRegisterThread();
+            \\        const __gc_fresh = __gcRegisterThread();
+            \\        defer __gcUnregisterThread(__gc_fresh);
             \\        const self: *__UnlinkState = @fieldParentPtr("task", t);
             \\        std.Io.Dir.cwd().deleteFile(__io, self.path) catch {};
             \\        __fsPushDone(self, finish);
@@ -454,7 +455,8 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    path: []const u8,
             \\    promise: *LumenPromise(void),
             \\    fn work(t: *xev.ThreadPool.Task) void {
-            \\        __gcRegisterThread();
+            \\        const __gc_fresh = __gcRegisterThread();
+            \\        defer __gcUnregisterThread(__gc_fresh);
             \\        const self: *__MkdirState = @fieldParentPtr("task", t);
             \\        std.Io.Dir.cwd().createDir(__io, self.path, std.Io.File.Permissions.default_dir) catch {};
             \\        __fsPushDone(self, finish);
@@ -481,7 +483,8 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    path: []const u8,
             \\    promise: *LumenPromise(void),
             \\    fn work(t: *xev.ThreadPool.Task) void {
-            \\        __gcRegisterThread();
+            \\        const __gc_fresh = __gcRegisterThread();
+            \\        defer __gcUnregisterThread(__gc_fresh);
             \\        const self: *__RmdirState = @fieldParentPtr("task", t);
             \\        std.Io.Dir.cwd().deleteDir(__io, self.path) catch {};
             \\        __fsPushDone(self, finish);
@@ -509,7 +512,8 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    result: __LumenStat = undefined,
             \\    promise: *LumenPromise(__LumenStat),
             \\    fn work(t: *xev.ThreadPool.Task) void {
-            \\        __gcRegisterThread();
+            \\        const __gc_fresh = __gcRegisterThread();
+            \\        defer __gcUnregisterThread(__gc_fresh);
             \\        const self: *__StatState = @fieldParentPtr("task", t);
             \\        self.result = __statSync(__io, self.path);
             \\        __fsPushDone(self, finish);
@@ -584,7 +588,8 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\        promise: *LumenPromise(T),
             \\        result: T = undefined,
             \\        fn threadMain(self: *@This()) void {
-            \\            __gcRegisterThread();
+            \\            const __gc_fresh = __gcRegisterThread();
+            \\            defer __gcUnregisterThread(__gc_fresh);
             \\            self.result = self.f.call(self.f.ctx);
             \\            __workerPushDone(self, finish);
             \\        }
