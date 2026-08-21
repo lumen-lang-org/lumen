@@ -63,6 +63,12 @@ pub fn zeroValue(ty: types.Type) []const u8 {
 pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, throw_target: ?[]const u8, switch_break_target: ?[]const u8, options: CompileOptions) CompileError!void {
     const chain = try collectChain(c, arena);
 
+    // Everything emitted until the closing brace lands inside the struct, where
+    // a module-level name the class also declares as a method is ambiguous.
+    const saved_class = emit_mod.g_cur_class;
+    emit_mod.g_cur_class = c;
+    defer emit_mod.g_cur_class = saved_class;
+
     try decls.print(arena, "const {s} = struct {{\n", .{c.name});
 
     // Instance fields, ancestors first (flattened layout).
@@ -282,6 +288,8 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     }
 
     try decls.appendSlice(arena, "};\n");
+    // Past the closing brace the output is top-level again.
+    emit_mod.g_cur_class = saved_class;
     // Per-interface vtables for polymorphic dispatch (spec 428).
     try emitClassVtables(c, decls, arena);
 }

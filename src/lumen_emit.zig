@@ -469,7 +469,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 // `[*:0]const u8`; copy it once into an owned Lumen string so the
                 // value outlives the C buffer.
                 if (cl.ffi_string_return) try w.appendSlice(arena, "(__alloc.dupe(u8, std.mem.span(");
-                try w.print(arena, "{s}(", .{try safeGlobalName(arena, cl.emit_name orelse cl.name)});
+                try w.print(arena, "{s}(", .{try moduleScopedName(arena, cl.emit_name orelse cl.name)});
                 for (cl.args, 0..) |arg, i| {
                     if (i > 0) try w.appendSlice(arena, ", ");
                     // A `string` argument crosses as a NUL-terminated C string.
@@ -513,7 +513,7 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
                 const sname = try types.funcStructName(arena, sig.*);
                 try w.print(arena, "{s}{{ .ctx = undefined, .call = struct {{ fn __t(__ctx: *const anyopaque", .{sname});
                 for (sig.params, 0..) |p, i| try w.print(arena, ", __p{d}: {s}", .{ i, try types.zigName(arena, p) });
-                try w.print(arena, ") {s} {{ _ = __ctx; return {s}(", .{ try types.zigName(arena, sig.ret.*), try safeGlobalName(arena, ref.emit_name orelse ref.name) });
+                try w.print(arena, ") {s} {{ _ = __ctx; return {s}(", .{ try types.zigName(arena, sig.ret.*), try moduleScopedName(arena, ref.emit_name orelse ref.name) });
                 for (sig.params, 0..) |_, i| {
                     if (i > 0) try w.appendSlice(arena, ", ");
                     try w.print(arena, "__p{d}", .{i});
@@ -1570,6 +1570,85 @@ pub fn safeGlobalName(arena: std.mem.Allocator, name: []const u8) CompileError![
     return name;
 }
 
+/// The generated alias for the file's own namespace: `const __lumen_mod =
+/// @This();`, emitted once at the top of a program that needs it.
+///
+/// A class lowers to a nested Zig container, and a bare name that the class
+/// also declares as a method is an "ambiguous reference" inside that container
+/// even when only one reading is possible in the source. A module-level
+/// function referenced from such a class body is spelled through this alias so
+/// the reference names the module and nothing else.
+pub const MODULE_SELF = "__lumen_mod";
+
+/// The class whose body is being emitted, so a module-level reference can tell
+/// whether the surrounding container declares the same name. Null everywhere
+/// else, including while the class's vtables are emitted (those are top-level).
+pub var g_cur_class: ?*const ast.ClassDecl = null;
+
+/// Whether `c` or an ancestor declares an instance method called `name`. Those
+/// are the only class members that become declarations in the generated struct:
+/// fields are fields and hold no namespace entry, accessors emit as
+/// `__get_`/`__set_`, statics as `__static_`, and none of those can collide
+/// with a name a user can write at module level.
+fn classDeclaresMethod(c: *const ast.ClassDecl, name: []const u8) bool {
+    var cur: ?*const ast.ClassDecl = c;
+    while (cur) |cc| {
+        for (cc.methods) |m| {
+            if (m.is_static or m.accessor != .none) continue;
+            if (std.mem.eql(u8, m.name, name)) return true;
+        }
+        cur = if (cc.parent) |p| findClass(p) else null;
+    }
+    return false;
+}
+
+/// Whether the program declares `name` at module level under exactly that
+/// emitted spelling. Guards the qualification below: a builtin lowered to a
+/// generated helper (`__parseInt`) is not a module declaration and must never
+/// be reached through the module alias.
+fn programDeclaresGlobal(name: []const u8) bool {
+    const prog = g_program orelse return false;
+    for (prog.stmts) |*stmt| switch (stmt.*) {
+        .function_decl => |*f| if (std.mem.eql(u8, f.name, name)) return true,
+        .class_decl => |*c| if (std.mem.eql(u8, c.name, name)) return true,
+        .var_decl => |*v| if (std.mem.eql(u8, v.emit_name orelse v.name, name)) return true,
+        else => {},
+    };
+    return false;
+}
+
+/// How a module-level name must be spelled at the point being emitted: bare
+/// almost everywhere, and through the module alias inside a class body that
+/// declares a method of the same name (spec 489).
+pub fn moduleScopedName(arena: std.mem.Allocator, name: []const u8) CompileError![]const u8 {
+    const safe = try safeGlobalName(arena, name);
+    const c = g_cur_class orelse return safe;
+    if (!programDeclaresGlobal(name) or !classDeclaresMethod(c, name)) return safe;
+    return std.fmt.allocPrint(arena, "{s}.{s}", .{ MODULE_SELF, safe });
+}
+
+/// Whether any class in the program declares a method whose name a module-level
+/// declaration also uses -- the one case that needs the module alias. Programs
+/// without such a pair emit exactly the code they emitted before.
+fn needsModuleSelf(program: *const Program) bool {
+    for (program.stmts) |*stmt| {
+        const c = switch (stmt.*) {
+            .class_decl => |*cd| cd,
+            else => continue,
+        };
+        for (program.stmts) |*other| {
+            const other_name = switch (other.*) {
+                .function_decl => |*f| f.name,
+                .var_decl => |*v| v.emit_name orelse v.name,
+                .class_decl => |*cd| cd.name,
+                else => continue,
+            };
+            if (classDeclaresMethod(c, other_name)) return true;
+        }
+    }
+    return false;
+}
+
 pub fn findClass(name: []const u8) ?*const ast.ClassDecl {
     const prog = g_program orelse return null;
     for (prog.stmts) |*stmt| {
@@ -1664,6 +1743,11 @@ fn initRunsAtModuleScope(program: *const Program, d: *const ast.VarDecl, promote
 pub fn emitProgram(program: *const Program, decls: *std.ArrayListUnmanaged(u8), body: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator, options: CompileOptions, diag: *diag_mod.Diag) CompileError!void {
     g_program = program;
     g_options = options;
+    g_cur_class = null;
+
+    // The module's own namespace, for class bodies that would otherwise read a
+    // module-level name as their own member (spec 489).
+    if (needsModuleSelf(program)) try decls.print(arena, "const {s} = @This();\n", .{MODULE_SELF});
 
     // `zig test` never calls `main`, so a program with `test` blocks needs its
     // module-level initializers replayed from a function the test blocks can
