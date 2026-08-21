@@ -1,0 +1,17 @@
+{
+  "feature": "488-class-and-type-alias-names",
+  "cases": [
+    {
+      "id": "names.valid.class-and-type-alias-share-a-name",
+      "source": "../examples/valid/collide.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "full-auto\n4\n1\n2" }
+    },
+    {
+      "id": "names.invalid.two-modules-declare-one-type",
+      "source": "../examples/invalid/two-types.ts",
+      "phase": "diagnostics",
+      "expect": { "diagnostic": "E_DUPLICATE_TYPE" }
+    }
+  ]
+}
