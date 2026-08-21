@@ -392,9 +392,14 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         // registered thread stacks and the data segment for roots. Without
         // this, a program's resident set equals every allocation it ever made
         // — a long-running server OOMs by design. Threads the runtime spawns
-        // (fs pool, http pool, Worker.run) each call `__gcRegisterThread()`
-        // on entry: an unregistered thread touching the collector aborts the
-        // process, and re-registering is a documented no-op (GC_DUPLICATE).
+        // (fs pool, http pool, Worker.run) each register on entry and
+        // unregister on the way out. They come from `std.Thread.spawn` and
+        // libxev's pool, not `GC_pthread_create`, so libgc has no exit hook of
+        // its own: a thread that exits still registered leaves a descriptor
+        // naming a dead thread, and the next stop-the-world aborts the process
+        // trying to suspend it. Register returns GC_DUPLICATE (1) rather than
+        // GC_SUCCESS (0) when the thread was already registered, and that
+        // caller must not unregister: the registration is the outer frame's.
         try out.appendSlice(arena,
             \\extern fn GC_init() void;
             \\extern fn GC_malloc(size: usize) ?*anyopaque;
@@ -402,6 +407,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\extern fn GC_allow_register_threads() void;
             \\extern fn GC_get_stack_base(sb: *anyopaque) c_int;
             \\extern fn GC_register_my_thread(sb: *const anyopaque) c_int;
+            \\extern fn GC_unregister_my_thread() c_int;
             \\fn __gcAllocFn(_: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
             \\    const a = alignment.toByteUnits();
             \\    const p = if (a <= 8) GC_malloc(len) else GC_memalign(a, len);
@@ -416,19 +422,23 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\fn __gcFreeFn(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {}
             \\const __gc_vtable: std.mem.Allocator.VTable = .{ .alloc = __gcAllocFn, .resize = __gcResizeFn, .remap = __gcRemapFn, .free = __gcFreeFn };
             \\const __gc_allocator: std.mem.Allocator = .{ .ptr = undefined, .vtable = &__gc_vtable };
-            \\fn __gcRegisterThread() void {
+            \\fn __gcRegisterThread() bool {
             \\    var sb: [4]usize = undefined;
             \\    _ = GC_get_stack_base(@ptrCast(&sb));
-            \\    _ = GC_register_my_thread(@ptrCast(&sb));
+            \\    return GC_register_my_thread(@ptrCast(&sb)) == 0;
+            \\}
+            \\fn __gcUnregisterThread(registered: bool) void {
+            \\    if (registered) _ = GC_unregister_my_thread();
             \\}
             \\fn __sa() std.mem.Allocator { return __gc_allocator; }
             \\
         );
     } else {
         try out.appendSlice(arena, "var __sa_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);\nfn __sa() std.mem.Allocator { return __sa_arena.allocator(); }\n");
-        // Thread entries call this unconditionally; without the collector
-        // there is nothing to register with.
-        try out.appendSlice(arena, "fn __gcRegisterThread() void {}\n");
+        // Thread entries call these unconditionally; without the collector
+        // there is nothing to register with, and so nothing to unregister.
+        try out.appendSlice(arena, "fn __gcRegisterThread() bool { return false; }\n");
+        try out.appendSlice(arena, "fn __gcUnregisterThread(_: bool) void {}\n");
     }
     // JS-semantics parseInt/parseFloat: skip leading whitespace, read an optional
     // sign, then consume the longest valid numeric prefix, ignoring trailing
