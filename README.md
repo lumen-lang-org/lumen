@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>Write TypeScript syntax. Ship a native binary or a single wasm file.</b><br>
-  No Node. No runtime. No GC pauses.
+  No Node. No interpreter. A single native binary.
 </p>
 
 <p align="center">
