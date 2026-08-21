@@ -1,0 +1,53 @@
+{
+  "feature": "487-chained-assignment-targets",
+  "cases": [
+    {
+      "id": "chained-assignment-targets.valid.chained-targets",
+      "source": "../examples/valid/chained-targets.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "42 2\n7\n9\n50\n51\n5\n1 6\n11\n15\n20\npositive"
+      }
+    },
+    {
+      "id": "chained-assignment-targets.invalid.call-target",
+      "source": "../examples/invalid/call-target.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "expected end of statement (';' or a newline), found '='"
+      }
+    },
+    {
+      "id": "chained-assignment-targets.invalid.literal-target",
+      "source": "../examples/invalid/literal-target.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "expected end of statement (';' or a newline), found '='"
+      }
+    },
+    {
+      "id": "chained-assignment-targets.invalid.method-call-target",
+      "source": "../examples/invalid/method-call-target.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "invalid assignment target"
+      }
+    },
+    {
+      "id": "chained-assignment-targets.invalid.optional-chain-target",
+      "source": "../examples/invalid/optional-chain-target.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "invalid assignment target"
+      }
+    },
+    {
+      "id": "chained-assignment-targets.invalid.indexed-write",
+      "source": "../examples/invalid/indexed-write.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "indexed assignment (`x[i] = ...`) is not supported"
+      }
+    }
+  ]
+}
