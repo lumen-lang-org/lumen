@@ -1,0 +1,17 @@
+{
+  "feature": "489-method-and-module-function-names",
+  "cases": [
+    {
+      "id": "names.valid.method-shares-a-name-with-a-module-function",
+      "source": "../examples/valid/collide.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "1\n0\n3\n1\n2\n1" }
+    },
+    {
+      "id": "names.valid.inherited-method-shares-a-name",
+      "source": "../examples/valid/inherited.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "100\n1\n7" }
+    }
+  ]
+}

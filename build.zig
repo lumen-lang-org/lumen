@@ -336,6 +336,10 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_483.step.dependOn(b.getInstallStep());
     const conformance_cmd_487 = b.addRunArtifact(conformance_runner);
     conformance_cmd_487.step.dependOn(b.getInstallStep());
+    const conformance_cmd_488 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_488.step.dependOn(b.getInstallStep());
+    const conformance_cmd_489 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_489.step.dependOn(b.getInstallStep());
     conformance_cmd_478.addArg("specs/478-class-to-record/conformance/manifest.json");
     conformance_cmd_478.addArg("zig-out/bin/lumen");
 
@@ -351,11 +355,19 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_487.addArg("specs/487-chained-assignment-targets/conformance/manifest.json");
     conformance_cmd_487.addArg("zig-out/bin/lumen");
 
+    conformance_cmd_488.addArg("specs/488-class-and-type-alias-names/conformance/manifest.json");
+    conformance_cmd_488.addArg("zig-out/bin/lumen");
+
+    conformance_cmd_489.addArg("specs/489-method-and-module-function-names/conformance/manifest.json");
+    conformance_cmd_489.addArg("zig-out/bin/lumen");
+
     const conformance_step = b.step("conformance", "Run Lumen manifest conformance cases");
     conformance_step.dependOn(&conformance_cmd.step);
     conformance_step.dependOn(&conformance_cmd_482.step);
     conformance_step.dependOn(&conformance_cmd_483.step);
     conformance_step.dependOn(&conformance_cmd_487.step);
+    conformance_step.dependOn(&conformance_cmd_488.step);
+    conformance_step.dependOn(&conformance_cmd_489.step);
     conformance_step.dependOn(&conformance_cmd_010.step);
     conformance_step.dependOn(&conformance_cmd_013.step);
     conformance_step.dependOn(&conformance_cmd_014.step);

@@ -1376,12 +1376,36 @@ fn appendExpandedSource(
             name = try exp.freshName(d.name);
             try renames.append(arena, .{ .name = d.name, .alias = name });
         } else if (d.kind == .type_name) {
-            // Two modules declaring the same type name is a real conflict, and
-            // the flat program cannot hold both. Name them (spec 451 D3).
-            if (exp.type_owners.get(d.name)) |owner| if (!std.mem.eql(u8, owner.key, id)) {
-                setImportDetail(arena, "type '{s}' is declared by both {s} and {s}", .{ d.name, displayPath(owner.path), displayPath(path) });
-                setImportLoc(path, d.line);
-                return error.DuplicateTypeName;
+            if (exp.type_owners.get(d.name)) |owner| {
+                // Two modules declaring the same type name is a real conflict,
+                // and the flat program cannot hold both. Name them (spec 451 D3).
+                if (!std.mem.eql(u8, owner.key, id)) {
+                    setImportDetail(arena, "type '{s}' is declared by both {s} and {s}", .{ d.name, displayPath(owner.path), displayPath(path) });
+                    setImportLoc(path, d.line);
+                    return error.DuplicateTypeName;
+                }
+            } else if (exp.taken.get(d.name)) |owner| if (!std.mem.eql(u8, owner, id)) {
+                // The name is claimed by another module, but for a VALUE: a
+                // class, an enum, a function, a binding. The language keeps type
+                // names and value names apart, so a type alias here and a class
+                // over there are two unrelated declarations that happen to be
+                // spelled alike -- the same coincidence spec 476 absorbs between
+                // two values, and neither author has seen the other's file.
+                //
+                // Only the flat program conflates them: a class emits a struct
+                // under its own name and so does a record type, and the backend
+                // has one namespace where the language has two. Left alone, this
+                // module kept the name and the checker resolved its OWN
+                // annotations to the other module's class -- the wrong symbol,
+                // found silently -- or, once both reached the backend, the
+                // generated code was rejected as a duplicate struct member.
+                //
+                // Rename the declaration and rewrite this module's own
+                // references, exactly as for a value. Importers resolve through
+                // the export table, which records the physical name, so the
+                // rename is invisible to them (spec 488).
+                name = try exp.freshName(d.name);
+                try renames.append(arena, .{ .name = d.name, .alias = name });
             };
         }
         try physical.put(arena, d.name, name);
