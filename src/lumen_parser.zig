@@ -415,22 +415,7 @@ pub const Parser = struct {
                 const this_e = try self.node(.this_expr);
                 const base = try self.node(.{ .field = .{ .obj = this_e, .name = member } });
                 const full = try self.parsePostfixFrom(base);
-                // Trailing assignment onto a nested field: obj.field = value.
-                if (self.isOp('=') or self.isCompoundAssignOp()) {
-                    var aop: []const u8 = "=";
-                    if (self.isOp('=')) {
-                        try self.advance();
-                    } else {
-                        aop = self.cur.op2;
-                        try self.advance();
-                    }
-                    const value = try self.parseExpr();
-                    try self.expectSemi();
-                    if (full.* != .field) return error.ParseError;
-                    return .{ .member_assign = .{ .field = full.field.name, .op = aop, .value = value, .obj = full.field.obj, .line = line, .col = col } };
-                }
-                try self.expectSemi();
-                return .{ .expr_stmt = .{ .value = full, .line = line, .col = col } };
+                return self.finishChainStmt(full, line, col);
             }
             // `this.x++;` / `this.x--;` as a statement — the postfix value is
             // discarded here, so lower to `this.x += 1` / `this.x -= 1`.
@@ -1086,8 +1071,7 @@ pub const Parser = struct {
             if (self.isOp('.') or self.isOp('[') or self.isOp2("?.")) {
                 const call_e = try self.node(.{ .call = .{ .name = name, .args = try args.toOwnedSlice(self.arena) } });
                 const e = try self.parsePostfixFrom(call_e);
-                try self.expectSemi();
-                return .{ .expr_stmt = .{ .value = e, .line = line, .col = col } };
+                return self.finishChainStmt(e, line, col);
             }
             try self.expectSemi();
             const value = try self.node(.{ .call = .{ .name = name, .args = try args.toOwnedSlice(self.arena) } });
@@ -1132,8 +1116,7 @@ pub const Parser = struct {
             self.cur_line = save_line_name;
             self.cur_col = save_col_name;
             const value = try self.parseExpr();
-            try self.expectSemi();
-            return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
+            return self.finishChainStmt(value, line, col);
         }
         // An assignment (`x = ...`, `x += ...`, `x++`) or, failing that, a
         // general expression statement led by an identifier (`x > 0 ? a : b;`,
@@ -1150,6 +1133,42 @@ pub const Parser = struct {
         const value = try self.parseExpr();
         try self.expectSemi();
         return .{ .expr_stmt = .{ .value = value, .line = line, .col = col } };
+    }
+
+    /// Completes a statement whose target has already been parsed through its
+    /// postfix chain (`a.b`, `a[i].b`, `a.b[i].c`, `this.items[i].f`, ...).
+    /// A trailing `=` or compound-assign operator makes the statement a field
+    /// write, so the chain has to end in a plain (non-optional) field access:
+    /// `f() = 5`, `a.b() = 5` and `a?.b = 5` are not assignable and are
+    /// reported as such. Without a trailing assignment operator the chain is
+    /// just an expression statement.
+    fn finishChainStmt(self: *Parser, full: *Expr, line: u32, col: u32) CompileError!Stmt {
+        if (self.isOp('=') or self.isCompoundAssignOp()) {
+            // A chain ending in an index is a write into the container itself,
+            // which stays rejected for the same reason `a[i] = v` is: arrays and
+            // records are immutable. Report it the same way, so `a[i][j] = v`
+            // and `a[i] = v` do not explain themselves differently.
+            if (full.* == .index) {
+                self.last_err = "indexed assignment (`x[i] = ...`) is not supported — arrays and records are immutable; build a new value instead (e.g. `a = [...a.slice(0, i), v, ...a.slice(i + 1)]`)";
+                return error.ParseError;
+            }
+            if (full.* != .field or full.field.optional_chain) {
+                self.last_err = "invalid assignment target — only a variable or a field reached through a chain of fields and indexes (`a.b`, `a[i].b`, `a.b[i].c`) can be assigned to";
+                return error.ParseError;
+            }
+            var op: []const u8 = "=";
+            if (self.isOp('=')) {
+                try self.advance();
+            } else {
+                op = self.cur.op2;
+                try self.advance();
+            }
+            const value = try self.parseExpr();
+            try self.expectSemi();
+            return .{ .member_assign = .{ .field = full.field.name, .op = op, .value = value, .obj = full.field.obj, .line = line, .col = col } };
+        }
+        try self.expectSemi();
+        return .{ .expr_stmt = .{ .value = full, .line = line, .col = col } };
     }
 
     pub fn parseProgram(self: *Parser) CompileError!Program {
