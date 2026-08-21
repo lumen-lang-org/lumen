@@ -392,19 +392,14 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         // registered thread stacks and the data segment for roots. Without
         // this, a program's resident set equals every allocation it ever made
         // — a long-running server OOMs by design. Threads the runtime spawns
-        // (fs pool, http pool, Worker.run) each call `__gcRegisterThread()`
-        // on entry and `__gcUnregisterThread()` on the way out: an
-        // unregistered thread touching the collector aborts the process, and a
-        // thread that exits while still registered is worse. These threads come
-        // from `std.Thread.spawn` and libxev's pool, not from
-        // `GC_pthread_create`, so libgc has no exit hook of its own and learns
-        // a thread died only from the unregister call. Skip it and libgc keeps
-        // a descriptor naming a thread that no longer exists; the next
-        // stop-the-world signals it, delivery fails, and after RETRY_LIMIT
-        // libgc aborts the process with "Signals delivery fails constantly".
-        // Registering an already-registered thread returns GC_DUPLICATE (1)
-        // rather than GC_SUCCESS (0), and that caller must not unregister on
-        // exit: the registration belongs to the frame that made it.
+        // (fs pool, http pool, Worker.run) each register on entry and
+        // unregister on the way out. They come from `std.Thread.spawn` and
+        // libxev's pool, not `GC_pthread_create`, so libgc has no exit hook of
+        // its own: a thread that exits still registered leaves a descriptor
+        // naming a dead thread, and the next stop-the-world aborts the process
+        // trying to suspend it. Register returns GC_DUPLICATE (1) rather than
+        // GC_SUCCESS (0) when the thread was already registered, and that
+        // caller must not unregister: the registration is the outer frame's.
         try out.appendSlice(arena,
             \\extern fn GC_init() void;
             \\extern fn GC_malloc(size: usize) ?*anyopaque;
