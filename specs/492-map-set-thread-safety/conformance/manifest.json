@@ -1,0 +1,11 @@
+{
+  "feature": "492-map-set-thread-safety",
+  "cases": [
+    {
+      "id": "mapset.valid.single-thread-unchanged",
+      "source": "../examples/valid/single-thread-unchanged.ts",
+      "phase": "compile-run",
+      "expect": { "stdout": "get_a=3\nget_b=2\nhas_c=false\nsize=2\nafter_delete_size=1\nafter_delete_has_a=false\neach b=2\nset_size=2\nhas_x=true\nafter_delete_set_size=1\nafter_delete_has_x=false" }
+    }
+  ]
+}

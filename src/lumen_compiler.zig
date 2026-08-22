@@ -718,6 +718,79 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\}
             \\
         );
+        // lumen#12 turned out to be two separate bugs that both surface as
+        // the same `eqlBytes` segfault or a silently wrong count, because
+        // both only show up once a Map/Set outlives the request that fed it
+        // (see specs/492-map-set-thread-safety/spec.md for the
+        // full writeup and the reproductions):
+        //
+        // 1. `http.createServer`'s `HttpRequest.path`/`.method`/`.body`/
+        //    header strings are sliced out of that connection's
+        //    request-scoped arena (`carena` in the codegen below), reset or
+        //    freed as soon as the handler returns -- deliberately, so a
+        //    long-running server's memory doesn't grow with every request
+        //    it has ever served. `Map.set`/`Set.add` used to store exactly
+        //    that slice: pointer and length, no copy. A key built from
+        //    `req.path` and stored in a module-level Map is a dangling
+        //    pointer the moment its connection's handler returns -- no
+        //    second thread required, confirmed by reproducing the crash
+        //    with fully sequential, single-connection-at-a-time requests
+        //    and making it disappear by swapping the key for a constant
+        //    string. `__lumenOwn` below closes this: `set`/`add` now copy a
+        //    `[]const u8` key or value into the Map/Set's own persistent
+        //    storage before keeping it, so what is stored no longer cares
+        //    how long the caller's own copy lives. `net.createServer`'s
+        //    `Socket.read()` already copies into that same persistent arena
+        //    for an unrelated reason (see its own comment), which is why
+        //    only the HTTP path needed this.
+        //
+        // 2. Separately, Map and Set are one growable-array backing store
+        //    per instance (keys_/values_ or items_ below) with no
+        //    synchronization of their own, and `http.createServer` (spec
+        //    049) and `net.createServer` (spec 490) both hand each
+        //    connection to a real OS thread from a `xev.ThreadPool`. An
+        //    instance reachable from more than one handler -- the ordinary
+        //    way to keep state across requests, since there is no
+        //    per-server context object -- can have two threads
+        //    append/resize the same backing array at once: a plain data
+        //    race on the storage itself, independent of bug 1 above and
+        //    still live once it's fixed. A full lock would make concurrent
+        //    use of one Map/Set safe, but it also taxes every
+        //    single-threaded call with an uncontended acquire/release, does
+        //    not extend to the general case (a plain scalar field on a
+        //    class instance shared the same way races the identical way
+        //    and a lock here does nothing for it), and turns a bug that
+        //    should be visible into one the language quietly supports.
+        //    Instead each instance carries one atomic flag that detects an
+        //    overlapping access and fails loudly and immediately instead of
+        //    silently, the same tradeoff Go's builtin map makes for the
+        //    identical problem: cheap on the uncontended path (a load, or a
+        //    swap for writes), and a best-effort detector rather than a
+        //    guarantee -- it does not claim to catch every interleaving,
+        //    only to turn the common case of "two threads touched this at
+        //    once" into an immediate, addressable error.
+        try out.appendSlice(arena,
+            \\fn __lumenOwn(comptime T: type, v: T) T {
+            \\    if (T == []const u8) return __sa().dupe(u8, v) catch unreachable;
+            \\    return v;
+            \\}
+            \\
+        );
+        try out.appendSlice(arena,
+            \\fn __lumenRaceCheck(writing: *std.atomic.Value(bool)) void {
+            \\    if (writing.load(.acquire)) __lumenConcurrentAccessPanic();
+            \\}
+            \\fn __lumenRaceBeginWrite(writing: *std.atomic.Value(bool)) void {
+            \\    if (writing.swap(true, .acquire)) __lumenConcurrentAccessPanic();
+            \\}
+            \\fn __lumenRaceEndWrite(writing: *std.atomic.Value(bool)) void {
+            \\    writing.store(false, .release);
+            \\}
+            \\fn __lumenConcurrentAccessPanic() noreturn {
+            \\    @panic("Map or Set used from more than one thread at the same time without synchronization -- see https://github.com/lumen-lang-org/lumen/issues/12");
+            \\}
+            \\
+        );
     }
     if (program.needs_map) {
         // Insertion-ordered Map<K, V>: linear-probe over parallel key/value lists
@@ -728,6 +801,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\        const Self = @This();
             \\        keys_: std.ArrayListUnmanaged(K) = .empty,
             \\        values_: std.ArrayListUnmanaged(V) = .empty,
+            \\        __writing: std.atomic.Value(bool) = .init(false),
             \\        fn __init() *Self {
             \\            const p = __sa().create(Self) catch unreachable;
             \\            p.* = .{};
@@ -738,16 +812,22 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\            return null;
             \\        }
             \\        fn set(self: *Self, key: K, value: V) void {
-            \\            if (self.__find(key)) |i| { self.values_.items[i] = value; return; }
-            \\            self.keys_.append(__sa(), key) catch unreachable;
-            \\            self.values_.append(__sa(), value) catch unreachable;
+            \\            __lumenRaceBeginWrite(&self.__writing);
+            \\            defer __lumenRaceEndWrite(&self.__writing);
+            \\            const owned_value = __lumenOwn(V, value);
+            \\            if (self.__find(key)) |i| { self.values_.items[i] = owned_value; return; }
+            \\            self.keys_.append(__sa(), __lumenOwn(K, key)) catch unreachable;
+            \\            self.values_.append(__sa(), owned_value) catch unreachable;
             \\        }
             \\        fn get(self: *Self, key: K) ?V {
+            \\            __lumenRaceCheck(&self.__writing);
             \\            if (self.__find(key)) |i| return self.values_.items[i];
             \\            return null;
             \\        }
-            \\        fn has(self: *Self, key: K) bool { return self.__find(key) != null; }
+            \\        fn has(self: *Self, key: K) bool { __lumenRaceCheck(&self.__writing); return self.__find(key) != null; }
             \\        fn delete(self: *Self, key: K) bool {
+            \\            __lumenRaceBeginWrite(&self.__writing);
+            \\            defer __lumenRaceEndWrite(&self.__writing);
             \\            if (self.__find(key)) |i| {
             \\                _ = self.keys_.orderedRemove(i);
             \\                _ = self.values_.orderedRemove(i);
@@ -755,11 +835,16 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\            }
             \\            return false;
             \\        }
-            \\        fn size(self: *Self) i32 { return @intCast(self.keys_.items.len); }
-            \\        fn clear(self: *Self) void { self.keys_.clearRetainingCapacity(); self.values_.clearRetainingCapacity(); }
-            \\        fn keys(self: *Self) []const K { return self.keys_.items; }
-            \\        fn values(self: *Self) []const V { return self.values_.items; }
+            \\        fn size(self: *Self) i32 { __lumenRaceCheck(&self.__writing); return @intCast(self.keys_.items.len); }
+            \\        fn clear(self: *Self) void {
+            \\            __lumenRaceBeginWrite(&self.__writing);
+            \\            defer __lumenRaceEndWrite(&self.__writing);
+            \\            self.keys_.clearRetainingCapacity(); self.values_.clearRetainingCapacity();
+            \\        }
+            \\        fn keys(self: *Self) []const K { __lumenRaceCheck(&self.__writing); return self.keys_.items; }
+            \\        fn values(self: *Self) []const V { __lumenRaceCheck(&self.__writing); return self.values_.items; }
             \\        fn forEach(self: *Self, cb: anytype) void {
+            \\            __lumenRaceCheck(&self.__writing);
             \\            const __np = @typeInfo(@typeInfo(@TypeOf(cb.call)).pointer.child).@"fn".params.len;
             \\            for (self.keys_.items, 0..) |k, i| {
             \\                if (__np == 3) { _ = cb.call(cb.ctx, self.values_.items[i], k); }
@@ -778,6 +863,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\    return struct {
             \\        const Self = @This();
             \\        items_: std.ArrayListUnmanaged(T) = .empty,
+            \\        __writing: std.atomic.Value(bool) = .init(false),
             \\        fn __init() *Self {
             \\            const p = __sa().create(Self) catch unreachable;
             \\            p.* = .{};
@@ -788,19 +874,28 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             \\            return null;
             \\        }
             \\        fn add(self: *Self, value: T) void {
+            \\            __lumenRaceBeginWrite(&self.__writing);
+            \\            defer __lumenRaceEndWrite(&self.__writing);
             \\            if (self.__find(value) != null) return;
-            \\            self.items_.append(__sa(), value) catch unreachable;
+            \\            self.items_.append(__sa(), __lumenOwn(T, value)) catch unreachable;
             \\        }
-            \\        fn has(self: *Self, value: T) bool { return self.__find(value) != null; }
+            \\        fn has(self: *Self, value: T) bool { __lumenRaceCheck(&self.__writing); return self.__find(value) != null; }
             \\        fn delete(self: *Self, value: T) bool {
+            \\            __lumenRaceBeginWrite(&self.__writing);
+            \\            defer __lumenRaceEndWrite(&self.__writing);
             \\            if (self.__find(value)) |i| { _ = self.items_.orderedRemove(i); return true; }
             \\            return false;
             \\        }
-            \\        fn size(self: *Self) i32 { return @intCast(self.items_.items.len); }
-            \\        fn clear(self: *Self) void { self.items_.clearRetainingCapacity(); }
-            \\        fn values(self: *Self) []const T { return self.items_.items; }
-            \\        fn keys(self: *Self) []const T { return self.items_.items; }
+            \\        fn size(self: *Self) i32 { __lumenRaceCheck(&self.__writing); return @intCast(self.items_.items.len); }
+            \\        fn clear(self: *Self) void {
+            \\            __lumenRaceBeginWrite(&self.__writing);
+            \\            defer __lumenRaceEndWrite(&self.__writing);
+            \\            self.items_.clearRetainingCapacity();
+            \\        }
+            \\        fn values(self: *Self) []const T { __lumenRaceCheck(&self.__writing); return self.items_.items; }
+            \\        fn keys(self: *Self) []const T { __lumenRaceCheck(&self.__writing); return self.items_.items; }
             \\        fn forEach(self: *Self, cb: anytype) void {
+            \\            __lumenRaceCheck(&self.__writing);
             \\            for (self.items_.items) |v| { _ = cb.call(cb.ctx, v); }
             \\        }
             \\    };

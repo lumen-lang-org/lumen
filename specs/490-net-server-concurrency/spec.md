@@ -85,6 +85,13 @@ handler now genuinely runs on multiple OS threads concurrently, so a handler
 that mutates shared global state has a real data race, same as any
 multi-threaded server in any language.
 
+(lumen#12 found this was two bugs, not one -- a Map/Set that detects the
+overlap and fails loudly instead of corrupting or crashing unpredictably,
+plus a separate dangling-key bug specific to `http.createServer`'s
+per-connection arena that `net.createServer` never had, since
+`Socket.read()` already copies into the persistent arena. See
+specs/492-map-set-thread-safety/spec.md.)
+
 ## Verified
 
 `zig build` and `zig build test` green.

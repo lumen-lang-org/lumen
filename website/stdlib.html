@@ -2222,10 +2222,16 @@ async function main(): Promise&lt;void&gt; {
     instance) only copies the pointer/slice header into the worker's
     closure &mdash; the pointee is still the same shared, unsynchronized
     memory. If the main thread (or another Worker) mutates it while the
-    worker reads or writes it too, that's a real, silent data race, the
+    worker reads or writes it too, that's a real data race, the
     same kind of trade-off <code>http.createServer</code>'s concurrent
-    handlers already document above. Not statically prevented this pass
-    &mdash; documented, not solved.</p>
+    handlers already document above. Not statically prevented this pass.
+    For <code>Map</code>/<code>Set</code> specifically (spec 492) this is no
+    longer silent: each instance detects an overlapping access from another
+    thread and stops with an explicit runtime error instead of corrupting
+    its own storage or crashing somewhere unrelated &mdash; still not safe
+    to rely on, but no longer invisible when it happens. Arrays,
+    <code>Buffer</code>, and class instance fields have no such guard yet
+    and remain a real, silent data race.</p>
   </div>
 
   <h3 id="planned">Planned</h3>
@@ -2322,7 +2328,7 @@ async function main(): Promise&lt;void&gt; {
     <tr><td>Idle keep-alive connection timeouts</td><td>a connection stays open indefinitely as long as the client keeps sending requests and doesn't send <code>Connection: close</code></td></tr>
     <tr><td>Response headers on the client side</td><td><code>http.request</code>'s own request headers and <code>http.createServer</code>'s response headers both shipped, via <code>Map&lt;string, string&gt;</code>; reading real response headers on the client needs a lower-level request flow than what's wired up yet -- confirmed reachable, deliberately deferred rather than rewriting an already-working, already-benchmarked call under time pressure</td></tr>
     <tr><td>Case-insensitive header lookup, repeated header/query values as an array</td><td><code>Map&lt;string, string&gt;</code>'s exact-match, last-write-wins lookup is what's available now</td></tr>
-    <tr><td>A general-purpose locking primitive for handler-shared state</td><td>concurrent serving (shipped) means a handler now genuinely runs on multiple OS threads; a handler that mutates shared global state without its own synchronization has a real data race -- documented, not solved, since Lumen has no <code>Mutex</code>-shaped stdlib type yet</td></tr>
+    <tr><td>A general-purpose locking primitive for handler-shared state</td><td>concurrent serving (shipped) means a handler now genuinely runs on multiple OS threads; a handler that mutates shared global state without its own synchronization has a real data race. <code>Map</code>/<code>Set</code> now detect an overlapping access and fail loudly instead of corrupting or crashing unpredictably (spec 492), but that is a diagnostic, not a fix -- a handler still cannot safely share mutable state across a concurrent server's connections, since Lumen has no <code>Mutex</code>-shaped stdlib type yet</td></tr>
     <tr><td>Real <code>Server</code>/<code>IncomingMessage</code>/<code>ServerResponse</code>/<code>ClientRequest</code>/<code>Agent</code> classes</td><td>Node's classes bundle request/response data with an event mechanism; <code>EventEmitter</code> alone doesn't supply the data half, which still needs the header-collection/streaming gaps closed first</td></tr>
     <tr><td>Server lifecycle events (<code>'error'</code>, <code>'close'</code>) via <code>EventEmitter&lt;T&gt;</code></td><td>genuinely reachable now that <code>EventEmitter</code> exists &mdash; a real follow-up</td></tr>
     <tr><td>Streaming request/response bodies</td><td>needs a <em>network</em>-backed <code>ReadableStream</code>/<code>WritableStream</code> (spec 046 shipped file-backed streams only, a deliberately separate backing type -- see spec 046's "why file-backed only")</td></tr>
