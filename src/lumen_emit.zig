@@ -1557,13 +1557,21 @@ pub fn safeGlobalName(arena: std.mem.Allocator, name: []const u8) CompileError![
     // A user global function whose name is a Zig keyword can't be emitted bare,
     // and one that matches a generated runtime helper's parameter name (`name`,
     // `value`, ...) would be shadowed by that parameter ("shadows declaration").
-    // Both classes are renamed to a reserved prefix; call sites, function-ref
-    // wrappers, and the declaration all route through this function, so the
-    // rename stays consistent.
+    // A third class: `net`'s and `fs`'s async runtime helpers each spawn a
+    // worker-thread task through a small local struct (`lumen_runtime_net.zig`,
+    // `lumen_runtime_fs.zig`) whose callback method is a bare `run`/`work`
+    // declaration. That struct is still nested inside the file's top-level
+    // container, so a user's own top-level `run`/`work` is visible from
+    // inside it too -- the same "ambiguous reference" a class method sharing a
+    // module-level name produces (spec 489), just from the runtime's own
+    // generated code instead of a user class (issue #29). All three classes
+    // are renamed to a reserved prefix; call sites, function-ref wrappers, and
+    // the declaration all route through this function, so the rename stays
+    // consistent.
     if (isZigReservedField(name)) {
         return std.fmt.allocPrint(arena, "__lumen_user_{s}", .{name});
     }
-    const collide = [_][]const u8{ "main", "std", "xev", "builtin", "cb", "chunk", "data", "encoding", "i", "key", "name", "other", "start", "v", "value", "bytes", "ctx", "io", "t", "self", "Self" };
+    const collide = [_][]const u8{ "main", "std", "xev", "builtin", "cb", "chunk", "data", "encoding", "i", "key", "name", "other", "start", "v", "value", "bytes", "ctx", "io", "t", "self", "Self", "run", "work" };
     for (collide) |c| {
         if (eq(u8, name, c)) return std.fmt.allocPrint(arena, "__lumen_user_{s}", .{name});
     }
