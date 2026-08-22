@@ -228,17 +228,51 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         );
     }
     if (program.needs_append_file_sync) {
-        // No direct append API on this std.Io.Dir; read the existing content (if
-        // any), concatenate, and rewrite. Fine for sync, single-writer use.
+        // The previous version of this function had no direct append API on
+        // std.Io.Dir, so it read the existing content, concatenated the new
+        // data onto it in memory, and rewrote the whole thing with
+        // writeFile -- create-or-truncate-and-write, i.e. O_WRONLY|O_CREAT
+        // |O_TRUNC. That's not append at all: every call left the file
+        // genuinely zero-length for the span between the truncate and the
+        // rewrite finishing (a concurrent reader can observe an empty
+        // file), and cost was quadratic (N appends rewrite the whole
+        // transcript N times) (#26).
+        //
+        // std.Io.Dir.CreateFileOptions/OpenFileOptions (Dir.zig) do not
+        // expose an append flag either -- confirmed by reading
+        // dirCreateFilePosix in the Threaded Io backend, which only ever
+        // sets ACCMODE/CREAT/TRUNC/EXCL/lock flags on the openat() call, so
+        // there is no way to reach real O_APPEND through that surface no
+        // matter which options are passed. Getting it means dropping to
+        // std.posix.openat directly and setting O_APPEND ourselves, then
+        // wrapping the resulting fd as a std.Io.File (it's just
+        // `{handle, flags}`, freely constructible) so the actual write
+        // still goes through Io's normal writeStreamingAll -> writev().
+        //
+        // This is real kernel O_APPEND, not the lseek-then-write shortcut
+        // fs.open's "a" mode uses elsewhere in this file (see __openSync):
+        // with O_APPEND set at open time, the kernel atomically repositions
+        // to end-of-file on every write syscall, so two processes
+        // appending to the same path concurrently each get their bytes
+        // placed atomically at whatever the end offset is at the moment of
+        // their write, never interleaved mid-write and never clobbering
+        // each other -- which the lseek approach cannot promise, since a
+        // second writer's lseek(SEEK_END) can land between another
+        // writer's lseek and its write.
         try out.appendSlice(arena,
             \\fn __appendFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8, data: []const u8) error{LumenThrow}!void {
-            \\    const existing = std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(64 * 1024 * 1024)) catch "";
-            \\    const combined = std.mem.concat(alloc, u8, &.{ existing, data }) catch {
-            \\        __lumen_err_msg = "cannot append: out of memory";
+            \\    var flags: std.posix.O = .{ .ACCMODE = .WRONLY, .CREAT = true, .APPEND = true };
+            \\    if (@hasField(std.posix.O, "CLOEXEC")) flags.CLOEXEC = true;
+            \\    if (@hasField(std.posix.O, "LARGEFILE")) flags.LARGEFILE = true;
+            \\    const mode = std.Io.File.Permissions.default_file.toMode();
+            \\    const fd = std.posix.openat(std.Io.Dir.cwd().handle, path, flags, mode) catch |e| {
+            \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot append to '{s}': {s}", .{ path, @errorName(e) }) catch "cannot append to file";
             \\        __lumen_throwing = true;
             \\        return error.LumenThrow;
             \\    };
-            \\    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = combined }) catch |e| {
+            \\    const file: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
+            \\    defer file.close(io);
+            \\    file.writeStreamingAll(io, data) catch |e| {
             \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot append to '{s}': {s}", .{ path, @errorName(e) }) catch "cannot append to file";
             \\        __lumen_throwing = true;
             \\        return error.LumenThrow;
