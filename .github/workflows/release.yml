@@ -78,6 +78,12 @@ jobs:
       - name: Show Zig version
         run: zig version
 
+      - name: Stamp the release version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "pub const lumen_version = \"$version\";" > src/lumen_version.zig
+          cat src/lumen_version.zig
+
       - name: Cross-compile lumen for ${{ matrix.name }}
         run: |
           zig build -Dtarget=${{ matrix.zig_target }} -Doptimize=ReleaseSafe

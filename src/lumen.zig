@@ -32,7 +32,7 @@ const CompileMode = enum {
     }
 };
 
-const lumen_version = "0.1.0-dev";
+const lumen_version = @import("lumen_version.zig").lumen_version;
 
 /// Human-readable message for a raw `E_*` diagnostic code. Diagnostics that
 /// already carry a formatted message pass through unchanged.
