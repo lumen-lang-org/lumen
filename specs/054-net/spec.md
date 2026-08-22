@@ -61,7 +61,7 @@ this spec, and used verbatim as the accept-loop template below. What's new:
 | Function | Type | Notes |
 | --- | --- | --- |
 | `net.connect(host, port)` | `(string, int) -> Socket` | blocking connect; a failed connect (refused, unknown host, timeout) degrades to a `Socket` whose `.read()` always returns `""` and `.write()` is a no-op -- the same "fallback, don't crash" convention `LumenReadableStream`'s missing-file case already established, not a thrown error |
-| `net.createServer(port, handler)` | `(int, (Socket) -> void) -> void` | blocking accept loop; calls `handler(socket)` once per accepted connection, then closes the socket when the handler returns (whether or not the handler itself already called `.close()` -- `LumenSocket.close()` is idempotent, see below) |
+| `net.createServer(port, handler)` | `(int, (Socket) -> void) -> void` | accepts connections concurrently (spec 490): each accepted connection's `handler(socket)` call runs on its own worker thread from a dedicated `xev.ThreadPool`, and closes the socket when the handler returns (whether or not the handler itself already called `.close()` -- `LumenSocket.close()` is idempotent, see below) |
 
 | Method | Type | Notes |
 | --- | --- | --- |
@@ -81,20 +81,16 @@ this spec, and used verbatim as the accept-loop template below. What's new:
   every other server-side language. Checked via `makeFuncType`/
   `ensureAssignable` the same way `http.createServer`'s handler type is
   checked (`self.makeFuncType(&.{.socket_type}, .void)`).
-- **Single connection at a time for `net.createServer`, not the spec
-  049 thread-pool treatment `http.createServer` got.** Spec 049's
-  concurrency was justified by benchmarking against Node's
-  `http.createServer` under keep-alive load; nothing analogous exists yet
-  for raw `net` (no natural request/response cadence to benchmark against,
-  no prior art in this codebase to extend). Documented as a real, current
-  limitation rather than silently accepted: a slow handler blocks new
-  connections from being accepted until it returns. The exact same
-  `xev.ThreadPool` mechanism spec 049 built is directly reusable here
-  later (accept loop hands the accepted `Stream` + handler to a
-  `ThreadPool.Task`, unchanged) -- called out explicitly as the natural
-  next step in "Not planned," not attempted this pass to keep the socket
-  type itself (the harder, load-bearing new primitive) the focus of this
-  slice.
+- **Concurrent, via the same `xev.ThreadPool` treatment `http.createServer`
+  got in spec 049 (spec 490, fixes lumen#11).** Originally shipped single
+  connection at a time (a slow or long-lived handler blocked every other
+  connection from being accepted at all, not merely delayed), documented
+  below as deliberately deferred. Filed upstream as
+  [lumen#11](https://github.com/lumen-lang-org/lumen/issues/11) once a real
+  caller (a relay serving concurrent long-lived WebSocket connections)
+  needed it; fixed in spec 490 exactly the way this note predicted -- the
+  accept loop now hands each accepted `Stream` + handler to a
+  `ThreadPool.Task` instead of calling the handler inline.
 - **`LumenSocket.close()` is idempotent (`closed: bool` flag), and the
   accept loop always calls it after the handler returns.** Unlike
   `WritableStream.close()` (caller-driven, called once, matching a
@@ -120,7 +116,6 @@ this spec, and used verbatim as the accept-loop template below. What's new:
 
 | Item | Why |
 | --- | --- |
-| Concurrent `net.createServer` (the spec 049 `xev.ThreadPool` treatment) | no benchmark or prior request/response cadence to justify it yet for a raw-bytes protocol; mechanically the same pattern spec 049 already proved for `http`, real follow-up work once a concrete slow-handler workload exists |
 | UDP (`net.dgram`/`dgram` module equivalent) | a different `Socket.Mode` (`.dgram` vs `.stream`) and connectionless send/receive API shape (`Socket.send`/`receive` in `std.Io.net`, distinct from `Stream`'s reader/writer) -- a separate primitive, not an extension of this one |
 | TLS (`tls.connect`/`tls.createServer`) | Node itself splits this into a separate `tls` module; `std.crypto.tls` integration is a real, separate feature |
 | Socket options (`setNoDelay`, `setKeepAlive`, `setTimeout`) | not exercised by the v1 verification (a real loopback round-trip); straightforward additions later, each one `io.vtable`/`std.posix.setsockopt` plumbing behind a new `Socket` method |

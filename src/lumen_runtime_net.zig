@@ -13,6 +13,7 @@ const CompileError = @import("lumen_diag.zig").CompileError;
 
 pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), program: *const ast.Program, options: CompileOptions) CompileError!void {
     const needs_http_threadpool = program.needs_http_server and !options.wasm;
+    const needs_net_threadpool = program.needs_net_server and !options.wasm;
     if (program.needs_http_module) {
         // http.request/get (spec 042): one-shot client request via
         // std.http.Client.fetch, with a real method/payload/response body
@@ -851,25 +852,92 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             );
         }
         if (program.needs_net_server) {
-            // Single connection at a time for v1 (spec 054's documented
-            // scope, not yet given the spec 049 xev.ThreadPool treatment
-            // http.createServer got -- no benchmark or prior request/
-            // response cadence exists yet to justify it for raw bytes).
-            // Mirrors __httpCreateServer's non-threadpool branch exactly.
-            try out.appendSlice(arena,
-                \\fn __netCreateServer(io: std.Io, alloc: std.mem.Allocator, port: i32, handler: anytype) noreturn {
-                \\    _ = alloc;
-                \\    const addr = std.Io.net.IpAddress.parse("0.0.0.0", @intCast(port)) catch std.process.exit(1);
-                \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
-                \\    while (true) {
-                \\        const stream = server.accept(io) catch continue;
-                \\        const sock = LumenSocket.__init(io, stream);
-                \\        handler.call(handler.ctx, sock);
-                \\        sock.close();
-                \\    }
-                \\}
-                \\
-            );
+            // net.createServer (spec 054), concurrency fixed per lumen#11:
+            // the original loop called the handler inline on the accept
+            // loop's own call stack and only called server.accept() again
+            // after the handler returned, so a second client's connection
+            // sat unread in the OS backlog for as long as the first
+            // handler's connection stayed open -- fatal for any
+            // long-lived-connection protocol (WebSocket relays, chat,
+            // subscriptions) and the reason lumen-lang-org/lumen#11 was
+            // filed. Fixed the same way spec 049 fixed the identical bug
+            // in http.createServer: each accepted connection's handling
+            // (here, the whole handler call plus the final close) is
+            // handed to a worker thread from a dedicated libxev
+            // `ThreadPool`, so accept() can loop back for the next
+            // connection immediately while earlier ones are still being
+            // served. Pool sizing and stack size match __httpCreateServer
+            // exactly -- I/O-bound work, sized for concurrent connections
+            // rather than CPU count, with a full 8 MiB stack since a
+            // handler may do anything main can.
+            //
+            // Same documented trade-off as http.createServer's pool: a
+            // handler now genuinely runs on multiple OS threads
+            // concurrently, so a handler that mutates shared global state
+            // has a real data race, exactly as it would in any
+            // multi-threaded server.
+            if (needs_net_threadpool) {
+                try out.appendSlice(arena,
+                    \\var __net_pool: xev.ThreadPool = undefined;
+                    \\fn __netCreateServer(io: std.Io, alloc: std.mem.Allocator, port: i32, handler: anytype) noreturn {
+                    \\    _ = alloc;
+                    \\    const addr = std.Io.net.IpAddress.parse("0.0.0.0", @intCast(port)) catch std.process.exit(1);
+                    \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
+                    \\    const __net_cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
+                    \\    __net_pool = xev.ThreadPool.init(.{
+                    \\        .max_threads = @max(4, __net_cpus * 2),
+                    \\        .stack_size = 8 * 1024 * 1024,
+                    \\    });
+                    \\    const Handler = @TypeOf(handler);
+                    \\    const Conn = struct {
+                    \\        task: xev.ThreadPool.Task = .{ .callback = run },
+                    \\        io: std.Io,
+                    \\        stream: std.Io.net.Stream,
+                    \\        handler: Handler,
+                    \\        fn run(t: *xev.ThreadPool.Task) void {
+                    \\            const __gc_fresh = __gcRegisterThread();
+                    \\            defer __gcUnregisterThread(__gc_fresh);
+                    \\            const self: *@This() = @fieldParentPtr("task", t);
+                    \\            defer std.heap.page_allocator.destroy(self);
+                    \\            const sock = LumenSocket.__init(self.io, self.stream);
+                    \\            self.handler.call(self.handler.ctx, sock);
+                    \\            sock.close();
+                    \\        }
+                    \\    };
+                    \\    while (true) {
+                    \\        const stream = server.accept(io) catch continue;
+                    \\        const conn = std.heap.page_allocator.create(Conn) catch {
+                    \\            stream.close(io);
+                    \\            continue;
+                    \\        };
+                    \\        conn.* = .{ .io = io, .stream = stream, .handler = handler };
+                    \\        __net_pool.schedule(xev.ThreadPool.Batch.from(&conn.task));
+                    \\    }
+                    \\}
+                    \\
+                );
+            } else {
+                // wasm32-wasi: no real OS threads, and the CLI's own
+                // libxev-wiring gate hard-fails any wasm build that
+                // references `@import("xev")` at all -- so this target
+                // keeps the original single-connection-at-a-time loop.
+                // Matches this function's pre-fix behavior exactly, not a
+                // new limitation.
+                try out.appendSlice(arena,
+                    \\fn __netCreateServer(io: std.Io, alloc: std.mem.Allocator, port: i32, handler: anytype) noreturn {
+                    \\    _ = alloc;
+                    \\    const addr = std.Io.net.IpAddress.parse("0.0.0.0", @intCast(port)) catch std.process.exit(1);
+                    \\    var server = addr.listen(io, .{ .reuse_address = true }) catch std.process.exit(1);
+                    \\    while (true) {
+                    \\        const stream = server.accept(io) catch continue;
+                    \\        const sock = LumenSocket.__init(io, stream);
+                    \\        handler.call(handler.ctx, sock);
+                    \\        sock.close();
+                    \\    }
+                    \\}
+                    \\
+                );
+            }
         }
     }
     if (program.needs_http_constants) {
