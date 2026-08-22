@@ -69,6 +69,7 @@ pub fn build(b: *std.Build) void {
     const fmt_targets = [_][]const u8{
         "build.zig",
         "src/lumen.zig",
+        "src/lumen_version.zig",
         "src/lumen_ast.zig",
         "src/lumen_check.zig",
         "src/lumen_check_stdlib.zig",
