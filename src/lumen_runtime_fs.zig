@@ -174,10 +174,64 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         // is the worst kind of difference between build modes: the fast one
         // is what ships. The comment above __lumen_throwing records the last
         // time this conflation bit.
+        // readFileAlloc (used here previously) opens the file and calls
+        // File.Reader's allocRemainingAlignedSentinel, which stats the file
+        // once for its size and then, on the streaming/positional read
+        // paths (Io/Reader.zig, File/Reader.zig), computes `size - pos`
+        // to bound each subsequent read against that cached size. If the
+        // file shrinks between that stat and a later read of it -- which is
+        // exactly what fs.appendFileSync used to do to every file it
+        // touched (#26), and which any other writer truncating the file
+        // can still do -- `pos` can end up bigger than the stale `size` and
+        // that subtraction wraps. Zig's runtime safety check turns the
+        // wraparound into a trap: not a Zig error, not something `catch`
+        // sees, the process just aborts. A Lumen try/catch around
+        // fs.readFileSync cannot protect against this (#25).
+        //
+        // Reading with a manual readStreaming loop instead avoids the bug
+        // by construction: it never consults or caches a file size, so
+        // there is no `size - pos` to wrap. Each call just reports how many
+        // bytes the kernel actually handed back; a file that shrank mid-read
+        // yields a short read or an early end-of-file, not a trap.
         try out.appendSlice(arena,
             \\fn __readFileSync(io: std.Io, alloc: std.mem.Allocator, path: []const u8) error{LumenThrow}![]const u8 {
-            \\    return std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .limited(16 * 1024 * 1024)) catch |e| {
+            \\    var file = std.Io.Dir.cwd().openFile(io, path, .{ .mode = .read_only }) catch |e| {
             \\        __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot read '{s}': {s}", .{ path, @errorName(e) }) catch "cannot read file";
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
+            \\    defer file.close(io);
+            \\    const read_limit: usize = 16 * 1024 * 1024;
+            \\    var list: std.ArrayListUnmanaged(u8) = .empty;
+            \\    var chunk: [64 * 1024]u8 = undefined;
+            \\    while (true) {
+            \\        // readStreaming signals real end-of-file as
+            \\        // error.EndOfStream, not a 0-length read (confirmed by
+            \\        // reading fileReadStreamingPosix: "if (rc == 0) return
+            \\        // error.EndOfStream"), so that is the normal, expected
+            \\        // way this loop ends -- not a failure to report.
+            \\        const n = file.readStreaming(io, &.{chunk[0..]}) catch |e| switch (e) {
+            \\            error.EndOfStream => break,
+            \\            else => {
+            \\                __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot read '{s}': {s}", .{ path, @errorName(e) }) catch "cannot read file";
+            \\                __lumen_throwing = true;
+            \\                return error.LumenThrow;
+            \\            },
+            \\        };
+            \\        if (n == 0) break;
+            \\        if (list.items.len + n > read_limit) {
+            \\            __lumen_err_msg = std.fmt.allocPrint(alloc, "cannot read '{s}': StreamTooLong", .{path}) catch "cannot read file";
+            \\            __lumen_throwing = true;
+            \\            return error.LumenThrow;
+            \\        }
+            \\        list.appendSlice(alloc, chunk[0..n]) catch {
+            \\            __lumen_err_msg = "cannot read: out of memory";
+            \\            __lumen_throwing = true;
+            \\            return error.LumenThrow;
+            \\        };
+            \\    }
+            \\    return list.toOwnedSlice(alloc) catch {
+            \\        __lumen_err_msg = "cannot read: out of memory";
             \\        __lumen_throwing = true;
             \\        return error.LumenThrow;
             \\    };
