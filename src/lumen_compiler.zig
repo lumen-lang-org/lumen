@@ -524,9 +524,12 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     // spec 049: `http.createServer`'s concurrent-serving codegen also needs
     // libxev, for its standalone `ThreadPool` (not the event loop) -- but
     // only on native targets; see `CompileOptions.wasm`'s doc comment for
-    // why the import is skipped entirely under `--wasm`.
+    // why the import is skipped entirely under `--wasm`. lumen#11: the same
+    // is true of `net.createServer`'s pool now that it gets the identical
+    // treatment.
     const needs_http_threadpool = program.needs_http_server and !options.wasm;
-    if (program.needs_async or needs_http_threadpool) {
+    const needs_net_threadpool = program.needs_net_server and !options.wasm;
+    if (program.needs_async or needs_http_threadpool or needs_net_threadpool) {
         try out.appendSlice(arena, "const xev = @import(\"xev\");\n");
     }
 
