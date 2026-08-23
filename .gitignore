@@ -14,8 +14,11 @@ zig-pkg/
 .lumen-*.zig
 
 # Lumen runtime fetch caches (wasm-link archives, the libxev async runtime
-# source) -- fetched on demand by the compiler, not vendored
+# source, and the bdwgc source and per-target collector a --target/--static
+# build compiles from it) -- fetched on demand by the compiler, not vendored
 .lumen-wasmlink-*.a
 .lumen-libxev-*/
+.lumen-bdwgc-*/
+.lumen-gc-*/
 
 .lumen-packages/

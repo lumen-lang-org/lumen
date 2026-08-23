@@ -100,9 +100,39 @@ Windows: download the `.zip` from the [releases page](https://github.com/lumen-l
 
 ```sh
 lumen compile app.ts      # build a native binary
+lumen compile --static app.ts   # ...that runs on any Linux, whatever its libc
 lumen watch app.ts        # rebuild + re-run on every change
 lumen test app.test.ts    # run test blocks
 ```
+
+## Ship one binary: `--static` and `--target`
+
+A plain `lumen compile` builds for the machine it runs on, against that
+machine's libc, so the build machine's glibc becomes the oldest system the
+program will start on. `--static` removes the question:
+
+```sh
+lumen compile --static app.ts
+ldd app                     # not a dynamic executable
+```
+
+The result needs nothing resolved at run time — no libc, no collector, no
+loader — and runs the same on Ubuntu 22.04, Rocky Linux 8 and Alpine as it does
+where it was built. On Linux `--static` builds against musl (the one libc that
+can be linked statically) for the same architecture; the memory collector is
+built to match and cached, which costs about half a minute the first time.
+
+`--target <triple>` builds for somewhere else, with or without `--static`:
+
+```sh
+lumen compile --target aarch64-linux-musl --static app.ts
+```
+
+Both work for async programs (`setTimeout`, `Promise`, `async`/`await`,
+servers) as well as plain ones. A target that cannot be built — an unknown
+triple, or `--static` against a libc that has to be dynamic, such as glibc or
+macOS — is refused with a message saying so, never quietly built for the host
+instead.
 
 ## Watch mode: `lumen watch`
 

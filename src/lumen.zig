@@ -1186,7 +1186,7 @@ fn buildAndRun(
         // in. Debug, not ReleaseSafe: this binary lives for the length of one
         // expansion and its speed of construction is the user's whole wait.
         var captured: std.Io.Writer.Allocating = .init(arena);
-        const built = compileFile(arena, io, entry_path, .debug, .build_quiet, &.{}, false, false, &captured.writer) catch |e|
+        const built = compileFile(arena, io, entry_path, .debug, .build_quiet, &.{}, false, false, .{}, &captured.writer) catch |e|
             return decoratorFailed(arena, path, app, "'@{s}' could not be compiled: {s}", .{ app.name, @errorName(e) });
         const exe_path = try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.stem(entry_name)});
         if (built != 0)
@@ -1712,7 +1712,7 @@ fn watchRebuild(
 ) !void {
     // Reuse the standard compile path so diagnostics are identical to `lumen
     // compile`. compileFile prints either the diagnostic or the success line.
-    const code = compileFile(arena, io, path, mode, .build_exe, &.{}, false, false, err) catch |e| {
+    const code = compileFile(arena, io, path, mode, .build_exe, &.{}, false, false, .{}, err) catch |e| {
         try err.print("watch: rebuild error: {s}\n", .{@errorName(e)});
         try err.flush();
         return;
@@ -1986,6 +1986,156 @@ fn appendLink(arena: std.mem.Allocator, argv: *std.ArrayListUnmanaged([]const u8
     } else {
         try argv.append(arena, try std.fmt.allocPrint(arena, "-l{s}", .{token}));
     }
+}
+
+/// What `lumen compile --target <triple>` and `--static` asked for.
+///
+/// These two reach the backend as `-target`/`-static`, and unlike every other
+/// link argument they have to be placed *before* the module (`-M`) arguments an
+/// async build uses: after them the backend keeps the host target and links the
+/// host libc, without saying so.
+const TargetSpec = struct {
+    triple: ?[]const u8 = null,
+    static: bool = false,
+
+    /// True when nothing was asked for: build for the host, as always.
+    fn isHost(self: TargetSpec) bool {
+        return self.triple == null and !self.static;
+    }
+};
+
+/// Either the triple to hand the backend (`null` = leave the target alone) or
+/// the reason the request cannot be honored. A target that cannot be built is
+/// an error, never a quiet fallback to the host.
+const TargetResolution = union(enum) {
+    triple: ?[]const u8,
+    unsupported: []const u8,
+};
+
+/// Resolves a `--target`/`--static` request to the triple the backend should
+/// build for.
+///
+/// `--static` needs a libc that can be linked statically, and the usual host
+/// libc is not one: glibc and Apple's libSystem both refuse, so a bare
+/// `--static` on a glibc machine can only ever fail. musl is the one that
+/// works, so on Linux `--static` alone retargets to `<arch>-linux-musl` — same
+/// architecture, same OS, a libc that can actually be linked in. Anywhere else
+/// there is nothing to fall back to and the user has to name a target.
+///
+/// A triple is parsed here rather than handed to the backend unread, so a
+/// mistyped one is reported as a mistyped target and not as a failure to build
+/// the collector for it.
+fn resolveTarget(arena: std.mem.Allocator, spec: TargetSpec) !TargetResolution {
+    const builtin = @import("builtin");
+    if (spec.triple) |t| {
+        var diags: std.Target.Query.ParseOptions.Diagnostics = .{};
+        const query = std.Target.Query.parse(.{ .arch_os_abi = t, .diagnostics = &diags }) catch
+            return .{ .unsupported = try std.fmt.allocPrint(arena, "unknown target '{s}'; targets are written <arch>-<os>[-<abi>], for example x86_64-linux-musl", .{t}) };
+        if (spec.static and !staticLinkable(query))
+            return .{ .unsupported = try std.fmt.allocPrint(arena, "--static cannot link the libc of '{s}'; a static binary needs musl (for example {s}-linux-musl)", .{ t, @tagName(query.cpu_arch orelse builtin.cpu.arch) }) };
+        return .{ .triple = t };
+    }
+    if (!spec.static) return .{ .triple = null };
+    if (builtin.os.tag != .linux)
+        return .{ .unsupported = try arena.dupe(u8, "--static needs a target whose libc can be linked statically; name one with --target (for example x86_64-linux-musl)") };
+    return .{ .triple = try std.fmt.allocPrint(arena, "{s}-linux-musl", .{@tagName(builtin.cpu.arch)}) };
+}
+
+/// Whether a target's libc can be linked statically.
+///
+/// Two cannot. Apple's libSystem is dynamic-only by Apple's rule, and glibc
+/// resolves parts of itself (name service switch, `dlopen`) at run time, so the
+/// backend refuses both with "libc of the specified target requires dynamic
+/// linking". Everything else can: musl by design, and mingw's gnu abi on
+/// Windows despite sharing the name, which is why the check asks about the
+/// pairing and not about the abi alone.
+fn staticLinkable(query: std.Target.Query) bool {
+    const os = query.os_tag orelse @import("builtin").os.tag;
+    switch (os) {
+        .macos, .ios, .watchos, .tvos, .visionos, .driverkit => return false,
+        else => {},
+    }
+    // An unnamed abi is the backend's default for the target, which on Linux is
+    // musl -- that is what makes a bare `-target x86_64-linux` a static build.
+    const abi = query.abi orelse return true;
+    return !(os == .linux and abi.isGnu());
+}
+
+/// The bdwgc commit whose collector a cross or static build links, pinned the
+/// same way `LIBXEV_COMMIT` is. v8.2.8.
+const BDWGC_COMMIT = "ee59af3722e56de8404de6cd0c21c2493cc4d855";
+
+/// Builds the conservative collector for `triple` and returns the directory
+/// holding the resulting `libgc.a`.
+///
+/// The host's `libgc.so` belongs to the host's libc, so it is no use to a build
+/// that is not for the host: linking it is how a "static" binary ends up with a
+/// dynamic dependency, or fails on `sigsetjmp` because the collector and the
+/// program disagree about which libc they are for. No distribution ships a musl
+/// build of it either, so the compiler builds one — bdwgc's single-translation-
+/// unit `extra/gc.c`, through the backend's own C compiler, which needs no
+/// autotools and no system headers. Cached per commit and target beside the
+/// libxev cache, so the ~30s build happens once.
+///
+/// `NO_GETCONTEXT` is not optional: musl has no `getcontext`, and without it
+/// the link fails on that symbol. The collector saves registers with `setjmp`
+/// instead, which is its portable path.
+fn buildStaticGc(arena: std.mem.Allocator, io: std.Io, triple: []const u8, err: *std.Io.Writer) ![]const u8 {
+    const dir = try std.fmt.allocPrint(arena, ".lumen-gc-{s}-{s}", .{ BDWGC_COMMIT[0..12], triple });
+    const archive = try std.fmt.allocPrint(arena, "{s}/libgc.a", .{dir});
+    if (std.Io.Dir.cwd().access(io, archive, .{})) |_| return dir else |_| {}
+
+    const src = try fetchBdwgc(arena, io);
+    try std.Io.Dir.cwd().createDirPath(io, dir);
+    const object = try std.fmt.allocPrint(arena, "{s}/gc.o", .{dir});
+    const compile: []const []const u8 = &.{
+        "zig",                                                   "cc",
+        "-target",                                               triple,
+        "-O2",                                                   "-c",
+        try std.fmt.allocPrint(arena, "{s}/extra/gc.c", .{src}), try std.fmt.allocPrint(arena, "-I{s}/include", .{src}),
+        "-DGC_THREADS",                                          "-D_REENTRANT",
+        "-DGC_BUILTIN_ATOMIC",                                   "-DNO_GETCONTEXT",
+        "-DHANDLE_FORK",                                         "-o",
+        object,
+    };
+    try runGcStep(arena, io, compile, triple, err);
+    try runGcStep(arena, io, &.{ "zig", "ar", "rcs", archive, object }, triple, err);
+    return dir;
+}
+
+/// One step of the collector build. A failure is reported with the backend's
+/// own output: a broken collector build must not look like a broken program.
+fn runGcStep(arena: std.mem.Allocator, io: std.Io, argv: []const []const u8, triple: []const u8, err: *std.Io.Writer) !void {
+    const result = std.process.run(arena, io, .{ .argv = argv }) catch return error.GcBuildFailed;
+    const ok = switch (result.term) {
+        .exited => |c| c == 0,
+        else => false,
+    };
+    if (ok) return;
+    try err.print("error: could not build the memory collector for {s}\n", .{triple});
+    if (result.stderr.len > 0) try err.print("  backend: {s}\n", .{std.mem.trim(u8, result.stderr, " \t\r\n")});
+    return error.GcBuildFailed;
+}
+
+/// Fetches and extracts bdwgc's source, returning the directory it lives in.
+/// Mirrors `fetchLibxev`: a one-time download cached by commit.
+fn fetchBdwgc(arena: std.mem.Allocator, io: std.Io) ![]const u8 {
+    const cache_dir = ".lumen-bdwgc-" ++ BDWGC_COMMIT[0..12];
+    if (std.Io.Dir.cwd().access(io, cache_dir ++ "/extra/gc.c", .{})) |_| return cache_dir else |_| {}
+
+    const url = "https://github.com/bdwgc/bdwgc/archive/" ++ BDWGC_COMMIT ++ ".tar.gz";
+    const bytes = try fetchUrl(arena, io, url);
+
+    var fixed_reader = std.Io.Reader.fixed(bytes);
+    const decomp_buf = try arena.alloc(u8, std.compress.flate.max_window_len);
+    var decomp = std.compress.flate.Decompress.init(&fixed_reader, .gzip, decomp_buf);
+
+    try std.Io.Dir.cwd().createDirPath(io, cache_dir);
+    var out_dir = try std.Io.Dir.cwd().openDir(io, cache_dir, .{ .iterate = true });
+    defer out_dir.close(io);
+    try std.tar.extract(io, out_dir, &decomp.reader, .{ .strip_components = 1 });
+
+    return cache_dir;
 }
 
 /// The libxev commit this compiler builds async programs against. Pinned (not
@@ -2603,12 +2753,27 @@ fn describeFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, err: *st
     return 0;
 }
 
-fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, action: Action, cli_libs: []const []const u8, wasm: bool, reactor: bool, err: *std.Io.Writer) !u8 {
+fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, action: Action, cli_libs: []const []const u8, wasm: bool, reactor: bool, target: TargetSpec, err: *std.Io.Writer) !u8 {
     const compile_start = std.Io.Clock.Timestamp.now(io, .awake);
     if (!std.mem.endsWith(u8, path, ".ts")) {
         try err.print("error: expected a .ts source file, got {s}\n", .{path});
         return 2;
     }
+
+    // The wasm target is a target too: `--wasm` already fixes the triple (and
+    // wasm modules are self-contained), so a second one would have to win or be
+    // ignored. Say so rather than pick.
+    if (wasm and !target.isHost()) {
+        try err.writeAll("error: --wasm already selects a target; --target and --static do not apply to it\n");
+        return 2;
+    }
+    const target_triple = switch (try resolveTarget(arena, target)) {
+        .triple => |t| t,
+        .unsupported => |why| {
+            try err.print("error: {s}\n", .{why});
+            return 2;
+        },
+    };
 
     const expanded = readSourceWithImports(arena, io, path) catch |e| {
         const detail = g_import_detail;
@@ -2728,6 +2893,27 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     // downloaded build is self-contained without exposing zig in the user's shell.
     var argv: std.ArrayListUnmanaged([]const u8) = .empty;
     const needs_xev = !wasm and std.mem.indexOf(u8, zig_src, "@import(\"xev\")") != null;
+    // The conservative collector behind `__alloc` is a C library; its externs in
+    // the generated source are the signal that it is in play (absent under
+    // LUMEN_NO_GC=1 and for programs that never allocate).
+    const needs_gc = !wasm and std.mem.indexOf(u8, zig_src, "extern fn GC_init") != null;
+
+    // `-target`, `-static` and the collector's `-L` go directly after
+    // `build-exe`, ahead of everything else. Both later forms depend on it:
+    // against the `-M` module arguments an async build uses, a target given
+    // afterwards is ignored outright, and even in the plain form the collector
+    // has to be searched for before `-lgc` is read, or the link resolves to the
+    // host's copy and fails on `sigsetjmp`.
+    var lead: std.ArrayListUnmanaged([]const u8) = .empty;
+    if (target_triple) |triple| try lead.appendSlice(arena, &.{ "-target", triple });
+    if (target.static) try lead.append(arena, "-static");
+    if (!target.isHost() and needs_gc) {
+        // Not the host's target, so not the host's collector: build one that
+        // belongs to the libc being linked.
+        const gc_dir = buildStaticGc(arena, io, target_triple.?, err) catch return 1;
+        try lead.append(arena, try std.fmt.allocPrint(arena, "-L{s}", .{gc_dir}));
+    }
+
     switch (action) {
         .build_exe, .build_quiet => if (wasm) {
             try argv.appendSlice(arena, &.{ "zig", "build-exe", gen_path, "-target", "wasm32-wasi", "-O", "ReleaseSmall", emit });
@@ -2740,15 +2926,18 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
                 try err.print("{s}:1:1: error: could not fetch the libxev async runtime: {s}\n", .{ path, @errorName(e) });
                 return 1;
             };
+            try argv.appendSlice(arena, &.{ "zig", "build-exe" });
+            try argv.appendSlice(arena, lead.items);
             try argv.appendSlice(arena, &.{
-                "zig",                                                    "build-exe",
                 "--dep",                                                  "xev",
                 try std.fmt.allocPrint(arena, "-Mroot={s}", .{gen_path}), try std.fmt.allocPrint(arena, "-Mxev={s}", .{xev_root}),
                 "-O",                                                     mode.zigName(),
                 emit,
             });
         } else {
-            try argv.appendSlice(arena, &.{ "zig", "build-exe", gen_path, "-O", mode.zigName(), emit });
+            try argv.appendSlice(arena, &.{ "zig", "build-exe" });
+            try argv.appendSlice(arena, lead.items);
+            try argv.appendSlice(arena, &.{ gen_path, "-O", mode.zigName(), emit });
         },
         .run_test => try argv.appendSlice(arena, &.{ "zig", "test", gen_path }),
         .check_only => unreachable, // returned before codegen
@@ -2778,10 +2967,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         // Link C libraries: from `// @link <lib>` source pragmas and `--link` flags.
         try collectLinkLibs(arena, source, &argv);
         for (cli_libs) |lib| try appendLink(arena, &argv, lib);
-        // The conservative collector behind `__alloc` is a system library; its
-        // externs in the generated source are the signal that it is in play
-        // (absent under LUMEN_NO_GC=1 and for programs that never allocate).
-        if (std.mem.indexOf(u8, zig_src, "extern fn GC_init") != null) {
+        if (needs_gc) {
             try argv.appendSlice(arena, &.{ "-lgc", "-lc" });
         }
     }
@@ -3109,7 +3295,7 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(2);
     }
 
-    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--link <lib>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen check <file.ts>\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
+    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--target <triple>] [--static] [--link <lib>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen check <file.ts>\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
     const code = if (std.mem.eql(u8, args[1], "init")) blk: {
         if (args.len > 3) {
             try err.writeAll(usage);
@@ -3122,7 +3308,7 @@ pub fn main(init: std.process.Init) !void {
             try err.writeAll("usage: lumen test <file.ts>\n");
             break :blk 2;
         }
-        break :blk try compileFile(arena, io, args[2], .release_safe, .run_test, &.{}, false, false, err);
+        break :blk try compileFile(arena, io, args[2], .release_safe, .run_test, &.{}, false, false, .{}, err);
     } else if (std.mem.eql(u8, args[1], "check")) blk: {
         // `lumen check <file.ts>`: parse + type-check only (fast feedback for
         // editors and CI); no code is generated or built.
@@ -3130,7 +3316,7 @@ pub fn main(init: std.process.Init) !void {
             try err.writeAll("usage: lumen check <file.ts>\n");
             break :blk 2;
         }
-        break :blk try compileFile(arena, io, args[2], .release_safe, .check_only, &.{}, false, false, err);
+        break :blk try compileFile(arena, io, args[2], .release_safe, .check_only, &.{}, false, false, .{}, err);
     } else if (std.mem.eql(u8, args[1], "describe")) blk: {
         if (args.len < 3) {
             try err.writeAll("usage: lumen describe <file.ts>\n");
@@ -3189,7 +3375,7 @@ pub fn main(init: std.process.Init) !void {
             try err.writeAll("usage: lumen run [--release-fast] <file.ts> [args...]\n");
             break :blk 2;
         };
-        const compile_code = try compileFile(arena, io, src, mode, .build_quiet, &.{}, false, false, err);
+        const compile_code = try compileFile(arena, io, src, mode, .build_quiet, &.{}, false, false, .{}, err);
         if (compile_code != 0) break :blk compile_code;
         try err.flush();
         // Execute ./<stem> forwarding trailing args.
@@ -3228,6 +3414,7 @@ pub fn main(init: std.process.Init) !void {
         var libs: std.ArrayListUnmanaged([]const u8) = .empty;
         var wasm = false;
         var reactor = false;
+        var target: TargetSpec = .{};
         var i: usize = 2;
         while (i < args.len) : (i += 1) {
             const arg = args[i];
@@ -3240,10 +3427,32 @@ pub fn main(init: std.process.Init) !void {
             } else if (std.mem.eql(u8, arg, "--reactor")) {
                 reactor = true;
                 wasm = true; // reactor implies the wasm target
+            } else if (std.mem.eql(u8, arg, "--static")) {
+                target.static = true;
+            } else if (std.mem.eql(u8, arg, "--target")) {
+                i += 1;
+                if (i >= args.len) {
+                    try err.writeAll("error: --target needs a target triple, for example x86_64-linux-musl\n");
+                    break :blk 2;
+                }
+                target.triple = args[i];
+            } else if (std.mem.startsWith(u8, arg, "--target=")) {
+                target.triple = arg["--target=".len..];
             } else if (std.mem.eql(u8, arg, "--link")) {
                 i += 1;
                 if (i >= args.len) {
                     try err.writeAll(usage);
+                    break :blk 2;
+                }
+                // `--link` names a library, a path, or an object file, and
+                // anything else it is handed becomes `-l<token>`. A backend flag
+                // passed this way used to turn into a nonsense library name
+                // (`--link -static` -> `-l-static`), which is how asking for a
+                // static binary looked like a missing library. Refuse it and
+                // point at the flags that do the job.
+                if (args[i].len > 0 and args[i][0] == '-') {
+                    try err.print("error: --link takes a library name or a path, not a backend flag ('{s}')\n", .{args[i]});
+                    try err.writeAll("note: to choose a target or a link mode use --target <triple> and --static\n");
                     break :blk 2;
                 }
                 try libs.append(arena, args[i]);
@@ -3257,7 +3466,7 @@ pub fn main(init: std.process.Init) !void {
         break :blk try compileFile(arena, io, source_arg orelse {
             try err.writeAll(usage);
             break :blk 2;
-        }, mode, .build_exe, libs.items, wasm, reactor, err);
+        }, mode, .build_exe, libs.items, wasm, reactor, target, err);
     } else if (std.mem.eql(u8, args[1], "version") or std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v")) blk: {
         try err.print("lumen {s}\n", .{lumen_version});
         break :blk 0;
@@ -3266,7 +3475,7 @@ pub fn main(init: std.process.Init) !void {
         break :blk 0;
     } else if (std.mem.endsWith(u8, args[1], ".ts")) blk: {
         // `lumen file.ts` is shorthand for `lumen compile file.ts`.
-        break :blk try compileFile(arena, io, args[1], .release_safe, .build_exe, &.{}, false, false, err);
+        break :blk try compileFile(arena, io, args[1], .release_safe, .build_exe, &.{}, false, false, .{}, err);
     } else blk: {
         try err.print("error: unknown command '{s}'\n\n", .{args[1]});
         try err.writeAll(usage);
@@ -3607,4 +3816,64 @@ test "a URL that is not https, names no file, or climbs out of the cache is refu
     try std.testing.expectError(error.InvalidImport, packagePathFor(arena, "http://lumen-lang.org/a.ts"));
     try std.testing.expectError(error.InvalidImport, packagePathFor(arena, "https://lumen-lang.org"));
     try std.testing.expectError(error.InvalidImport, packagePathFor(arena, "https://lumen-lang.org/../../etc/passwd"));
+}
+
+test "a static link is only offered where the libc can carry it (spec 493)" {
+    const linkable = struct {
+        fn f(triple: []const u8) !bool {
+            return staticLinkable(try std.Target.Query.parse(.{ .arch_os_abi = triple }));
+        }
+    }.f;
+    // musl is the case that works, whatever else the triple says.
+    try std.testing.expect(try linkable("x86_64-linux-musl"));
+    try std.testing.expect(try linkable("aarch64-linux-musl"));
+    // No abi named: the backend picks one, and on Linux it is musl.
+    try std.testing.expect(try linkable("x86_64-linux"));
+    // The gnu abi means mingw on Windows, and mingw links statically.
+    try std.testing.expect(try linkable("x86_64-windows-gnu"));
+    // glibc and Apple's libSystem both require dynamic linking.
+    try std.testing.expect(!try linkable("x86_64-linux-gnu"));
+    try std.testing.expect(!try linkable("x86_64-linux-gnu.2.28"));
+    try std.testing.expect(!try linkable("aarch64-macos"));
+}
+
+test "--static resolves to a target rather than failing against the host libc (spec 493)" {
+    var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer scratch.deinit();
+    const arena = scratch.allocator();
+    const builtin = @import("builtin");
+
+    // Nothing asked for: the target is left alone.
+    try std.testing.expectEqual(@as(?[]const u8, null), (try resolveTarget(arena, .{})).triple);
+
+    // A target on its own is passed through as written.
+    try std.testing.expectEqualStrings("aarch64-linux-musl", (try resolveTarget(arena, .{ .triple = "aarch64-linux-musl" })).triple.?);
+
+    // `--static` with a libc that cannot be linked statically is refused here,
+    // naming musl, rather than left to the backend to phrase.
+    switch (try resolveTarget(arena, .{ .triple = "x86_64-linux-gnu", .static = true })) {
+        .unsupported => |why| try std.testing.expect(std.mem.indexOf(u8, why, "musl") != null),
+        .triple => return error.TestExpectedRefusal,
+    }
+
+    // A mistyped target is reported as one, before anything is built for it.
+    switch (try resolveTarget(arena, .{ .triple = "x86_65-linuks" })) {
+        .unsupported => |why| try std.testing.expect(std.mem.indexOf(u8, why, "unknown target") != null),
+        .triple => return error.TestExpectedRefusal,
+    }
+
+    // On Linux a bare `--static` picks the host's architecture with musl, so
+    // the flag means something on its own.
+    const bare = try resolveTarget(arena, .{ .static = true });
+    if (builtin.os.tag == .linux) {
+        try std.testing.expectEqualStrings(
+            try std.fmt.allocPrint(arena, "{s}-linux-musl", .{@tagName(builtin.cpu.arch)}),
+            bare.triple.?,
+        );
+    } else {
+        switch (bare) {
+            .unsupported => |why| try std.testing.expect(std.mem.indexOf(u8, why, "--target") != null),
+            .triple => return error.TestExpectedRefusal,
+        }
+    }
 }
