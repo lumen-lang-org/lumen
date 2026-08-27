@@ -149,6 +149,27 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\        };
             \\        return __sa().dupe(u8, std.mem.trimEnd(u8, raw, "\r\n")) catch "";
             \\    }
+            \\    // Raw counterpart to readLine() above, for bytes that are not
+            \\    // line-delimited text -- a binary WebSocket frame past a 101
+            \\    // upgrade, say. Reads off the exact same reader readLine() uses
+            \\    // (self.body, which is already the raw connection reader for a
+            \\    // 101's shape), but does no delimiter scan and no trimming:
+            \\    // one recv-style read, whatever arrived, "" on EOF/closed.
+            \\    // Mirrors LumenSocket.read() verbatim -- see that method's
+            \\    // comment for why readVec (one read, short is fine) and not
+            \\    // readSliceShort (loops to fill, misreads a short read as EOF).
+            \\    fn read(self: *LumenHttpStream) []const u8 {
+            \\        if (self.done_) return "";
+            \\        const r = self.body orelse {
+            \\            self.done_ = true;
+            \\            return "";
+            \\        };
+            \\        var scratch: [65536]u8 = undefined;
+            \\        var data: [1][]u8 = .{&scratch};
+            \\        const n = r.readVec(&data) catch return "";
+            \\        if (n == 0) return "";
+            \\        return __sa().dupe(u8, scratch[0..n]) catch "";
+            \\    }
             \\    // Exposes the connection's raw writer for one specific case: a
             \\    // WebSocket upgrade. A 101 response has no body, so `self.body`
             \\    // above is already the raw connection reader (Zig's client falls

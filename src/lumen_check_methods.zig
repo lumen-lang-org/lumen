@@ -867,7 +867,10 @@ pub fn childProcessMethod(self: *Checker, program: *ast.Program, mc: anytype, ob
 /// case-insensitively; `readLine()` blocks for the next decoded body line;
 /// `write(chunk)` sends raw bytes on the connection (spec 494 -- a caller
 /// past a `101` upgrade response completing a WebSocket handshake, say);
-/// `done()` reports exhaustion; `close()` drops the connection early.
+/// `read()` does one raw, undelimited read off the same connection (spec
+/// 495 -- binary WebSocket frames, where readLine()'s line-delimited,
+/// trimming semantics would corrupt or hang); `done()` reports exhaustion;
+/// `close()` drops the connection early.
 pub fn httpStreamMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
     mc.container_type = obj_type;
     const name = mc.name;
@@ -910,6 +913,13 @@ pub fn httpStreamMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_
             return null;
         }
         return .void;
+    }
+    if (eq(u8, name, "read")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return .string;
     }
     if (eq(u8, name, "done")) {
         if (mc.args.len != 0) {

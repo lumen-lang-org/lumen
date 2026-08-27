@@ -36,9 +36,9 @@ isGenericTemplateStmt:31, appendStmt:41, isIdentChar:50, substAnnotation:57, ann
 `Class.*` — the three things the compiler knows about a class that a
 namespace:32, classMetaCall:37
 
-## src/lumen_check_methods.zig (1334 lines)
+## src/lumen_check_methods.zig (1344 lines)
 Type-checking for stdlib *instance* methods: methods called on a value of
-cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:871, responseWriterMethod:937, bufferMethod:990, numberInstanceMethod:1047, stringMethod:1127, hashMethod:1279, hmacMethod:1308
+cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:874, responseWriterMethod:947, bufferMethod:1000, numberInstanceMethod:1057, stringMethod:1137, hashMethod:1289, hmacMethod:1318
 
 ## src/lumen_check_stdlib.zig (1536 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
@@ -119,7 +119,7 @@ parseTypeMember:27, consumeTypeArgClose:109, parseFunctionType:140, parseTupleTy
 Runtime prelude codegen for the filesystem surface: async fs (libxev),
 emitFsRuntime:14
 
-## src/lumen_runtime_net.zig (1148 lines)
+## src/lumen_runtime_net.zig (1169 lines)
 Runtime prelude codegen for the network surface: the `http` client
 emitNetRuntime:14
 
@@ -287,3 +287,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 487-chained-assignment-targets 488-class-and-type-alias-names 489-method-and-module-function-names 
 490-net-server-concurrency 491-fs-append-real-append 491-version-stamping 492-map-set-thread-safety 
 492-readfilesync-shrink-abort 493-static-and-cross-target-builds 494-http-stream-write 
+495-http-stream-read 
