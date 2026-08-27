@@ -865,6 +865,8 @@ pub fn childProcessMethod(self: *Checker, program: *ast.Program, mc: anytype, ob
 /// lower `<recv>.<name>(<args>)`) then validates by name. `status()` returns
 /// the response status; `header(name)` looks a response header up
 /// case-insensitively; `readLine()` blocks for the next decoded body line;
+/// `write(chunk)` sends raw bytes on the connection (spec 494 -- a caller
+/// past a `101` upgrade response completing a WebSocket handshake, say);
 /// `done()` reports exhaustion; `close()` drops the connection early.
 pub fn httpStreamMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
     mc.container_type = obj_type;
@@ -896,6 +898,18 @@ pub fn httpStreamMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_
             return null;
         }
         return .string;
+    }
+    if (eq(u8, name, "write")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const chunk_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.string, chunk_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return .void;
     }
     if (eq(u8, name, "done")) {
         if (mc.args.len != 0) {

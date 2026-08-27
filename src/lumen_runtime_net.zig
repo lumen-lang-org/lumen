@@ -149,6 +149,21 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\        };
             \\        return __sa().dupe(u8, std.mem.trimEnd(u8, raw, "\r\n")) catch "";
             \\    }
+            \\    // Exposes the connection's raw writer for one specific case: a
+            \\    // WebSocket upgrade. A 101 response has no body, so `self.body`
+            \\    // above is already the raw connection reader (Zig's client falls
+            \\    // back to it whenever there is no Content-Length and no chunked
+            \\    // encoding) -- this is the write half of that same connection,
+            \\    // for a caller that has seen status() == 101 and wants to hand-
+            \\    // frame bytes onto the wire. Guarded exactly like every other
+            \\    // method here: close()/exhaustion null `req`, so a write after
+            \\    // either is a no-op, not a use-after-free.
+            \\    fn write(self: *LumenHttpStream, chunk: []const u8) void {
+            \\        const rq = self.req orelse return;
+            \\        const conn = rq.connection orelse return;
+            \\        conn.writer().writeAll(chunk) catch return;
+            \\        conn.flush() catch {};
+            \\    }
             \\    fn close(self: *LumenHttpStream) void {
             \\        self.done_ = true;
             \\        self.__release();
