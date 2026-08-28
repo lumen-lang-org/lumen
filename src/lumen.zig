@@ -1988,17 +1988,26 @@ fn appendLink(arena: std.mem.Allocator, argv: *std.ArrayListUnmanaged([]const u8
     }
 }
 
-/// What `lumen compile --target <triple>` and `--static` asked for.
+/// What `lumen compile --target <triple>`, `--static` and `--library-path
+/// <dir>` asked for.
 ///
-/// These two reach the backend as `-target`/`-static`, and unlike every other
-/// link argument they have to be placed *before* the module (`-M`) arguments an
-/// async build uses: after them the backend keeps the host target and links the
-/// host libc, without saying so.
+/// These reach the backend as `-target`/`-static`/`-L<dir>`, and unlike every
+/// other link argument they have to be placed *before* the module (`-M`)
+/// arguments an async build uses: after them the backend keeps the host target
+/// and links the host libc, without saying so. A search path has the same
+/// requirement for its own reason -- a directory named after `-lgc` is read is
+/// a directory the collector is not found in.
 const TargetSpec = struct {
     triple: ?[]const u8 = null,
     static: bool = false,
+    /// Directories to search for libraries, in the order given.
+    lib_dirs: []const []const u8 = &.{},
 
     /// True when nothing was asked for: build for the host, as always.
+    ///
+    /// A search path is not part of this: naming somewhere to look for a
+    /// library says nothing about what is being built, and a host build with
+    /// `--library-path` is still a host build.
     fn isHost(self: TargetSpec) bool {
         return self.triple == null and !self.static;
     }
@@ -2907,6 +2916,9 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     var lead: std.ArrayListUnmanaged([]const u8) = .empty;
     if (target_triple) |triple| try lead.appendSlice(arena, &.{ "-target", triple });
     if (target.static) try lead.append(arena, "-static");
+    // Caller-named search paths come before the collector's own, so a program
+    // that stages its own `libgc.a` gets that one rather than the host's.
+    for (target.lib_dirs) |dir| try lead.append(arena, try std.fmt.allocPrint(arena, "-L{s}", .{dir}));
     if (!target.isHost() and needs_gc) {
         // Not the host's target, so not the host's collector: build one that
         // belongs to the libc being linked.
@@ -3295,7 +3307,7 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(2);
     }
 
-    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--target <triple>] [--static] [--link <lib>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen check <file.ts>\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
+    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--target <triple>] [--static] [--link <lib>] [--library-path <dir>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen check <file.ts>\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
     const code = if (std.mem.eql(u8, args[1], "init")) blk: {
         if (args.len > 3) {
             try err.writeAll(usage);
@@ -3412,6 +3424,7 @@ pub fn main(init: std.process.Init) !void {
         var mode: CompileMode = .release_safe;
         var source_arg: ?[]const u8 = null;
         var libs: std.ArrayListUnmanaged([]const u8) = .empty;
+        var lib_dirs: std.ArrayListUnmanaged([]const u8) = .empty;
         var wasm = false;
         var reactor = false;
         var target: TargetSpec = .{};
@@ -3438,6 +3451,15 @@ pub fn main(init: std.process.Init) !void {
                 target.triple = args[i];
             } else if (std.mem.startsWith(u8, arg, "--target=")) {
                 target.triple = arg["--target=".len..];
+            } else if (std.mem.eql(u8, arg, "--library-path")) {
+                i += 1;
+                if (i >= args.len) {
+                    try err.writeAll("error: --library-path needs a directory\n");
+                    break :blk 2;
+                }
+                try lib_dirs.append(arena, args[i]);
+            } else if (std.mem.startsWith(u8, arg, "--library-path=")) {
+                try lib_dirs.append(arena, arg["--library-path=".len..]);
             } else if (std.mem.eql(u8, arg, "--link")) {
                 i += 1;
                 if (i >= args.len) {
@@ -3452,7 +3474,11 @@ pub fn main(init: std.process.Init) !void {
                 // point at the flags that do the job.
                 if (args[i].len > 0 and args[i][0] == '-') {
                     try err.print("error: --link takes a library name or a path, not a backend flag ('{s}')\n", .{args[i]});
-                    try err.writeAll("note: to choose a target or a link mode use --target <triple> and --static\n");
+                    if (std.mem.startsWith(u8, args[i], "-L")) {
+                        try err.writeAll("note: to name a directory to search for libraries use --library-path <dir>\n");
+                    } else {
+                        try err.writeAll("note: to choose a target or a link mode use --target <triple> and --static\n");
+                    }
                     break :blk 2;
                 }
                 try libs.append(arena, args[i]);
@@ -3463,6 +3489,7 @@ pub fn main(init: std.process.Init) !void {
                 break :blk 2;
             }
         }
+        target.lib_dirs = lib_dirs.items;
         break :blk try compileFile(arena, io, source_arg orelse {
             try err.writeAll(usage);
             break :blk 2;
