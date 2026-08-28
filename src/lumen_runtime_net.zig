@@ -154,21 +154,45 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\    // upgrade, say. Reads off the exact same reader readLine() uses
             \\    // (self.body, which is already the raw connection reader for a
             \\    // 101's shape), but does no delimiter scan and no trimming:
-            \\    // one recv-style read, whatever arrived, "" on EOF/closed.
-            \\    // Mirrors LumenSocket.read() verbatim -- see that method's
-            \\    // comment for why readVec (one read, short is fine) and not
-            \\    // readSliceShort (loops to fill, misreads a short read as EOF).
+            \\    // one underlying read, whatever arrived, "" on EOF/closed.
+            \\    //
+            \\    // NOT readVec, the way LumenSocket.read() does it. readVec is
+            \\    // only correct on a reader whose vtable writes into the caller's
+            \\    // slices, which the plaintext stream reader does and TLS does
+            \\    // not: std.crypto.tls.Client's readVec ignores `data` entirely
+            \\    // ("This function writes exclusively to the buffer"), decrypts
+            \\    // the record into the reader's own buffer, and returns 0. On a
+            \\    // wss:// upgrade -- the only shape this method exists for --
+            \\    // readVec therefore reports 0 bytes with the peer's frame
+            \\    // sitting in the buffer, and reading that 0 as end of stream
+            \\    // drops every frame the server ever sends.
+            \\    //
+            \\    // fillMore() is the primitive that means "do one underlying
+            \\    // read, into the buffer"; it is what readLine()'s delimiter scan
+            \\    // already reaches through, and it is right for either vtable
+            \\    // shape. buffered()/toss() then hand out exactly what arrived.
+            \\    // Looking at the buffer before reading matters on its own:
+            \\    // receiveHead() leaves whatever came in alongside the 101 head
+            \\    // buffered, and for a server that speaks first that is the
+            \\    // whole first frame.
             \\    fn read(self: *LumenHttpStream) []const u8 {
             \\        if (self.done_) return "";
             \\        const r = self.body orelse {
             \\            self.done_ = true;
             \\            return "";
             \\        };
-            \\        var scratch: [65536]u8 = undefined;
-            \\        var data: [1][]u8 = .{&scratch};
-            \\        const n = r.readVec(&data) catch return "";
-            \\        if (n == 0) return "";
-            \\        return __sa().dupe(u8, scratch[0..n]) catch "";
+            \\        if (r.bufferedLen() == 0) {
+            \\            r.fillMore() catch {
+            \\                self.done_ = true;
+            \\                self.__release();
+            \\                return "";
+            \\            };
+            \\        }
+            \\        const avail = r.buffered();
+            \\        if (avail.len == 0) return "";
+            \\        const out = __sa().dupe(u8, avail) catch "";
+            \\        r.toss(avail.len);
+            \\        return out;
             \\    }
             \\    // Exposes the connection's raw writer for one specific case: a
             \\    // WebSocket upgrade. A 101 response has no body, so `self.body`

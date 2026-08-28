@@ -119,7 +119,7 @@ parseTypeMember:27, consumeTypeArgClose:109, parseFunctionType:140, parseTupleTy
 Runtime prelude codegen for the filesystem surface: async fs (libxev),
 emitFsRuntime:14
 
-## src/lumen_runtime_net.zig (1169 lines)
+## src/lumen_runtime_net.zig (1193 lines)
 Runtime prelude codegen for the network surface: the `http` client
 emitNetRuntime:14
 
@@ -287,4 +287,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 487-chained-assignment-targets 488-class-and-type-alias-names 489-method-and-module-function-names 
 490-net-server-concurrency 491-fs-append-real-append 491-version-stamping 492-map-set-thread-safety 
 492-readfilesync-shrink-abort 493-static-and-cross-target-builds 494-http-stream-write 
-495-http-stream-read 
+495-http-stream-read 496-http-stream-read-tls 
