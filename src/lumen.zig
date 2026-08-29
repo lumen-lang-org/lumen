@@ -2150,7 +2150,192 @@ fn fetchBdwgc(arena: std.mem.Allocator, io: std.Io) ![]const u8 {
 /// The libxev commit this compiler builds async programs against. Pinned (not
 /// `main`) so every compile fetches the identical, previously-verified source
 /// tree; bump deliberately when adopting a newer libxev.
+///
+/// Read `LIBXEV_PATCHES` before bumping this: the extracted tree is not
+/// pristine, and a bump that invalidates a carried fix fails the build on
+/// purpose rather than quietly dropping it.
 const LIBXEV_COMMIT = "9ce8e8e6ff89e583258a7f8e7adeeeaeae8611bf";
+
+/// Revision of `LIBXEV_PATCHES`. It is stamped into the extraction and checked
+/// on every reuse, so a tree left behind by an older compiler -- unpatched, or
+/// patched differently -- is re-fetched instead of silently reused. Bump it
+/// whenever `LIBXEV_PATCHES` changes.
+const LIBXEV_PATCH_REV = "1";
+
+/// One exact-text replacement against the extracted libxev tree.
+const LibxevPatch = struct {
+    /// Path within the extracted tree.
+    file: []const u8,
+    /// Text to replace. Must occur exactly once.
+    find: []const u8,
+    /// What to put there instead.
+    replace: []const u8,
+};
+
+/// Fixes this compiler carries against the pinned libxev tree. They are NOT
+/// upstream, and they are applied to the download, not to anything in this
+/// repository -- `applyLibxevPatches` runs them once, right after extraction.
+///
+/// What is carried, and why:
+///
+///   * `src/backend/epoll.zig`, the `pread` and `pwrite` prongs. Both file the
+///     error from a failed `thread_schedule` (and from a failed `fd_maybe_dup`
+///     or `epoll_ctl`) into the wrong field of the result union: `.read` and
+///     `.write` respectively, rather than `.pread` and `.pwrite`. The caller
+///     reads the field it asked for, so the program dies with `access of union
+///     field 'pwrite' while field 'write' is active` and the real error is
+///     never seen. Async file I/O on the epoll backend is what walks into it,
+///     which is every async program on a host where io_uring is unavailable.
+///
+/// Dropping a patch: bump `LIBXEV_COMMIT` to a tree that already has the fix,
+/// delete the entry, bump `LIBXEV_PATCH_REV`. A stale entry is not dangerous,
+/// only loud -- `applyLibxevPatches` refuses to build against a tree it could
+/// not patch, so a pin bump that lands the fix upstream reports itself.
+const LIBXEV_PATCHES = [_]LibxevPatch{
+    .{
+        .file = "src/backend/epoll.zig",
+        .find =
+        \\            .pread => res: {
+        \\                if (completion.flags.threadpool) {
+        \\                    if (self.thread_schedule(completion)) |_|
+        \\                        return
+        \\                    else |err|
+        \\                        break :res .{ .read = err };
+        \\                }
+        \\
+        \\                var ev: linux.epoll_event = .{
+        \\                    .events = linux.EPOLL.IN | linux.EPOLL.RDHUP,
+        \\                    .data = .{ .ptr = @intFromPtr(completion) },
+        \\                };
+        \\
+        \\                const fd = completion.fd_maybe_dup() catch |err| break :res .{ .read = err };
+        \\                break :res if (epoll_helper.epoll_ctl(
+        \\                    self.fd,
+        \\                    linux.EPOLL.CTL_ADD,
+        \\                    fd,
+        \\                    &ev,
+        \\                )) null else |err| .{ .read = err };
+        \\            },
+        ,
+        .replace =
+        \\            // lumen: local carry, applied by the compiler when it fetches libxev.
+        \\            // See LIBXEV_PATCHES in src/lumen.zig for what this fixes and when
+        \\            // it can be dropped. Not an upstream change.
+        \\            .pread => res: {
+        \\                if (completion.flags.threadpool) {
+        \\                    if (self.thread_schedule(completion)) |_|
+        \\                        return
+        \\                    else |err|
+        \\                        break :res .{ .pread = err };
+        \\                }
+        \\
+        \\                var ev: linux.epoll_event = .{
+        \\                    .events = linux.EPOLL.IN | linux.EPOLL.RDHUP,
+        \\                    .data = .{ .ptr = @intFromPtr(completion) },
+        \\                };
+        \\
+        \\                const fd = completion.fd_maybe_dup() catch |err| break :res .{ .pread = err };
+        \\                break :res if (epoll_helper.epoll_ctl(
+        \\                    self.fd,
+        \\                    linux.EPOLL.CTL_ADD,
+        \\                    fd,
+        \\                    &ev,
+        \\                )) null else |err| .{ .pread = err };
+        \\            },
+        ,
+    },
+    .{
+        .file = "src/backend/epoll.zig",
+        .find =
+        \\            .pwrite => res: {
+        \\                if (completion.flags.threadpool) {
+        \\                    if (self.thread_schedule(completion)) |_|
+        \\                        return
+        \\                    else |err|
+        \\                        break :res .{ .write = err };
+        \\                }
+        \\
+        \\                var ev: linux.epoll_event = .{
+        \\                    .events = linux.EPOLL.OUT,
+        \\                    .data = .{ .ptr = @intFromPtr(completion) },
+        \\                };
+        \\
+        \\                const fd = completion.fd_maybe_dup() catch |err| break :res .{ .write = err };
+        \\                break :res if (epoll_helper.epoll_ctl(
+        \\                    self.fd,
+        \\                    linux.EPOLL.CTL_ADD,
+        \\                    fd,
+        \\                    &ev,
+        \\                )) null else |err| .{ .write = err };
+        \\            },
+        ,
+        .replace =
+        \\            // lumen: local carry, applied by the compiler when it fetches libxev.
+        \\            // See LIBXEV_PATCHES in src/lumen.zig for what this fixes and when
+        \\            // it can be dropped. Not an upstream change.
+        \\            .pwrite => res: {
+        \\                if (completion.flags.threadpool) {
+        \\                    if (self.thread_schedule(completion)) |_|
+        \\                        return
+        \\                    else |err|
+        \\                        break :res .{ .pwrite = err };
+        \\                }
+        \\
+        \\                var ev: linux.epoll_event = .{
+        \\                    .events = linux.EPOLL.OUT,
+        \\                    .data = .{ .ptr = @intFromPtr(completion) },
+        \\                };
+        \\
+        \\                const fd = completion.fd_maybe_dup() catch |err| break :res .{ .pwrite = err };
+        \\                break :res if (epoll_helper.epoll_ctl(
+        \\                    self.fd,
+        \\                    linux.EPOLL.CTL_ADD,
+        \\                    fd,
+        \\                    &ev,
+        \\                )) null else |err| .{ .pwrite = err };
+        \\            },
+        ,
+    },
+};
+
+/// Applies `LIBXEV_PATCHES` to a freshly extracted libxev tree.
+///
+/// A patch that does not apply is a hard error. That is the point: the next
+/// person to bump `LIBXEV_COMMIT` finds out this tree carries local fixes from
+/// a failing build, not from a program that misbehaves some months later.
+fn applyLibxevPatches(
+    arena: std.mem.Allocator,
+    io: std.Io,
+    dir: []const u8,
+    err: *std.Io.Writer,
+) !void {
+    for (LIBXEV_PATCHES) |patch| {
+        const path = try std.fs.path.join(arena, &.{ dir, patch.file });
+        const src = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(8 * 1024 * 1024)) catch {
+            try err.print("error: libxev patch target is missing: {s}\n", .{patch.file});
+            return error.LibxevPatchFailed;
+        };
+        const at = std.mem.indexOf(u8, src, patch.find) orelse {
+            try err.print(
+                "error: a fix this compiler carries against libxev no longer applies to {s}\n" ++
+                    "  the pinned commit is {s}\n" ++
+                    "  if the fix is upstream now, drop its entry from LIBXEV_PATCHES in src/lumen.zig\n" ++
+                    "  and bump LIBXEV_PATCH_REV; otherwise update the entry to match the new source\n",
+                .{ patch.file, LIBXEV_COMMIT[0..12] },
+            );
+            return error.LibxevPatchFailed;
+        };
+        if (std.mem.indexOfPos(u8, src, at + patch.find.len, patch.find) != null) {
+            try err.print("error: a libxev patch for {s} matches more than once\n", .{patch.file});
+            return error.LibxevPatchFailed;
+        }
+        var patched: std.ArrayListUnmanaged(u8) = .empty;
+        try patched.appendSlice(arena, src[0..at]);
+        try patched.appendSlice(arena, patch.replace);
+        try patched.appendSlice(arena, src[at + patch.find.len ..]);
+        try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = patched.items });
+    }
+}
 
 /// Fetches and extracts libxev's source (the async event loop backing
 /// async/await, Promise, and setTimeout) and returns a local path to its
@@ -2159,11 +2344,18 @@ const LIBXEV_COMMIT = "9ce8e8e6ff89e583258a7f8e7adeeeaeae8611bf";
 /// replaced), so this mirrors `fetchWasmLib`'s fetch-and-cache shape rather
 /// than `pkg-config`: a one-time download (gzip+tar extracted via `std.compress
 /// .flate`/`std.tar`) cached by commit, reused on every later compile.
-fn fetchLibxev(arena: std.mem.Allocator, io: std.Io) ![]const u8 {
+fn fetchLibxev(arena: std.mem.Allocator, io: std.Io, err: *std.Io.Writer) ![]const u8 {
     const cache_dir = ".lumen-libxev-" ++ LIBXEV_COMMIT[0..12];
     const root = cache_dir ++ "/src/main.zig";
-    if (std.Io.Dir.cwd().access(io, root, .{})) |_| {
-        return root;
+    const stamp = cache_dir ++ "/.lumen-patch-rev";
+
+    // The extracted tree is patched (see `LIBXEV_PATCHES`), so "the directory
+    // exists" is no longer enough to reuse it: a tree left by a compiler that
+    // carried different fixes, or none, would be reused unpatched and fail in
+    // a way that pointed nowhere near here. The stamp is written last, so it
+    // also means "extraction and patching both finished".
+    if (std.Io.Dir.cwd().readFileAlloc(io, stamp, arena, .limited(64))) |rev| {
+        if (std.mem.eql(u8, std.mem.trim(u8, rev, " \r\n"), LIBXEV_PATCH_REV)) return root;
     } else |_| {}
 
     const url = "https://github.com/mitchellh/libxev/archive/" ++ LIBXEV_COMMIT ++ ".tar.gz";
@@ -2173,10 +2365,17 @@ fn fetchLibxev(arena: std.mem.Allocator, io: std.Io) ![]const u8 {
     const decomp_buf = try arena.alloc(u8, std.compress.flate.max_window_len);
     var decomp = std.compress.flate.Decompress.init(&fixed_reader, .gzip, decomp_buf);
 
+    // Whatever is there is an extraction this compiler will not reuse: no
+    // stamp, or the wrong one. `std.tar.extract` will not write over it, so
+    // clear it rather than fail on the first directory it meets.
+    std.Io.Dir.cwd().deleteTree(io, cache_dir) catch {};
     try std.Io.Dir.cwd().createDirPath(io, cache_dir);
     var out_dir = try std.Io.Dir.cwd().openDir(io, cache_dir, .{ .iterate = true });
     defer out_dir.close(io);
     try std.tar.extract(io, out_dir, &decomp.reader, .{ .strip_components = 1 });
+
+    try applyLibxevPatches(arena, io, cache_dir, err);
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = stamp, .data = LIBXEV_PATCH_REV });
 
     return root;
 }
@@ -2934,7 +3133,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             // library: fetched once and wired in as a named module via `-Mxev=`,
             // bare CLI flags (no build.zig needed) -- the same single-file
             // `zig build-exe` invocation as every other compile.
-            const xev_root = fetchLibxev(arena, io) catch |e| {
+            const xev_root = fetchLibxev(arena, io, err) catch |e| {
                 try err.print("{s}:1:1: error: could not fetch the libxev async runtime: {s}\n", .{ path, @errorName(e) });
                 return 1;
             };
