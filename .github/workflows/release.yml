@@ -1,8 +1,8 @@
 name: release
 
 # Build self-contained Lumen archives for every platform and attach them to the
-# GitHub Release. Cross-compiled entirely from one Linux runner — Zig is a
-# first-class cross-compiler, so a single job produces all targets.
+# GitHub Release. Cross-compiled entirely from Linux runners — Zig is a
+# first-class cross-compiler, so no target needs a machine of its own.
 #
 # Trigger: push a tag like `v0.1.0`.
 
@@ -19,9 +19,12 @@ env:
 
 jobs:
   release:
-    # Self-hosted runner (label `diff`). One machine cross-compiles every target
-    # (Zig). Requires on the runner: zig 0.16.0, curl, tar (with xz), unzip, zip.
-    runs-on: [self-hosted, diff]
+    # GitHub-hosted runner. This repository is public, so these cost nothing and
+    # the five targets build at once instead of queueing behind the two machines
+    # labelled `diff`. The job needs curl, tar (with xz), unzip and zip, all of
+    # which the image carries; the toolchain it does not rely on the machine for
+    # at all, since the step below downloads the Zig it builds with.
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -60,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Provide a host Zig for building (don't rely on the runner's PATH).
+      # The build's own Zig, downloaded rather than expected on the machine.
       - name: Set up host Zig
         run: |
           host_arch=$(uname -m)
