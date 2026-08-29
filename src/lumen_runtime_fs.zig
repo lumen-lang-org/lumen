@@ -468,8 +468,12 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         // the same shape Node's own libuv uses for most of its async fs, and
         // the same mechanism libxev's own kqueue backend already relies on
         // internally for its file I/O (kqueue has no native completion-based
-        // filesystem I/O either). One shared ThreadPool + one shared
-        // xev.Async bridge per program, not one per call.
+        // filesystem I/O either). They run on the same pool the event loop
+        // itself was given (`__xev_pool`, see `LumenLoop.init`) rather than a
+        // second one: a program that needs this plumbing is asynchronous by
+        // definition, so that pool always exists, and one pool per program is
+        // the point of having a pool. One shared xev.Async bridge per program,
+        // not one per call.
         //
         // LumenPromise.resolve() is a plain, non-atomic field write, and
         // LumenLoop.driveUntil/.drain poll it from the main thread while
@@ -481,13 +485,11 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
         // .resolve(), keeping LumenPromise itself completely unchanged.
         try out.appendSlice(arena,
             \\const __FsDone = struct { ctx: *anyopaque, finish: *const fn (*anyopaque) void };
-            \\var __fs_pool: xev.ThreadPool = undefined;
             \\var __fs_async: xev.Async = undefined;
             \\var __fs_async_c: xev.Completion = undefined;
             \\var __fs_done_mutex: std.Io.Mutex = .init;
             \\var __fs_done_queue: std.ArrayListUnmanaged(__FsDone) = .empty;
             \\fn __fsThreadPoolInit() void {
-            \\    __fs_pool = xev.ThreadPool.init(.{});
             \\    __fs_async = xev.Async.init() catch unreachable;
             \\    __fs_async.wait(&__xev_loop, &__fs_async_c, void, null, __fsOnWake);
             \\}
@@ -530,7 +532,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    const p = LumenPromise(void).create();
             \\    const st = __alloc.create(__UnlinkState) catch unreachable;
             \\    st.* = .{ .path = path, .promise = p };
-            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    __xev_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
             \\    return p;
             \\}
             \\
@@ -558,7 +560,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    const p = LumenPromise(void).create();
             \\    const st = __alloc.create(__MkdirState) catch unreachable;
             \\    st.* = .{ .path = path, .promise = p };
-            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    __xev_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
             \\    return p;
             \\}
             \\
@@ -586,7 +588,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    const p = LumenPromise(void).create();
             \\    const st = __alloc.create(__RmdirState) catch unreachable;
             \\    st.* = .{ .path = path, .promise = p };
-            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    __xev_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
             \\    return p;
             \\}
             \\
@@ -615,7 +617,7 @@ pub fn emitFsRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8),
             \\    const p = LumenPromise(__LumenStat).create();
             \\    const st = __alloc.create(__StatState) catch unreachable;
             \\    st.* = .{ .path = path, .promise = p };
-            \\    __fs_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
+            \\    __xev_pool.schedule(xev.ThreadPool.Batch.from(&st.task));
             \\    return p;
             \\}
             \\

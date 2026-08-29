@@ -529,8 +529,24 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     // treatment.
     const needs_http_threadpool = program.needs_http_server and !options.wasm;
     const needs_net_threadpool = program.needs_net_server and !options.wasm;
+    // Which backend the loop runs on is decided at run time, not here. libxev's
+    // package root binds `Backend.default()` -- io_uring on Linux -- so a binary
+    // built against it cannot start at all where io_uring is unavailable: a
+    // seccomp profile without `io_uring_setup` answers EPERM, and a container
+    // sandbox is the ordinary place for that. `Dynamic` keeps the same API but
+    // probes its candidates in order and takes the first the system allows:
+    // io_uring, then epoll.
+    //
+    // Where a platform has only one candidate (macOS, Windows, WASI) `Dynamic`
+    // collapses to that backend's static API, which does not forward
+    // `ThreadPool`. There the package root is both the right type and the same
+    // behaviour, so the generated source picks between them rather than the
+    // compiler guessing from the target triple.
     if (program.needs_async or needs_http_threadpool or needs_net_threadpool) {
-        try out.appendSlice(arena, "const xev = @import(\"xev\");\n");
+        try out.appendSlice(arena,
+            \\const xev = if (@import("xev").Dynamic.dynamic) @import("xev").Dynamic else @import("xev");
+            \\
+        );
     }
 
     // I/O plumbing is hoisted to file scope so builtins (arg, fs, httpGet, …)
@@ -975,8 +991,67 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         // equal-deadline timers in start order).
         try out.appendSlice(arena,
             \\var __xev_loop: xev.Loop = undefined;
+            \\var __xev_pool: xev.ThreadPool = undefined;
+            \\const __xev_candidates: []const u8 = if (@hasDecl(xev, "candidates")) c: {
+            \\    var names: []const u8 = "";
+            \\    for (xev.candidates, 0..) |be, i| names = names ++ (if (i == 0) "" else ", ") ++ @tagName(be);
+            \\    break :c names;
+            \\} else @tagName(xev.backend);
+            \\fn __xevStartFailed(what: []const u8, which: []const u8, why: []const u8) noreturn {
+            \\    std.debug.print("lumen: could not {s}\n", .{what});
+            \\    std.debug.print("  backend:    {s}\n", .{which});
+            \\    std.debug.print("  candidates: {s}\n", .{__xev_candidates});
+            \\    std.debug.print("  error:      {s}\n", .{why});
+            \\    std.debug.print("  This program is asynchronous, so it needs an event-loop backend the\n", .{});
+            \\    std.debug.print("  system will let it start. A sandbox or seccomp profile that blocks a\n", .{});
+            \\    std.debug.print("  backend's syscalls is the usual cause: io_uring needs io_uring_setup\n", .{});
+            \\    std.debug.print("  and io_uring_enter, epoll needs epoll_create1, epoll_ctl, epoll_pwait\n", .{});
+            \\    std.debug.print("  and eventfd2.\n", .{});
+            \\    std.process.exit(1);
+            \\}
+            \\fn __xevBadRequest(name: []const u8) noreturn {
+            \\    std.debug.print("lumen: LUMEN_EVENT_BACKEND names an event-loop backend this program cannot use\n", .{});
+            \\    std.debug.print("  requested:  {s}\n", .{name});
+            \\    std.debug.print("  candidates: {s}\n", .{__xev_candidates});
+            \\    std.debug.print("  A named backend has to be one of the candidates above and available on\n", .{});
+            \\    std.debug.print("  this system. Unset LUMEN_EVENT_BACKEND to let the runtime choose.\n", .{});
+            \\    std.process.exit(1);
+            \\}
+            \\fn __xevPrefer(name: []const u8) bool {
+            \\    inline for (xev.candidates) |be| {
+            \\        if (std.mem.eql(u8, name, @tagName(be))) return xev.prefer(be);
+            \\    }
+            \\    return false;
+            \\}
             \\const LumenLoop = struct {
-            \\    fn init() void { __xev_loop = xev.Loop.init(.{}) catch unreachable; }
+            \\    // Pick a backend before anything else touches libxev: every
+            \\    // watcher (Timer, Async, File) reads the selected backend when
+            \\    // it is initialized, and `Dynamic` defaults to a candidate it
+            \\    // has not probed until `detect()` says otherwise.
+            \\    //
+            \\    // `LUMEN_EVENT_BACKEND` overrides the probe. An explicit choice
+            \\    // that cannot be honoured is a failure rather than a silent
+            \\    // fallback -- someone naming a backend wants to know they did
+            \\    // not get it. Its real job is testing: it is what lets the
+            \\    // epoll path be exercised on a host where io_uring works.
+            \\    //
+            \\    // The loop always gets a thread pool. epoll has no completion-
+            \\    // based file I/O of its own and offloads `pread`/`pwrite` to a
+            \\    // pool, failing the operation outright when there is none;
+            \\    // io_uring never asks for one. A pool spawns no threads until
+            \\    // something is scheduled on it, so the io_uring path pays
+            \\    // nothing for carrying it.
+            \\    fn init(requested: ?[]const u8) void {
+            \\        if (@hasDecl(xev, "detect")) {
+            \\            if (requested) |name| {
+            \\                if (!__xevPrefer(name)) __xevBadRequest(name);
+            \\            } else xev.detect() catch |e|
+            \\                __xevStartFailed("select an event-loop backend", "none", @errorName(e));
+            \\        }
+            \\        __xev_pool = xev.ThreadPool.init(.{});
+            \\        __xev_loop = xev.Loop.init(.{ .thread_pool = &__xev_pool }) catch |e|
+            \\            __xevStartFailed("start the async event loop", @tagName(xev.backend), @errorName(e));
+            \\    }
             \\    fn driveUntil(ctx: *const anyopaque, done: *const fn (*const anyopaque) bool) void {
             \\        while (!done(ctx)) {
             \\            __xev_loop.run(.once) catch break;
@@ -1103,7 +1178,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
             try out.appendSlice(arena, "    __process_start_ns = @intCast(std.Io.Clock.now(.awake, __io).nanoseconds);\n");
         }
         if (program.needs_async) {
-            try out.appendSlice(arena, "    LumenLoop.init();\n");
+            try out.appendSlice(arena, "    LumenLoop.init(__init.environ_map.get(\"LUMEN_EVENT_BACKEND\"));\n");
         }
         if (program.needs_thread_pool_fs) {
             try out.appendSlice(arena, "    __fsThreadPoolInit();\n");
