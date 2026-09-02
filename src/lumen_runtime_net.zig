@@ -1138,6 +1138,10 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
         // zeroes and travelled on as though it had parsed.
         try out.appendSlice(arena,
             \\fn __jsonBlame(comptime T: type, alloc: std.mem.Allocator, text: []const u8) ?[]const u8 {
+            \\    return __jsonBlameOpt(T, alloc, text, false);
+            \\}
+            \\
+            \\fn __jsonBlameOpt(comptime T: type, alloc: std.mem.Allocator, text: []const u8, __open: bool) ?[]const u8 {
             \\    const S = switch (@typeInfo(T)) { .pointer => |pt| pt.child, .optional => |o| o.child, else => T };
             \\    const info = @typeInfo(S);
             \\    if (info != .@"struct") return null;
@@ -1157,7 +1161,7 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\        inline for (info.@"struct".fields) |f| {
             \\            if (std.mem.eql(u8, f.name, kv.key_ptr.*)) known = true;
             \\        }
-            \\        if (!known) {
+            \\        if (!known and !__open) {
             \\            return std.fmt.allocPrint(alloc, "JSON.parse: the field \"{s}\" is not one this accepts", .{kv.key_ptr.*}) catch null;
             \\        }
             \\    }
@@ -1181,6 +1185,16 @@ pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8)
             \\fn __jsonParse(comptime T: type, alloc: std.mem.Allocator, text: []const u8) error{LumenThrow}!T {
             \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{}) catch |e| {
             \\        __lumen_err_msg = __jsonBlame(T, alloc, text) orelse
+            \\            (std.fmt.allocPrint(alloc, "JSON.parse: invalid JSON ({s})", .{@errorName(e)}) catch "JSON.parse: invalid JSON");
+            \\        __lumen_throwing = true;
+            \\        return error.LumenThrow;
+            \\    };
+            \\    return parsed.value;
+            \\}
+            \\
+            \\fn __jsonParseOpen(comptime T: type, alloc: std.mem.Allocator, text: []const u8) error{LumenThrow}!T {
+            \\    const parsed = std.json.parseFromSlice(T, alloc, text, .{ .ignore_unknown_fields = true }) catch |e| {
+            \\        __lumen_err_msg = __jsonBlameOpt(T, alloc, text, true) orelse
             \\            (std.fmt.allocPrint(alloc, "JSON.parse: invalid JSON ({s})", .{@errorName(e)}) catch "JSON.parse: invalid JSON");
             \\        __lumen_throwing = true;
             \\        return error.LumenThrow;
