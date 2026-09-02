@@ -1007,6 +1007,13 @@ fn canonicalModuleKey(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
     return buf.items;
 }
 
+/// Decorators the compiler answers for itself. `@must_use` carries no code and
+/// imports nothing: it marks a function whose return value is the point of
+/// calling it, and the checker warns where a call to one is thrown away.
+pub fn isBuiltinMarker(name: []const u8) bool {
+    return std.mem.eql(u8, name, "must_use");
+}
+
 /// The decorator that could not run, for `compileFile` to report once the
 /// expansion has unwound. Mirrors `g_import_detail`: the expander returns an
 /// error, and the located message waits here.
@@ -1091,6 +1098,9 @@ fn runDecorators(
 
     var generated: std.ArrayListUnmanaged(decorator.Generated) = .empty;
     for (apps) |app| {
+        // A built-in marker is read by the checker and runs nothing, so it has
+        // no module to bind to and must not be asked for one.
+        if (isBuiltinMarker(app.name)) continue;
         const binding = bindings.get(app.name) orelse return decoratorFailed(arena, path, app, "'@{s}' is not imported — a decorator is an ordinary imported function, so add `import {{ {s} }} from \"./…\";`", .{ app.name, app.name });
         const module_path = if (std.mem.startsWith(u8, binding.spec, "https://"))
             resolveUrlToLocal(arena, io, binding.spec) catch

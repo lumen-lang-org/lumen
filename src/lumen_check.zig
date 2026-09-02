@@ -100,7 +100,19 @@ const FunctionInfo = struct {
     // guarded and the type a truthy result narrows it to.
     predicate_param: ?usize = null,
     predicate_type: ?[]const u8 = null,
+    // `@must_use`: the return value is the point of calling this, so a call
+    // whose result is discarded is a mistake worth naming.
+    must_use: bool = false,
 };
+
+/// Whether a declaration carries `@must_use`, the built-in marker saying its
+/// return value is the reason to call it.
+pub fn hasMustUse(decorators: []ast.Decorator) bool {
+    for (decorators) |d| {
+        if (std.mem.eql(u8, d.name, "must_use")) return true;
+    }
+    return false;
+}
 
 const EnumInfo = struct {
     is_string: bool,
@@ -1358,7 +1370,7 @@ pub const Checker = struct {
             if (pred_idx == null) return self.fail(decl.line, decl.col, "a type-guard predicate must name one of the function's parameters");
             _ = try self.typeFromAnnotation(decl.predicate_type.?, decl.line, decl.col); // validate the target type
         }
-        self.funcs.put(self.arena, decl.name, .{ .params = decl.params, .return_type = return_type, .predicate_param = pred_idx, .predicate_type = decl.predicate_type }) catch return error.OutOfMemory;
+        self.funcs.put(self.arena, decl.name, .{ .params = decl.params, .return_type = return_type, .predicate_param = pred_idx, .predicate_type = decl.predicate_type, .must_use = hasMustUse(decl.decorators) }) catch return error.OutOfMemory;
     }
 
     /// Validates structural default-value and rest-parameter rules over a resolved
