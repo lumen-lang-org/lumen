@@ -1376,6 +1376,18 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
             // A pure transform used as a statement silently does nothing —
             // Lumen arrays/strings are immutable, so `names.sort()` returns a
             // new value the caller must keep (spec 271).
+            // A call to a `@must_use` function, thrown away. The marker says
+            // the returned value is the reason to call it - for a transform on
+            // an immutable value, discarding it is the whole bug (spec 499).
+            if (et != .void and expr_stmt.value.* == .call) {
+                const c = expr_stmt.value.call;
+                if (self.funcs.get(c.name)) |info| {
+                    if (info.must_use) {
+                        const msg = std.fmt.allocPrint(self.arena, "result of '{s}()' is discarded — it is marked @must_use, so the value it returns is the reason to call it; assign it: `let x = {s}(...)`", .{ c.name, c.name }) catch "discarded must_use result";
+                        self.warnings.append(self.arena, .{ .line = expr_stmt.line, .col = expr_stmt.col, .msg = msg }) catch {};
+                    }
+                }
+            }
             if (et != .void and expr_stmt.value.* == .method_call) {
                 const mc = expr_stmt.value.method_call;
                 if (!mc.is_console and (mc.array_result_type != null or mc.string_method)) {
