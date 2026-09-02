@@ -40,9 +40,9 @@ namespace:32, classMetaCall:37
 Type-checking for stdlib *instance* methods: methods called on a value of
 cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:874, responseWriterMethod:947, bufferMethod:1000, numberInstanceMethod:1057, stringMethod:1137, hashMethod:1289, hmacMethod:1318
 
-## src/lumen_check_stdlib.zig (1536 lines)
+## src/lumen_check_stdlib.zig (1539 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
-staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:873, jsonSerializable:952, registerLumenHttpResponse:970, registerLumenHttpRequest:992, promiseCallType:1013, mathCallType:1085, stringCallType:1337, arrayCallType:1403
+staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:873, jsonSerializable:955, registerLumenHttpResponse:973, registerLumenHttpRequest:995, promiseCallType:1016, mathCallType:1088, stringCallType:1340, arrayCallType:1406
 
 ## src/lumen_check_stdlib_os.zig (1427 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
@@ -83,7 +83,7 @@ emitElemEq:26, emitArrayMethod:75, emitStringMethod:455, emitTemplateText:762
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:325, emitSuperCopies:391, collectSuperInStmt:395, collectSuperInExpr:415, ifaceMethodThrows:469, emitIfaceDecl:482, emitClassVtables:500
 
-## src/lumen_emit_static.zig (1187 lines)
+## src/lumen_emit_static.zig (1188 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
 emitStaticCall:12
 
@@ -119,7 +119,7 @@ parseTypeMember:27, consumeTypeArgClose:109, parseFunctionType:140, parseTupleTy
 Runtime prelude codegen for the filesystem surface: async fs (libxev),
 emitFsRuntime:14
 
-## src/lumen_runtime_net.zig (1193 lines)
+## src/lumen_runtime_net.zig (1207 lines)
 Runtime prelude codegen for the network surface: the `http` client
 emitNetRuntime:14
 
@@ -288,4 +288,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 490-net-server-concurrency 491-fs-append-real-append 491-version-stamping 492-map-set-thread-safety 
 492-readfilesync-shrink-abort 493-static-and-cross-target-builds 494-http-stream-write 
 495-http-stream-read 496-http-stream-read-tls 497-library-search-path 
-498-runtime-event-loop-backend 499-must-use 
+498-runtime-event-loop-backend 499-must-use 500-json-parse-open 

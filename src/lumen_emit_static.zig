@@ -920,7 +920,7 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
             try em.emitExpr(cl.args[0], w, arena);
             try w.append(arena, ')');
         }
-    } else if (std.mem.eql(u8, cl.namespace, "JSON") and std.mem.eql(u8, cl.name, "parse")) {
+    } else if (std.mem.eql(u8, cl.namespace, "JSON") and (std.mem.eql(u8, cl.name, "parse") or std.mem.eql(u8, cl.name, "parseOpen"))) {
         const result_type = cl.checked_arg_type orelse .void;
         const zig_name = types.zigName(arena, result_type) catch "void";
         // The last of the calls that used to throw only in some build modes.
@@ -930,7 +930,8 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         // Zig rejected the program with "unused block label". The engine's
         // own vertex.ts is where that surfaced.
         try em.emitThrowingCallPrefix(w, arena);
-        try w.print(arena, "__jsonParse({s}, __alloc, ", .{zig_name});
+        const parse_fn = if (std.mem.eql(u8, cl.name, "parseOpen")) "__jsonParseOpen" else "__jsonParse";
+        try w.print(arena, "{s}({s}, __alloc, ", .{ parse_fn, zig_name });
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
         try em.emitThrowingCallSuffix(w, arena);

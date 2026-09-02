@@ -908,7 +908,10 @@ pub fn jsonCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         call.checked_type = .string;
         return .string;
     }
-    if (std.mem.eql(u8, call.name, "parse")) {
+    // `parseOpen` is `parse` that keeps going past a member the type does not
+    // declare (spec 500). Same arguments, same result, same checking - the
+    // difference is only what the generated parser does with an extra field.
+    if (std.mem.eql(u8, call.name, "parse") or std.mem.eql(u8, call.name, "parseOpen")) {
         if (call.args.len != 1) {
             _ = self.fail(line, col, "E_ARG_COUNT") catch {};
             return null;
