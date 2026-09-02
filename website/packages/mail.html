@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>mathx · Packages · Lumen</title>
-<meta name="description" content="Integer math helpers: gcd, lcm, ipow, isPrime, clampInt.">
+<title>mail · Packages · Lumen</title>
+<meta name="description" content="Sending mail: one Mailer interface, Resend and SendGrid implementations, one HTML shell.">
 <link rel="stylesheet" href="/style.css">
-<link rel="canonical" href="https://lumen-lang.org/packages/mathx">
-<meta property="og:url" content="https://lumen-lang.org/packages/mathx">
-<meta property="og:title" content="mathx · Packages · Lumen">
-<meta property="og:description" content="Integer math helpers: gcd, lcm, ipow, isPrime, clampInt.">
-<meta name="twitter:title" content="mathx · Packages · Lumen">
-<meta name="twitter:description" content="Integer math helpers: gcd, lcm, ipow, isPrime, clampInt.">
+<link rel="canonical" href="https://lumen-lang.org/packages/mail">
+<meta property="og:url" content="https://lumen-lang.org/packages/mail">
+<meta property="og:title" content="mail · Packages · Lumen">
+<meta property="og:description" content="Sending mail: one Mailer interface, Resend and SendGrid implementations, one HTML shell.">
+<meta name="twitter:title" content="mail · Packages · Lumen">
+<meta name="twitter:description" content="Sending mail: one Mailer interface, Resend and SendGrid implementations, one HTML shell.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -42,7 +42,7 @@
 <section class="wrap">
   <div class="docs">
   <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
-    <span id="docs-nav-toggle-label">mathx</span>
+    <span id="docs-nav-toggle-label">mail</span>
     <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
   <aside class="docs-nav" id="docs-nav"><nav>
@@ -77,30 +77,59 @@
     <a href="/packages/quickjs">quickjs</a>
     <a href="/packages/cron">cron</a>
     <a href="/packages/tty">tty</a>
-    <a href="/packages/mail">mail</a>
+    <a href="/packages/mail" class="active">mail</a>
     <p class="docs-nav-title">Small & example</p>
-    <a href="/packages/mathx" class="active">mathx</a>
+    <a href="/packages/mathx">mathx</a>
     <a href="/packages/geo">geo</a>
     <a href="/packages/hello">hello</a>
     <a href="/packages/greeter">greeter</a>
   </nav></aside>
   <div class="docs-main">
-  <p class="sub"><a href="/packages">Packages</a> / <strong>mathx</strong>
-  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/mathx">source</a></p>
-  <h2>mathx</h2>
-  <p class="sub">Integer math helpers.</p>
-  <table>
-    <tr><th>Function</th><th>Signature</th></tr>
-    <tr><td><code>gcd</code></td><td><code>(a: int, b: int) =&gt; int</code></td></tr>
-    <tr><td><code>lcm</code></td><td><code>(a: int, b: int) =&gt; int</code></td></tr>
-    <tr><td><code>ipow</code></td><td><code>(base: int, exp: int) =&gt; int</code></td></tr>
-    <tr><td><code>isPrime</code></td><td><code>(n: int) =&gt; bool</code></td></tr>
-    <tr><td><code>clampInt</code></td><td><code>(v: int, lo: int, hi: int) =&gt; int</code></td></tr>
-  </table>
-<pre><code class="lumen">console.log(gcd(12, 8));     // 4
-console.log(ipow(2, 10));    // 1024
-console.log(isPrime(13));    // true</code></pre>
-  <p class="sub">Test: <code>lumen test packages/mathx/mathx.ts</code></p>
+  <p class="sub"><a href="/packages">Packages</a> / <strong>mail</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/mail">source</a></p>
+  <h2>mail</h2>
+  <p class="sub">Sending mail from a Lumen program. One <code>Mailer</code> interface, one module per service, one HTML shell.</p>
+<pre><code class="lumen">export type Mailer = {
+  name: string,
+  credential: string,
+  deliver: (key: string, message: MailMessage) =&gt; MailReply,
+};</code></pre>
+  <p class="sub">Ships with <code>resend.ts</code> and <code>sendgrid.ts</code>.</p>
+  <h3>Use</h3>
+<pre><code class="lumen">import { MailAsk, MailPost, mailWith } from "./mail.ts";
+import { resendMailer } from "./resend.ts";
+
+let post: MailPost = {
+  from: "Joule &lt;hello@joule.sh&gt;",
+  replyTo: "",
+  key: apiKey,                       // already decrypted; this package reads no key store
+  brand: "Joule",
+  footer: "Sent by an agent on Joule.",
+};
+let ask: MailAsk = {
+  to: "someone@example.com, another@example.com",
+  subject: "Weekly report",
+  body: "All quiet.\n\nNothing needed your attention this week.",
+};
+
+let sent = mailWith(resendMailer(), post, ask);
+if (!sent.ok) {
+  print(sent.fault);
+}</code></pre>
+  <p class="sub">The body is prose. Blank lines become paragraphs, single newlines become breaks, and the plain-text part is what you wrote, unchanged.</p>
+  <p class="sub"><code>from</code> comes from the caller, never from the message.</p>
+  <h3>Refused before a request</h3>
+  <ul>
+    <li>an address that is not one — and the whole list, not the addresses either side of the typo</li>
+    <li>more than ten recipients</li>
+    <li>a newline in the subject</li>
+    <li>an empty subject or body</li>
+    <li>a body over 100,000 characters</li>
+  </ul>
+  <h3>Answers</h3>
+  <p class="sub"><code>mailWith</code> says whether the service accepted the message. Whether it arrived is the service's own webhooks; <code>MailReply.id</code> is kept so a program can ask later. SendGrid returns 202 with no body, so <code>id</code> is empty there.</p>
+  <h3>Adding a service</h3>
+  <p class="sub">A module with a <code>deliver</code> and a constructor, and a line wherever your program picks one. <code>mail.ts</code> does not change.</p>
   </div>
   </div>
 </section>

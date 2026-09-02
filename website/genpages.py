@@ -45,9 +45,9 @@ INDEX = PKGS.parent / "index.json"
 GROUPS = [
     ("Formats", ["csv", "toml", "dotenv", "semver", "markdown", "pdf"]),
     ("Data", ["plume", "sqlite", "pgvector"]),
-    ("Servers", ["rest", "websocket", "socketio", "sse", "press", "validation"]),
+    ("Servers", ["rest", "openapi", "websocket", "socketio", "sse", "press", "validation"]),
     ("AI & agents", ["ai", "agents", "tracing"]),
-    ("Tooling", ["token-gate", "code-index", "args", "quickjs", "cron"]),
+    ("Tooling", ["token-gate", "code-index", "args", "quickjs", "cron", "tty", "mail"]),
     ("Small & example", ["mathx", "geo", "hello", "greeter"]),
 ]
 
