@@ -60,6 +60,7 @@
     <a href="/packages/pgvector">pgvector</a>
     <p class="docs-nav-title">Servers</p>
     <a href="/packages/rest">rest</a>
+    <a href="/packages/openapi">openapi</a>
     <a href="/packages/websocket">websocket</a>
     <a href="/packages/socketio">socketio</a>
     <a href="/packages/sse" class="active">sse</a>
@@ -74,6 +75,9 @@
     <a href="/packages/code-index">code-index</a>
     <a href="/packages/args">args</a>
     <a href="/packages/quickjs">quickjs</a>
+    <a href="/packages/cron">cron</a>
+    <a href="/packages/tty">tty</a>
+    <a href="/packages/mail">mail</a>
     <p class="docs-nav-title">Small & example</p>
     <a href="/packages/mathx">mathx</a>
     <a href="/packages/geo">geo</a>
@@ -99,6 +103,12 @@ browser: error → reconnect → token|"Hel"|id=7</code></pre>
   <p class="sub">Simpler, and enough for most of what a WebSocket gets used for: streaming an answer as it is written, or telling a page something changed.</p>
   <p class="sub"><strong>The browser reconnects on its own</strong>, which is the part people underestimate. The trace above shows it: the stream ended, <code>EventSource</code> reconnected without being asked, and sent <code>Last-Event-ID: 7</code> so the server could resume rather than repeat. A dropped WebSocket needs code to recover; this needs none.</p>
   <p class="sub">What it cannot do is carry anything upstream — the page talks back with an ordinary request, which it can already do. If you need the <em>browser</em> pushing into an open channel, you want the websocket package.</p>
+  <h3>What the handler is given</h3>
+  <p class="sub"><code>serveEvents</code> hands the handler an <code>EventStream</code> carrying the two request headers a server has to act on:</p>
+  <ul>
+    <li><code>lastEventId</code> — what the subscriber last saw. Server-side resume is the whole reason <code>Last-Event-ID</code> exists, and until this was passed through the package read the header and dropped it, so nothing built on it could resume.</li>
+    <li><code>authorization</code> — because a stream on its own port is not covered by whatever guards the ordinary routes, and a feed of everything is worth a token.</li>
+  </ul>
   <h3>The mistakes this format invites</h3>
   <p class="sub"><strong>The blank line is the frame.</strong> Without it the event is never delivered, and the stream looks perfectly correct in a log.</p>
   <p class="sub"><strong>Every line of the data needs its own <code>data:</code> prefix.</strong> A newline inside a value ends the event early and delivers half of it. The browser rejoins them, so <code>"line one\nline two"</code> arrives exact — that round trip is asserted here and confirmed above.</p>

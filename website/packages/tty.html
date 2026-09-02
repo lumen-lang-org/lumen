@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>tty · Packages · Lumen</title>
+<meta name="description" content="Raw-mode terminal input, key decoding, terminal size, and ANSI cursor/screen control via a C shim (community).">
+<link rel="stylesheet" href="/style.css">
+<link rel="canonical" href="https://lumen-lang.org/packages/tty">
+<meta property="og:url" content="https://lumen-lang.org/packages/tty">
+<meta property="og:title" content="tty · Packages · Lumen">
+<meta property="og:description" content="Raw-mode terminal input, key decoding, terminal size, and ANSI cursor/screen control via a C shim (community).">
+<meta name="twitter:title" content="tty · Packages · Lumen">
+<meta name="twitter:description" content="Raw-mode terminal input, key decoding, terminal size, and ANSI cursor/screen control via a C shim (community).">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+  <span class="links">
+    <a href="/#features">Features</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+</div></nav>
+
+<section class="wrap">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">tty</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/packages">All packages</a></p>
+    <p class="docs-nav-title">Formats</p>
+    <a href="/packages/csv">csv</a>
+    <a href="/packages/toml">toml</a>
+    <a href="/packages/dotenv">dotenv</a>
+    <a href="/packages/semver">semver</a>
+    <a href="/packages/markdown">markdown</a>
+    <a href="/packages/pdf">pdf</a>
+    <p class="docs-nav-title">Data</p>
+    <a href="/packages/plume">plume</a>
+    <a href="/packages/sqlite">sqlite</a>
+    <a href="/packages/pgvector">pgvector</a>
+    <p class="docs-nav-title">Servers</p>
+    <a href="/packages/rest">rest</a>
+    <a href="/packages/openapi">openapi</a>
+    <a href="/packages/websocket">websocket</a>
+    <a href="/packages/socketio">socketio</a>
+    <a href="/packages/sse">sse</a>
+    <a href="/packages/press">press</a>
+    <a href="/packages/validation">validation</a>
+    <p class="docs-nav-title">AI & agents</p>
+    <a href="/packages/ai">ai</a>
+    <a href="/packages/agents">agents</a>
+    <a href="/packages/tracing">tracing</a>
+    <p class="docs-nav-title">Tooling</p>
+    <a href="/packages/token-gate">token-gate</a>
+    <a href="/packages/code-index">code-index</a>
+    <a href="/packages/args">args</a>
+    <a href="/packages/quickjs">quickjs</a>
+    <a href="/packages/cron">cron</a>
+    <a href="/packages/tty" class="active">tty</a>
+    <a href="/packages/mail">mail</a>
+    <p class="docs-nav-title">Small & example</p>
+    <a href="/packages/mathx">mathx</a>
+    <a href="/packages/geo">geo</a>
+    <a href="/packages/hello">hello</a>
+    <a href="/packages/greeter">greeter</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/packages">Packages</a> / <strong>tty</strong>
+  · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/tty">source</a></p>
+  <h2>tty</h2>
+  <p class="sub">Raw-mode terminal input and control for Lumen programs: raw mode, key decoding, terminal size, and ANSI cursor/screen control. Enough to build a real TUI (persistent input region, scrollback, in-place redraw), not just single-keypress detection.</p>
+  <p class="sub">By default a terminal is in "cooked" mode: the OS buffers input a line at a time and only hands it to your program once Enter is pressed — this is what <code>readline.question</code> relies on. Raw mode delivers bytes as they're typed, <code>readKey</code> turns those bytes into decoded keypresses (arrow keys, Enter, Backspace, Ctrl-C, UTF-8 characters, ...), and the ANSI helpers let you redraw in place instead of only ever scrolling.</p>
+  <h3>Why a shim</h3>
+  <p class="sub"><code>termios</code> and <code>ioctl(TIOCGWINSZ)</code> settings live in structs, and Lumen's FFI only marshals scalars and strings across the C boundary (<code>Ref&lt;T&gt;</code> is disallowed on FFI parameters too, see <code>SPEC.md</code>). <code>tty_shim.c</code> keeps every struct entirely on the C side and hands Lumen only scalar in/out functions. Cursor movement and the alternate screen need no FFI at all: they're ANSI escape sequences, plain strings written to stdout.</p>
+  <h3>Usage</h3>
+<pre><code class="lumen">import { isatty, rawEnable, rawDisable, readKey, KEY_CTRL_C, KEY_ENTER, ENTER_ALT_SCREEN, EXIT_ALT_SCREEN } from
+  "https://lumen-lang.org/package/std-contrib/tty/tty.ts";
+
+const STDIN = 0;
+
+if (isatty(STDIN)) {
+  console.log(ENTER_ALT_SCREEN);
+  rawEnable(STDIN);
+  const k = readKey(STDIN);
+  if (k.kind == KEY_CTRL_C) {
+    console.log("cancelled");
+  } else if (k.kind == KEY_ENTER) {
+    console.log("submitted");
+  }
+  rawDisable(STDIN);
+  console.log(EXIT_ALT_SCREEN);
+}</code></pre>
+  <p class="sub">Always pair a successful <code>rawEnable</code> with a <code>rawDisable</code>, and <code>ENTER_ALT_SCREEN</code> with <code>EXIT_ALT_SCREEN</code>, before the program exits — otherwise the user's shell is left in raw mode or on the alternate screen.</p>
+  <h3>API</h3>
+  <p class="sub">Raw mode and byte I/O:</p>
+  <ul>
+    <li><code>isatty(fd: int): bool</code> — is <code>fd</code> connected to a terminal?</li>
+    <li><code>rawEnable(fd: int): bool</code> — switch <code>fd</code> to raw mode. <code>false</code> if <code>fd</code> isn't a terminal.</li>
+    <li><code>rawDisable(fd: int): bool</code> — restore the settings from the last <code>rawEnable</code>. <code>false</code> if nothing was enabled.</li>
+    <li><code>readByte(fd: int): int</code> — block for exactly one byte. <code>-1</code> at EOF, <code>-2</code> on a read error, otherwise the byte's value (0-255).</li>
+    <li><code>readByteTimeout(fd: int, timeoutMs: int): int</code> — as <code>readByte</code>, plus <code>-3</code> if the timeout elapses with nothing available.</li>
+  </ul>
+  <p class="sub">Terminal size:</p>
+  <ul>
+    <li><code>cols(fd: int): int</code>, <code>rows(fd: int): int</code> — current width/height. <code>-1</code> if <code>fd</code> isn't a terminal. Two calls rather than one, since <code>Ref&lt;T&gt;</code> cannot carry the two values out through an FFI parameter (spec 024).</li>
+  </ul>
+  <p class="sub">Key decoding:</p>
+  <ul>
+    <li><code>readKey(fd: int): Key</code> — blocks for one keypress and decodes it: the arrow keys, Enter, Backspace, Tab, Ctrl-C, Ctrl-D, a lone Escape (nothing follows within 50ms), a UTF-8 character (1-4 bytes), or <code>KEY_UNKNOWN</code>/ <code>KEY_EOF</code>. <code>Key</code> is <code>{ kind: string, char: string }</code>; <code>char</code> is only set when <code>kind == KEY_CHAR</code>.</li>
+    <li>Kind constants: <code>KEY_CHAR</code>, <code>KEY_ENTER</code>, <code>KEY_BACKSPACE</code>, <code>KEY_TAB</code>, <code>KEY_ESCAPE</code>, <code>KEY_CTRL_C</code>, <code>KEY_CTRL_D</code>, <code>KEY_ARROW_UP</code>, <code>KEY_ARROW_DOWN</code>, <code>KEY_ARROW_LEFT</code>, <code>KEY_ARROW_RIGHT</code>, <code>KEY_EOF</code>, <code>KEY_UNKNOWN</code>.</li>
+  </ul>
+  <p class="sub">Cursor and screen (plain ANSI strings, write them to stdout):</p>
+  <ul>
+    <li><code>ENTER_ALT_SCREEN</code>, <code>EXIT_ALT_SCREEN</code> — switch to/from the alternate screen buffer, so the TUI doesn't scroll the user's normal terminal history.</li>
+    <li><code>HIDE_CURSOR</code>, <code>SHOW_CURSOR</code>.</li>
+    <li><code>CLEAR_SCREEN</code>, <code>CLEAR_LINE</code>.</li>
+    <li><code>cursorTo(row: int, col: int): string</code>, <code>cursorUp(n: int): string</code>, <code>cursorDown(n: int): string</code>, <code>cursorToColumn(col: int): string</code>.</li>
+  </ul>
+  <h3>Build</h3>
+<pre><code>cc -c tty_shim.c -o tty_shim.o</code></pre>
+  <p class="sub">Then <code>// @link ./tty_shim.o</code> in any program that imports <code>tty.ts</code>.</p>
+  <h3>Scope</h3>
+  <p class="sub">One fd's raw-mode state at a time. No mouse events, no function-key/Home/End/ PageUp decoding beyond the arrow keys, no wasm target (WASI has no terminal ioctl surface). See <code>SPEC.md</code> for the full list.</p>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+</div></footer>
+
+<script src="/highlight.js"></script>
+<script>
+// Mobile package-list toggle: shows/hides the same sidebar nav used on
+// desktop. Closes on link click or an outside click. Same code as stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setOpen(!panel.classList.contains('open'));
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') setOpen(false);
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.contains(e.target) && e.target !== toggle) setOpen(false);
+  });
+})();
+</script>
+</body>
+</html>
