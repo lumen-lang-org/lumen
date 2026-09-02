@@ -169,6 +169,15 @@ lumen compile main.ts && ./main</code></pre>
   whenever the entry file or any of its local imports changes:</p>
 <pre><code class="lumen">lumen watch main.ts            # rebuild and re-run on change
 lumen watch --no-run main.ts   # rebuild only</code></pre>
+  <p class="sub">A binary built the plain way links against the host's libc, which makes the
+  machine that compiled it the floor for every machine that runs it. Name a target and ask
+  for a static link and it stops mattering:</p>
+<pre><code class="lumen">lumen compile --target x86_64-linux-musl --static main.ts
+lumen compile --library-path ./vendor --link gc main.ts</code></pre>
+  <p class="sub"><code>--target</code> takes a triple, <code>--static</code> asks for a
+  self-contained binary, and <code>--library-path</code> names a directory to search for a
+  library <code>--link</code> asks for &mdash; which is what makes linking a staged
+  collector work without the machine running the program having a package manager.</p>
 </section>
 
 <footer><div class="wrap">
