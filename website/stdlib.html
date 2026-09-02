@@ -1826,6 +1826,36 @@ http.createServer(8080, handleRequest);</code></pre>
     server does by default.</p>
   </div>
 
+  <div class="api" id="http-stream">
+    <h5><code>http.stream(url, method, body, headers)</code></h5>
+    <p class="sub">The same four arguments as <code>http.request</code>, but instead of
+    waiting for the whole body it hands back a live handle to the connection &mdash; so a
+    response that arrives a line at a time can be read a line at a time, and a connection
+    that has stopped being HTTP can go on being used.</p>
+<pre><code class="lumen">const s = http.stream("https://api.example.com/v1/chat", "POST", body, headers);
+if (s.status() == 200) {
+  while (!s.done()) {
+    const line = s.readLine();
+    if (line != "") console.log(line);
+  }
+}
+s.close();</code></pre>
+    <p class="sub"><code>status()</code> is the response status and <code>header(name)</code>
+    looks a response header up without regard to case. <code>readLine()</code> blocks for the
+    next decoded line of the body, <code>done()</code> reports exhaustion, and
+    <code>close()</code> drops the connection early.</p>
+    <p class="sub"><strong>Past a <code>101</code>, it is a raw two-way pipe.</strong>
+    <code>write(chunk)</code> puts raw bytes on the connection and <code>read()</code> takes
+    one undelimited read off it &mdash; which is what a WebSocket needs and what
+    <code>readLine()</code> cannot do, since a binary frame carries no newline guarantee: a
+    frame without one would never return, and a frame that happened to contain one would come
+    back truncated.</p>
+    <p class="sub">This is also the only way to speak <code>wss://</code> today.
+    <code>net.connect</code> has no TLS, and <code>http.stream</code> already owns a
+    TLS connection that keeps reading past a <code>101 Switching Protocols</code>, so the
+    upgrade rides on the connection the client already made.</p>
+  </div>
+
   <div class="api" id="http-METHODS">
     <h5><code>http.METHODS()</code></h5>
     <p class="sub">() → <code>string[]</code> &mdash; the 35 HTTP method
