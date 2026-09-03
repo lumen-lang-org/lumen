@@ -20,9 +20,12 @@
   --radius: 10px;
 }
 
-/* Dark theme — follows the OS setting */
+/* Dark theme — follows the OS setting unless the toggle in the nav has
+   pinned one (data-theme on <html>, remembered in localStorage by site.js).
+   The palette is declared twice on purpose: once for the OS default, once
+   for an explicit choice, so the toggle wins in both directions. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0e1116;
     --bg-soft: #141923;
     --panel: #161b22;
@@ -33,6 +36,18 @@
     --accent-fg: #1a1205;
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1116;
+  --bg-soft: #141923;
+  --panel: #161b22;
+  --border: #262c36;
+  --fg: #e6edf3;
+  --muted: #9aa7b4;
+  --accent: #fb923c;
+  --accent-fg: #1a1205;
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 /* The filters toggle the hidden attribute; it must beat any display rule. */
@@ -69,11 +84,29 @@ nav .links a:hover { color: var(--fg); text-decoration: none; }
 /* The page being viewed (set by site.js). */
 nav .links a[aria-current="page"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); padding-bottom: 2px; }
 .nav-burger { display: none; }
+/* Light/dark switch: shows the icon of the theme you'd switch to. */
+.theme-toggle {
+  margin-left: 22px; width: 32px; height: 32px; padding: 0; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.theme-toggle:hover { color: var(--fg); border-color: var(--accent); }
+.theme-toggle svg { width: 16px; height: 16px; }
+.theme-toggle .icon-sun { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
+}
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
 
 @media (max-width: 720px) {
   nav .wrap { position: relative; }
+  .theme-toggle { margin-left: auto; margin-right: 16px; }
   .nav-burger {
-    display: block; margin-left: auto; width: 26px; height: 16px; cursor: pointer;
+    display: block; width: 26px; height: 16px; cursor: pointer;
     background:
       linear-gradient(var(--fg), var(--fg)) left top / 100% 2px no-repeat,
       linear-gradient(var(--fg), var(--fg)) left center / 100% 2px no-repeat,
@@ -228,6 +261,52 @@ p code, li code, td code { background: var(--panel); border: 1px solid var(--bor
 .tok-num { color: #ffd479; }
 .tok-com { color: #6b7785; font-style: italic; }
 .tok-fn { color: #b9c2ff; }
+
+/* Feature cards on the home page: each links into a section of the tour. */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 0 0 22px; }
+.card {
+  display: block; padding: 18px 18px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-soft); color: var(--fg); text-decoration: none;
+}
+.card:hover { text-decoration: none; border-color: var(--accent); }
+.card h3 { margin: 0 0 6px; font-size: 16px; }
+.card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.card code { font-size: 12px; }
+@media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+
+/* Benchmark strip: a few headline numbers, each linking to the source. */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 0 0 18px; }
+.stat { padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-soft); }
+.stat .num { display: block; font-size: 28px; font-weight: 750; letter-spacing: -0.02em; color: var(--accent); line-height: 1.1; }
+.stat .what { display: block; margin-top: 6px; font-size: 14px; color: var(--fg); font-weight: 600; }
+.stat .how { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .stats { grid-template-columns: 1fr; } }
+
+/* Latest-release line under the install command (filled in by site.js). */
+.release-line { color: var(--muted); font-size: 13.5px; margin: -8px 0 18px; }
+.release-line:empty { display: none; }
+
+/* Tour page: prose + sample per section, same sidebar as the stdlib page. */
+.tour h2 { font-size: 22px; margin: 44px 0 8px; scroll-margin-top: 76px; }
+.tour h2:first-of-type { margin-top: 8px; }
+.tour p.sub { max-width: 720px; }
+.tour .next { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 36px; }
+
+/* Roadmap page: the per-module "what's next" tables. */
+.roadmap h4 { scroll-margin-top: 80px; }
+
+/* 404 page */
+.notfound { text-align: center; padding: 90px 0 110px; border-bottom: none; }
+.notfound h1 { font-size: 40px; margin-bottom: 8px; }
+.notfound .code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); }
+
+/* Playground: compile-service status dot. */
+.svc { display: inline-flex; align-items: center; gap: 6px; }
+.svc::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.svc.up::before { background: #22c55e; }
+.svc.down::before { background: #ef4444; }
 
 /* Coverage list: topic in the left column, what's supported on the right. */
 .coverage { display: grid; grid-template-columns: 200px 1fr; margin: 0; border-top: 1px solid var(--border); }

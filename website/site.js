@@ -80,4 +80,41 @@
       if (el) copyText(el.textContent, b);
     });
   });
+
+  // 4. Theme toggle. The choice is pinned on <html data-theme> and remembered;
+  //    with nothing stored the page follows the OS (see the head script and
+  //    style.css). Clicking flips whichever theme is showing now.
+  document.querySelectorAll(".theme-toggle").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var root = document.documentElement;
+      var showing = root.getAttribute("data-theme") ||
+        (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var next = showing === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("theme", next); } catch (e) {}
+    });
+  });
+
+  // 5. Latest release, filled from GitHub's public API into any
+  //    [data-latest-release] element. Silent when the API is unreachable.
+  var rel = document.querySelectorAll("[data-latest-release]");
+  if (rel.length && window.fetch) {
+    fetch("https://api.github.com/repos/lumen-lang-org/lumen/releases/latest")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.tag_name) return;
+        var when = j.published_at ? new Date(j.published_at) : null;
+        rel.forEach(function (el) {
+          el.textContent = "Latest release: ";
+          var a = document.createElement("a");
+          a.href = j.html_url;
+          a.textContent = j.tag_name;
+          el.appendChild(a);
+          if (when && !isNaN(when)) {
+            el.appendChild(document.createTextNode(" · " + when.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })));
+          }
+        });
+      })
+      .catch(function () {});
+  }
 })();

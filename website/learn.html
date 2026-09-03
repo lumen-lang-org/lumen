@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>Learn Lumen · Lumen</title>
+<meta name="description" content="A tour of the Lumen language: TypeScript syntax, static types, classes, generics, null safety, async, C FFI and URL imports, each with a sample you can run in the browser.">
+<link rel="stylesheet" href="style.css">
+<link rel="canonical" href="https://lumen-lang.org/learn">
+<meta property="og:url" content="https://lumen-lang.org/learn">
+<meta property="og:title" content="Learn Lumen">
+<meta property="og:description" content="A tour of the Lumen language, one runnable sample per topic.">
+<meta name="twitter:title" content="Learn Lumen">
+<meta name="twitter:description" content="A tour of the Lumen language, one runnable sample per topic.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://lumen-lang.org/og-image.png">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <span class="links">
+    <a href="/learn">Learn</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+  <button type="button" class="theme-toggle" aria-label="Switch between light and dark theme" title="Switch theme">
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+</div></nav>
+
+<section class="wrap" id="main">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">Jump to section</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title">The language</p>
+    <a href="#types">Types you already know</a>
+    <a href="#records">Records, unions and enums</a>
+    <a href="#control">Control flow</a>
+    <a href="#null">Null safety</a>
+    <a href="#functions">Functions and closures</a>
+    <a href="#classes">Classes and inheritance</a>
+    <a href="#generics">Generics</a>
+    <a href="#strings">Strings and regex</a>
+    <a href="#collections">Arrays, Map and Set</a>
+    <a href="#errors">Errors, defer and tests</a>
+    <a href="#async">Async, threads and events</a>
+    <a href="#ffi">Calling C</a>
+    <a href="#modules">Modules and URL imports</a>
+    <p class="docs-nav-title">Working with it</p>
+    <a href="#build">Build, run and test</a>
+    <a href="#not">What is left out</a>
+    <a href="#reference">Reference summary</a>
+  </nav></aside>
+  <div class="docs-main tour">
+
+  <h1>Learn Lumen</h1>
+  <p class="sub">A tour of the language in fourteen short stops. If you write
+  TypeScript you already know the syntax; what changes is that every program is
+  checked and compiled ahead of time to a native binary or a single WebAssembly
+  module. Each sample was checked with the released compiler, and the ones marked
+  <strong>Open in playground</strong> run in your browser.</p>
+
+<h2 id="types">Types you already know</h2>
+<p class="sub">Lumen is TypeScript syntax with the types checked ahead of time and
+nothing dynamic left over. <code>int</code> (also spelled <code>i32</code>) is a
+32-bit integer and <code>number</code> a 64-bit float; <code>i64</code>,
+<code>bool</code> and <code>string</code> round out the scalars. Locals infer their
+type from the initializer, and so do function return types, so annotations go
+where they help a reader: parameters and public signatures.</p>
+<p class="sub">Mixing <code>int</code> and <code>number</code> promotes to
+<code>number</code>, and <code>int</code> widens losslessly to <code>i64</code>,
+the way TypeScript's single <code>number</code> would let you expect.</p>
+<pre data-play><code class="lumen">// `int` is a 32-bit integer, `number` a 64-bit float. Locals and
+// return types are inferred; annotate where it helps the reader.
+const name: string = "Lumen";
+let year = 2026;            // int
+let ratio = 0.75;           // number
+let ready: bool = true;
+
+function describe(n: int) {
+  return `${name} ${n}`;    // inferred: string
+}
+
+console.log(describe(year));   // Lumen 2026
+console.log(ratio * 2);        // 1.5
+console.log(ready);            // true</code></pre>
+
+<h2 id="records">Records, unions and enums</h2>
+<p class="sub">Object shapes are closed: an <code>interface</code> or record
+<code>type</code> says exactly which fields exist. A wider record still flows into
+a narrower parameter (structural width subtyping). Unions are built from named
+types, and a shared literal field such as <code>kind</code> makes them
+discriminated, so <code>switch</code> narrows each branch and the compiler checks
+that every variant is handled. Tuples are fixed-shape arrays like
+<code>[int, string]</code>; <code>enum</code>s are plain integer members.</p>
+<pre data-play><code class="lumen">interface Point {
+  x: int;
+  y: int;
+}
+
+type Circle = { kind: "circle"; radius: int };
+type Square = { kind: "square"; side: int };
+type Shape = Circle | Square;   // discriminated union
+
+enum Level { Low, High }
+
+function area(s: Shape): int {
+  switch (s.kind) {
+    case "circle": return s.radius * s.radius * 3;
+    case "square": return s.side * s.side;
+  }
+}
+
+let p: Point = { x: 3, y: 4 };
+let pair: [int, string] = [1, "one"];
+
+console.log(p.x + p.y);                            // 7
+console.log(area({ kind: "circle", radius: 2 }));  // 12
+console.log(pair[1]);                              // one
+console.log(Level.High);                           // 1</code></pre>
+
+<h2 id="control">Control flow</h2>
+<p class="sub">Everything you would write in TypeScript: <code>if</code>/<code>else</code>,
+<code>while</code>, <code>do</code>, C-style <code>for</code>, <code>for…of</code> over
+arrays, strings, <code>Set</code> and <code>Map</code>, <code>for…in</code>, the
+ternary, labeled <code>break</code>/<code>continue</code>, and every compound
+assignment (<code>+=</code>, <code>??=</code>, <code>&lt;&lt;=</code>,
+<code>**=</code>, …). A <code>switch</code> over an enum or a literal union is
+exhaustive: a missing case is a compile error, and a function that returns from
+every case needs no fallback <code>return</code>.</p>
+<pre data-play><code class="lumen">enum Color { Red, Green, Blue }
+
+function name(c: Color): string {
+  switch (c) {              // exhaustive: every enum member handled
+    case Color.Red: return "red";
+    case Color.Green: return "green";
+    case Color.Blue: return "blue";
+  }
+}
+
+let total = 0;
+for (let i = 1; i &lt;= 10; i += 1) {
+  if (i % 2 == 0) continue;
+  total += i;
+}
+console.log(total);                     // 25
+
+for (const c of [Color.Red, Color.Blue]) {
+  console.log(name(c));                 // red, blue
+}
+
+let n = 27;
+let steps = 0;
+while (n != 1) {
+  n = n % 2 == 0 ? n / 2 : 3 * n + 1;
+  steps += 1;
+}
+console.log(steps);                     // 111
+
+outer: for (let a = 0; a &lt; 3; a += 1) {
+  for (let b = 0; b &lt; 3; b += 1) {
+    if (a * b == 2) { console.log(`${a}*${b}`); break outer; }
+  }
+}</code></pre>
+
+<h2 id="null">Null safety</h2>
+<p class="sub">There is no <code>undefined</code>. A value that may be absent is
+<code>T | null</code>, an optional field <code>port?</code> is the same thing, and
+<code>??</code>, <code>?.</code> (including <code>?.[i]</code>, <code>?.()</code> and
+<code>?.length</code>) and the non-null assertion <code>x!</code> work on it. The
+compiler narrows across <code>if</code>/<code>else</code>, guard clauses,
+<code>while</code>, <code>&amp;&amp;</code>/<code>||</code>, and field paths like
+<code>a.b.c != null</code>, so after the check you use the value as a plain
+<code>T</code>.</p>
+<pre data-play><code class="lumen">interface Settings {
+  host: string;
+  port?: int;               // optional field: int | null
+}
+
+function address(s: Settings): string {
+  let port = s.port ?? 8080;
+  return `${s.host}:${port}`;
+}
+
+function shout(word: string | null): string {
+  if (word == null) return "...";   // narrowed to string below
+  return word.toUpperCase();
+}
+
+let maybe: string | null = null;
+console.log(maybe?.length ?? 0);                     // 0
+console.log(address({ host: "localhost" }));         // localhost:8080
+console.log(address({ host: "api", port: 443 }));    // api:443
+console.log(shout("hey"));                           // HEY
+console.log(shout(null));                            // ...</code></pre>
+
+<h2 id="functions">Functions and closures</h2>
+<p class="sub">Default and rest parameters, spread at the call site, arrow
+functions, function types, and closures that capture their surroundings.
+Everything is checked statically, so there is no <code>arguments</code> object.
+Array and object destructuring work in declarations, parameters and assignment,
+with defaults (<code>[a = 1]</code>, <code>{ x = 1 }</code>).</p>
+<p class="sub">One rule to know: a closure can <em>read</em> a captured variable but
+not assign to it. The compiler reports <code>E_CAPTURED_MUTATION</code> and points
+you at <code>for…of</code> or <code>reduce</code> instead, which keeps closures
+cheap to compile to native code.</p>
+<pre data-play><code class="lumen">function greet(name: string, greeting: string = "Hello"): string {
+  return `${greeting}, ${name}`;
+}
+
+function sum(...nums: int[]): int {
+  let total = 0;
+  for (const n of nums) total += n;
+  return total;
+}
+
+function makeAdder(n: int): (x: int) =&gt; int {
+  return (x: int) =&gt; x + n;       // a closure captures n
+}
+
+const applyTwice = (f: (n: int) =&gt; int, v: int): int =&gt; f(f(v));
+
+let extra: int[] = [4, 5, 6];
+let add10 = makeAdder(10);
+let first = 10;
+let second = 20;
+[first, second] = [second, first];   // destructuring assignment
+
+console.log(greet("World"));               // Hello, World
+console.log(sum(1, 2, 3, ...extra));       // 21
+console.log(add10(5));                     // 15
+console.log(applyTwice((x: int) =&gt; x * 3, 2));   // 18
+console.log(first);                        // 20</code></pre>
+
+<h2 id="classes">Classes and inheritance</h2>
+<p class="sub"><code>class</code>, <code>extends</code>, <code>super</code>,
+<code>public</code>/<code>private</code>/<code>protected</code>, <code>#private</code>
+fields, <code>static</code>, <code>readonly</code>, and <code>get</code>/<code>set</code>
+accessors. A field with an initializer infers its type (<code>count = 0</code> is an
+<code>int</code>). Methods take default, optional and rest parameters like any
+function, and method calls compile to direct calls on a flat struct: there is no
+prototype chain to walk.</p>
+<pre data-play><code class="lumen">class Animal {
+  static created = 0;
+  protected name: string;
+  readonly legs: int;
+
+  constructor(name: string, legs: int) {
+    this.name = name;
+    this.legs = legs;
+    Animal.created += 1;
+  }
+
+  get label(): string { return `${this.name} (${this.legs} legs)`; }
+  speak(): string { return `${this.name} makes a sound`; }
+}
+
+class Dog extends Animal {
+  constructor(name: string) { super(name, 4); }
+  speak(): string { return super.speak() + " (woof)"; }
+}
+
+let rex = new Dog("Rex");
+console.log(rex.speak());        // Rex makes a sound (woof)
+console.log(rex.label);          // Rex (4 legs)
+console.log(Animal.created);     // 1</code></pre>
+
+<h2 id="generics">Generics</h2>
+<p class="sub">Generic functions, classes and interfaces, with constraints
+(<code>&lt;T extends …&gt;</code>) and defaults (<code>&lt;T = …&gt;</code>). Each
+instantiation is monomorphized at compile time, so <code>Box&lt;int&gt;</code> holds a
+bare integer with no boxing. A method cannot yet introduce a type parameter of
+its own; make the class generic or use a generic free function instead.</p>
+<pre data-play><code class="lumen">function firstOf&lt;T&gt;(xs: T[]): T {
+  return xs[0];
+}
+
+class Box&lt;T&gt; {
+  value: T;
+  constructor(v: T) { this.value = v; }
+  get(): T { return this.value; }
+}
+
+function largest&lt;T extends int&gt;(a: T, b: T): T {
+  return a &gt; b ? a : b;
+}
+
+let boxed = new Box&lt;int&gt;(21);
+
+console.log(firstOf&lt;int&gt;([10, 20, 30]));   // 10
+console.log(boxed.get() * 2);              // 42
+console.log(largest(3, 9));                // 9</code></pre>
+
+<h2 id="strings">Strings and regex</h2>
+<p class="sub">Single- and double-quoted literals, template literals with string
+and numeric interpolation, and the methods you reach for: <code>split</code>,
+<code>slice</code>, <code>trim</code>, <code>includes</code>, <code>indexOf</code>,
+<code>replace</code>, <code>repeat</code>, <code>padStart</code>,
+<code>toUpperCase</code> and more. Regex literals with <code>.test()</code> match
+JavaScript's results exactly; anchored patterns compile to specialized native
+matchers at build time, and everything else falls back to a built-in engine.</p>
+<pre data-play><code class="lumen">let csv = "  ada, grace ,linus ";
+let names = csv.trim().split(",");
+
+for (const n of names) {
+  console.log(n.trim().toUpperCase().padStart(6, "."));   // ...ADA / .GRACE / .LINUS
+}
+
+console.log("hello".repeat(2).replace("lo", "p"));   // helphello
+console.log("grace,hopper".includes("grace"));      // true
+
+// Regex literals compile to native matchers at build time.
+const semver = /^\d+\.\d+\.\d+$/;
+console.log(semver.test("1.2.30"));   // true
+console.log(semver.test("1.2"));      // false</code></pre>
+
+<h2 id="collections">Arrays, Map and Set</h2>
+<p class="sub">Arrays carry <code>map</code>, <code>filter</code>, <code>reduce</code>,
+<code>forEach</code>, <code>find</code>, <code>some</code>, <code>every</code>,
+<code>includes</code>, <code>indexOf</code> and <code>join</code>.
+<code>Map&lt;K, V&gt;</code> and <code>Set&lt;T&gt;</code> are typed and iterable with
+<code>for…of</code>. <code>JSON.parse&lt;T&gt;</code> takes the shape you expect and
+returns exactly that: there is no untyped JSON value to inspect at runtime.</p>
+<p class="sub">Arrays are fixed-length today. <code>push</code>, <code>pop</code> and
+<code>sort</code> are on the <a href="/roadmap#array-more">roadmap</a>; until then
+build a new array with spread, <code>map</code> or <code>filter</code>.</p>
+<pre data-play><code class="lumen">let nums: int[] = [1, 2, 3, 4, 5, 6];
+let evens = nums.filter((n: int) =&gt; n % 2 == 0);
+let total = nums.reduce((acc: int, n: int) =&gt; acc + n, 0);
+
+console.log(evens.map((n: int) =&gt; n * n).join(", "));   // 4, 16, 36
+console.log(total);                                     // 21
+console.log(nums.some((n: int) =&gt; n &gt; 5));              // true
+
+let scores: Map&lt;string, int&gt; = new Map&lt;string, int&gt;();
+scores.set("ada", 90);
+scores.set("linus", 85);
+for (const [who, score] of scores) {
+  console.log(`${who}: ${score}`);
+}
+
+let tags = new Set&lt;string&gt;();
+tags.add("red");
+tags.add("red");
+console.log(tags.size);                                 // 1</code></pre>
+
+<h2 id="errors">Errors, defer and tests</h2>
+<p class="sub"><code>throw</code> and <code>try</code>/<code>catch</code>/<code>finally</code>
+propagate across functions, methods and constructors, with a readable
+<code>.message</code> and a real stack trace on an uncaught error.
+<code>using _ = defer(…)</code> runs cleanup when the enclosing scope exits, last
+in first out. Tests live next to the code as <code>test "…" { expect(…); }</code>
+blocks and run with <code>lumen test file.ts</code>; they are ignored by
+<code>lumen compile</code>.</p>
+<pre data-play><code class="lumen">function parseAge(s: string): int {
+  let n = parseInt(s);
+  if (n == null || n &lt; 0) throw new Error(`bad age: ${s}`);
+  return n;
+}
+
+function withFile(): void {
+  using _ = defer(() =&gt; console.log("closed"));   // runs at scope exit, LIFO
+  console.log("open");
+}
+
+try {
+  console.log(parseAge("42"));
+  console.log(parseAge("-1"));
+} catch (e) {
+  console.log(e.message);       // bad age: -1
+} finally {
+  withFile();                   // open, closed
+}
+
+test "parseAge accepts digits" {
+  expect(parseAge("7") == 7);
+}</code></pre>
+
+<h2 id="async">Async, threads and events</h2>
+<p class="sub"><code>async</code> functions return <code>Promise&lt;T&gt;</code> and
+<code>await</code> resolves them on a native event loop, alongside
+<code>setTimeout</code>/<code>setInterval</code>. <code>Worker.run(fn)</code> starts a real
+OS thread and hands back a promise for its result, so CPU-bound work runs in
+parallel. <code>EventEmitter&lt;T&gt;</code> carries one payload type per instance.
+These need the native target: the in-browser wasm build has no event loop yet.</p>
+<pre><code class="lumen">async function fetchBase(): Promise&lt;int&gt; {
+  return 10;
+}
+
+async function total(n: int): Promise&lt;int&gt; {
+  let base = await fetchBase();
+  return base + n;
+}
+
+function fib(): i32 {
+  let a: i32 = 0;
+  let b: i32 = 1;
+  for (let i = 0; i &lt; 40; i += 1) { const next = a + b; a = b; b = next; }
+  return a;
+}
+
+const emitter = new EventEmitter&lt;string&gt;();
+emitter.on("greet", (msg: string) =&gt; console.log(msg));
+emitter.emit("greet", "hello");          // hello
+
+console.log(await total(32));            // 42
+const p = Worker.run(fib);               // a real OS thread
+console.log("main keeps going");
+console.log(await p);                    // 102334155</code></pre>
+
+<h2 id="ffi">Calling C</h2>
+<p class="sub">Name a library with <code>// @link</code>, <code>declare</code> the
+functions you use, and call them. Scalars and strings cross the boundary; the
+compiler links the library into the binary. Packages such as
+<a href="/packages/sqlite">sqlite</a> and <a href="/packages/quickjs">quickjs</a>
+are built this way, and on the wasm target they embed the C library into the
+module with a <code>// @wasm-link</code> archive. Details are in the
+<a href="/stdlib#ffi">FFI reference</a>.</p>
+<pre><code class="lumen">// Name the library once; declare the C functions you use.
+// @link m
+declare function pow(base: number, exp: number): number;
+declare function sqrt(x: number): number;
+
+console.log(sqrt(pow(3.0, 2.0) + pow(4.0, 2.0)));   // 5</code></pre>
+
+<h2 id="modules">Modules and URL imports</h2>
+<p class="sub">Default, named and <code>import * as ns</code> imports, plus
+<code>export … from</code> re-exports, from a relative file or from an
+<code>https://</code> URL. A package is just a URL: the source is fetched at compile
+time and compiled in, so there is no package manager, install step or lockfile.
+The <a href="/packages">catalog</a> lists what is available.</p>
+<pre data-play><code class="lumen">// A package is a URL: fetched over HTTPS and compiled in. No package
+// manager, no lockfile. Relative imports work the same way.
+import greet from "https://lumen-lang.org/package/std-contrib/hello/hello.ts";
+import { render } from "https://lumen-lang.org/package/std-contrib/markdown/markdown.ts";
+
+console.log(greet("world"));          // Hello, world!
+console.log(render("# Hi\n\n*md*"));</code></pre>
+
+
+<h2 id="build">Build, run and test</h2>
+<p class="sub">One binary, six commands. <code>lumen init</code> writes a starter
+project with a <code>tsconfig.json</code> so your editor's TypeScript tooling
+works out of the box.</p>
+<pre><code class="lumen">lumen init my-app &amp;&amp; cd my-app
+lumen check main.ts                 # type-check only
+lumen run main.ts                   # build and run
+lumen compile main.ts               # native binary next to the source
+lumen compile --release-fast main.ts
+lumen compile --wasm main.ts        # one self-contained .wasm (WASI)
+lumen watch main.ts                 # rebuild and re-run on every save
+lumen test main.ts                  # run the test blocks</code></pre>
+<p class="sub">Cross-compile with <code>--target &lt;triple&gt;</code>, ask for a
+self-contained binary with <code>--static</code>, and link a vendored C library with
+<code>--link</code> / <code>--library-path</code>. The <a href="/#quickstart">install
+section</a> walks through each.</p>
+
+
+<h2 id="not">What is deliberately left out</h2>
+<p class="sub">Lumen removes the parts of JavaScript that need a runtime to
+interpret them: no prototypes, no <code>eval</code>, no dynamic object shapes, no
+<code>arguments</code>, no CommonJS, no <code>any</code> escape hatch. What remains
+compiles to a small, dependency-free executable that starts in milliseconds.
+The <a href="/roadmap">roadmap</a> lists what is still being added.</p>
+
+<h2 id="reference">Reference summary</h2>
+<p class="sub">The whole surface on one screen. The <a href="/stdlib">standard
+library reference</a> covers the modules; this is the language itself.</p>
+  <dl class="coverage">
+    <dt>Static types</dt>
+    <dd>Local inference and <strong>return-type inference</strong> for functions, arrows, and methods, <code>int</code>/<code>i64</code>/<code>number</code>/<code>bool</code>/<code>string</code>, float &amp; hex/binary literals. Numeric promotion (<code>int</code>&#8202;+&#8202;<code>number</code>) and lossless <code>int</code>&#8202;&rarr;&#8202;<code>i64</code> widening, just like TypeScript's single <code>number</code>.</dd>
+    <dt>Records, interfaces &amp; unions</dt>
+    <dd>Closed object shapes, nested records, arrays of records, <code>enum</code>s, and fixed&#8209;shape tuples like <code>[int, string]</code>. <strong>Structural width subtyping</strong>: a wider record flows into a narrower one, so <code>interface</code> parameters accept any matching shape. Plus <code>type</code> aliases, discriminated and string&#8209;literal unions, <code>as</code> assertions, <code>as const</code>, <code>satisfies</code>, and <code>readonly</code> arrays.</dd>
+    <dt>Control flow &amp; operators</dt>
+    <dd><code>if</code>/<code>else if</code>, <code>while</code>, <code>do</code>, C&#8209;style <code>for</code>, <code>for…of</code> (arrays, strings, <code>Set</code>, <code>Map</code>), <code>for…in</code>, <code>switch</code> (exhaustive over literal unions <em>and</em> enums), ternary, and labeled <code>break</code>/<code>continue</code>. The full arithmetic, bitwise, and shift set, with every compound&#8209;assignment form (<code>+=</code>, <code>&amp;&amp;=</code>, <code>??=</code>, <code>&lt;&lt;=</code>, <code>**=</code>, and more).</dd>
+    <dt>Null safety &amp; narrowing</dt>
+    <dd><code>T | null</code>, optional <code>?</code> fields, <code>??</code>, optional chaining <code>?.</code>/<code>?.[i]</code>/<code>?.()</code>/<code>?.length</code>, and the non-null assertion <code>x!</code>. Flow narrowing across <code>if</code>/<code>else</code>, guard clauses (<code>if (x == null) return</code>), <code>while</code>, <code>&amp;&amp;</code>/<code>||</code>, and deep field paths (<code>a.b.c != null</code>) &mdash; plus discriminated-union complement narrowing.</dd>
+    <dt>Functions &amp; parameters</dt>
+    <dd>Function types, arrow functions, and capturing closures. Default values, rest parameters, and spread, checked statically, no <code>arguments</code> object. Object shorthand <code>{ x }</code> and computed keys, <strong>destructuring defaults</strong> in array (<code>[a = 1]</code>) and object (<code>{ x = 1 }</code>) patterns, and <strong>destructuring assignment</strong> (<code>[a, b] = [b, a]</code>).</dd>
+    <dt>Classes &amp; inheritance</dt>
+    <dd><code>extends</code>, <code>super</code>, <code>public</code>/<code>private</code>/<code>protected</code>, <code>#private</code> fields, <code>static</code>, <code>readonly</code>, and <code>get</code>/<code>set</code>. Fields infer their type from an initializer (<code>count = 0</code>); methods take default, optional, and rest parameters.</dd>
+    <dt>Generics</dt>
+    <dd>Generic functions, classes, and interfaces with <code>Array&lt;T&gt;</code>, monomorphized at compile time, no boxing. Type-parameter constraints (<code>&lt;T extends ...&gt;</code>) and defaults (<code>&lt;T = ...&gt;</code>).</dd>
+    <dt>Strings &amp; regex</dt>
+    <dd>Single&#8209; and double&#8209;quoted literals, template literals <code>`hi ${name}`</code> with string &amp; numeric interpolation, and the methods you expect (<code>split</code>, <code>slice</code>, <code>trim</code>, <code>includes</code>, <code>indexOf</code>, <code>replace</code>, <code>repeat</code>, <code>padStart</code>, <code>toUpperCase</code>, and more). <code>/pattern/</code> literals with <code>.test()</code>: anchored patterns compile to specialized native matchers at build time, <strong>~3&times; faster than V8</strong> on checks like semver and identifiers, and everything else falls back to a built-in engine, so every pattern works.</dd>
+    <dt>Collections &amp; helpers</dt>
+    <dd><code>Map&lt;K, V&gt;</code> and <code>Set&lt;T&gt;</code>, both iterable with <code>for…of</code>, and the array methods you expect (<code>map</code>, <code>filter</code>, <code>reduce</code>, <code>forEach</code>, <code>find</code>, <code>some</code>, <code>every</code>, <code>includes</code>, <code>indexOf</code>, <code>join</code>). Plus <code>Date.now()</code>, <code>Object.keys</code>/<code>Object.freeze</code>, <code>Array.isArray</code>/<code>Array.from</code>/<code>Array.of</code>, <code>JSON.stringify</code>/<code>parse&lt;T&gt;</code>, <code>parseInt</code>/<code>parseFloat</code>, and the full <code>Math</code>/<code>Number</code> surface.</dd>
+    <dt>Errors, defer &amp; tests</dt>
+    <dd><code>try</code>/<code>catch</code>/<code>finally</code> and <code>throw</code>, propagating across functions, methods, and constructors; readable <code>.message</code>, optional catch binding, and full stack traces on uncaught errors. Scope&#8209;exit cleanup with <code>defer</code> (last&#8209;in&#8209;first&#8209;out), and built&#8209;in tests: <code>test "…" { expect(…); }</code> run with <code>lumen test</code>.</dd>
+    <dt>Async, threads &amp; events</dt>
+    <dd><code>async</code> functions return <code>Promise&lt;T&gt;</code> and <code>await</code> resolves them on a fast native event loop, with <code>setTimeout</code>/<code>setInterval</code> and their <code>clear*</code> counterparts. <code>Worker.run(fn)</code> spawns a real, detached OS thread &mdash; genuine CPU parallelism, with no per&#8209;thread interpreter overhead to pay. <code>EventEmitter&lt;T&gt;</code> is statically typed, one payload type per instance, and <strong>~3.5&times; faster than Node's</strong> on a tight emit loop.</dd>
+    <dt>Buffer, crypto &amp; I/O</dt>
+    <dd>A real byte&#8209;array type, distinct from <code>string</code> at compile time: <code>Buffer.from</code>/<code>.alloc</code>, <code>utf8</code>/<code>hex</code>/<code>base64</code> encodings, <code>.slice</code>/<code>.at</code>/<code>.equals</code>. <code>crypto.hmacSync</code> and AES&#8209;256&#8209;GCM <code>encryptSync</code>/<code>decryptSync</code> both read and return it. Alongside <code>net</code> TCP sockets, an <code>http</code> client &amp; concurrent server, <code>process.stdin</code>/<code>stdout</code>/<code>stderr</code> as streams, <code>readline.question</code>, and <code>zlib</code> gzip/deflate.</dd>
+    <dt>Modules &amp; native output</dt>
+    <dd>Default, named, and <code>import * as ns</code> imports, and <code>export … from</code> re-exports, from a relative file or an <code>https://</code> URL &mdash; a package is just a URL. <code>declare function</code> + <code>// @link</code> calls native C libraries, with scalars and strings marshalling across the boundary. It all compiles to a small, dependency&#8209;free native binary.</dd>
+  </dl>
+
+  <div class="next">
+    <a class="btn primary" href="/play">Open the playground</a>
+    <a class="btn ghost" href="/examples">Browse complete programs</a>
+    <a class="btn ghost" href="/stdlib">Standard library</a>
+  </div>
+
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/learn">Learn</a> ·
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="/roadmap">Roadmap</a> ·
+    <a href="/community">Community</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a>
+  </p>
+</div></footer>
+
+<script src="highlight.js"></script>
+<script src="site.js"></script>
+<script>
+// Mobile "jump to section" toggle and active-section tracking, as on stdlib.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!panel.classList.contains('open')); });
+  panel.addEventListener('click', function (e) { if (e.target.tagName === 'A') setOpen(false); });
+  document.addEventListener('click', function (e) { if (!panel.contains(e.target) && e.target !== toggle) setOpen(false); });
+
+  var navLinks = document.querySelectorAll('.docs-nav a[href^="#"]');
+  var sections = [];
+  navLinks.forEach(function (link) {
+    var el = document.getElementById(link.getAttribute('href').slice(1));
+    if (el) sections.push({ id: el.id, link: link, el: el });
+  });
+  if (!sections.length || !('IntersectionObserver' in window)) return;
+  var label = document.getElementById('docs-nav-toggle-label');
+  var current = null;
+  function setActive(id) {
+    if (id === current) return;
+    current = id;
+    navLinks.forEach(function (l) { l.classList.remove('active'); });
+    var match = sections.find(function (s) { return s.id === id; });
+    if (match) { match.link.classList.add('active'); if (label) label.textContent = match.link.textContent; }
+  }
+  var observer = new IntersectionObserver(function (entries) {
+    var visible = entries.filter(function (e) { return e.isIntersecting; });
+    if (!visible.length) return;
+    visible.sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+    setActive(visible[0].target.id);
+  }, { rootMargin: '-70px 0px -75% 0px', threshold: 0 });
+  sections.forEach(function (s) { observer.observe(s.el); });
+})();
+</script>
+</body>
+</html>

@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://lumen-lang.org/</loc></url>
+  <url><loc>https://lumen-lang.org/learn</loc></url>
   <url><loc>https://lumen-lang.org/examples</loc></url>
+  <url><loc>https://lumen-lang.org/play</loc></url>
   <url><loc>https://lumen-lang.org/stdlib</loc></url>
   <url><loc>https://lumen-lang.org/packages</loc></url>
+  <url><loc>https://lumen-lang.org/roadmap</loc></url>
+  <url><loc>https://lumen-lang.org/community</loc></url>
   <url><loc>https://lumen-lang.org/packages/agents</loc></url>
   <url><loc>https://lumen-lang.org/packages/ai</loc></url>
   <url><loc>https://lumen-lang.org/packages/args</loc></url>
