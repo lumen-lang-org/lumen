@@ -7,7 +7,7 @@
 <script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>Packages · Lumen</title>
 <meta name="description" content="Lumen community packages from the std-contrib catalog, imported by URL, statically typed, tested.">
-<link rel="stylesheet" href="style.css?v=1fd18e07">
+<link rel="stylesheet" href="style.css?v=cc47e897">
 <link rel="canonical" href="https://lumen-lang.org/packages">
 <meta property="og:url" content="https://lumen-lang.org/packages">
 <meta property="og:title" content="Packages · Lumen">
@@ -48,156 +48,200 @@
 
 <section class="wrap" id="main">
   <h1>Packages</h1>
-  <p class="sub">Community packages live in the
-  <a href="https://github.com/lumen-lang-org/std-contrib">std-contrib</a> catalog.
-  A package is just a URL: it is fetched over HTTPS and inlined at compile time,
-  no package manager, no install step, no lockfile. Every package is plain Lumen,
-  statically typed, and tested.</p>
+  <p class="sub">Thirty packages, each one plain Lumen with tests, imported straight from a
+  URL: no package manager, no install step, no lockfile. Those marked
+  <span class="badge badge-ffi">FFI</span> link a C library and build on the native target
+  (some also ship a wasm archive for the browser).</p>
 
-  <h3>Using a package</h3>
-  <p class="sub">Import a package's export straight from its URL and build as usual.</p>
-<pre><code class="lumen">import greet from "https://lumen-lang.org/package/std-contrib/hello/hello.ts";
-
-console.log(greet("world"));   // Hello, world!</code></pre>
-  <p class="sub"><code>lumen-lang.org/package/std-contrib/&lt;name&gt;/&lt;file&gt;.ts</code>
-  redirects to the package's repository; the raw GitHub URL works too.</p>
-
-  <h3>Catalog</h3>
-  <div class="filter-row">
-    <input type="search" id="catalog-filter" placeholder="Filter packages, e.g. csv, http, sqlite" aria-label="Filter the package catalog" autocomplete="off">
-    <span class="filter-count" id="catalog-filter-count" aria-live="polite"></span>
+  <div class="pkg-toolbar">
+    <div class="filter-row">
+      <input type="search" id="catalog-filter" placeholder="Filter packages, e.g. csv, http, sqlite" aria-label="Filter the package catalog" autocomplete="off">
+      <span class="filter-count" id="catalog-filter-count" aria-live="polite"></span>
+    </div>
   </div>
+  <nav class="pkg-jump" aria-label="Package groups">
+    <a href="#formats">Formats</a>
+    <a href="#data">Data</a>
+    <a href="#servers">Servers</a>
+    <a href="#ai-agents">AI &amp; agents</a>
+    <a href="#tooling">Tooling</a>
+    <a href="#small-example">Small &amp; example</a>
+  </nav>
+  <p class="filter-empty" id="catalog-filter-empty" hidden>No package matches. Try a shorter word, or
+  <a href="/community#contribute">contribute one</a>.</p>
+
   <div id="catalog">
   <!-- catalog:start -->
-  <table>
-    <tr><th>Package</th><th>What it does</th></tr>
-    <tr>
-      <td><a href="/packages/agents">agents</a></td>
-      <td>Agents, prompts, models, MCP links and sub-agents as database rows — run, evaluated and reconfigured over HTTP without a restart.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/ai">ai</a></td>
-      <td>Typed AI helpers for OpenAI-compatible chat APIs: RAG, conversation memory with context compression, structured output, a live tool-calling agent loop, and an MCP client (HTTP, stdio, SSE).</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/args">args</a></td>
-      <td>Command-line flag and option parsing (hasFlag, optionValue, positional).</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/code-index">code-index</a></td>
-      <td>Codebase symbol index (cidx): map/find/refs/search/rank, persistent cache, 8 languages — AI navigation, no vector DB.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/cron">cron</a></td>
-      <td>Schedule expressions and the next time one fires.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/csv">csv</a></td>
-      <td>CSV parser/stringifier with quoted fields, CRLF, row helpers, and flat arrays.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/dotenv">dotenv</a></td>
-      <td>.env parser for key/value config strings.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/geo">geo</a></td>
-      <td>2D point helpers: distanceSq, manhattan.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/greeter">greeter</a></td>
-      <td>Two-file package; demonstrates recursive URL-relative imports.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/hello">hello</a></td>
-      <td>Minimal greet function; canonical URL-import example.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/mail">mail</a></td>
-      <td>Sending mail: one Mailer interface, Resend and SendGrid implementations, one HTML shell.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/markdown">markdown</a></td>
-      <td>Pure-Lumen Markdown -&gt; HTML renderer (no FFI); render(md).</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/mathx">mathx</a></td>
-      <td>Integer math helpers: gcd, lcm, ipow, isPrime, clampInt.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/openapi">openapi</a></td>
-      <td>OpenAPI 3.0 document generation for rest controllers: @openapi/@schema decorators, cross-referenced against the real Route[].</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/pdf">pdf</a></td>
-      <td>PDF text and metadata via Poppler: layout mode, page ranges, document info.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/pgvector">pgvector</a></td>
-      <td>Persistent vector store on PostgreSQL + pgvector via FFI: upsert, cosine search, distance bounds.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/plume">plume</a></td>
-      <td>Typed data-mapper and migration tool over PostgreSQL, SQLite and MySQL via FFI: explicit field/column mapping, projections, relations, checksummed migrations, transactions.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/press">press</a></td>
-      <td>Templates for pages: EJS-style tags, escaped by default.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/quickjs">quickjs</a></td>
-      <td>Embed a QuickJS JavaScript sandbox via FFI; set/eval/get values across the boundary.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/rest">rest</a></td>
-      <td>Router and HTTP server: decorated controllers, a route table checked at startup, JSON replies.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/semver">semver</a></td>
-      <td>Semantic Versioning parser, comparator, incrementer, and range evaluator.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/socketio">socketio</a></td>
-      <td>A socket.io server the official browser client connects to: Engine.IO and Socket.IO framing over websocket.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/sqlite">sqlite</a></td>
-      <td>Typed SQLite access via FFI; open/exec/query int and text over a C shim.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/sse">sse</a></td>
-      <td>Server-sent events: one-way push over an HTTP response that never ends, with resumption.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/token-gate">token-gate</a></td>
-      <td>Token-optimizing command proxy (tkg): per-command handlers for git/ls/find/du/grep/tables/linters/tests, savings ledger, Claude Code hook.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/toml">toml</a></td>
-      <td>Practical TOML parser/stringifier for sections, dotted keys, typed values, and simple arrays.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/tracing">tracing</a></td>
-      <td>OpenTelemetry traces for AI runs over OTLP/HTTP: spans, generations, tools, token usage — six backends, Langfuse-compatible.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/tty">tty</a></td>
-      <td>Raw-mode terminal input, key decoding, terminal size, and ANSI cursor/screen control via a C shim (community).</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/validation">validation</a></td>
-      <td>Rules written on the fields they govern; faults come back as a list.</td>
-    </tr>
-    <tr>
-      <td><a href="/packages/websocket">websocket</a></td>
-      <td>RFC 6455 websockets: handshake, frames, server and client — a browser connects, exchanges and closes clean.</td>
-    </tr>
-  </table>
+  <div class="pkg-group" id="formats">
+    <h3>Formats <span class="pkg-count">6</span></h3>
+    <p class="sub">Parse and write text formats.</p>
+    <div class="pkg-grid">
+      <a class="pkg" href="/packages/csv" data-name="csv">
+        <span class="pkg-name">csv</span>
+        <span class="pkg-summary">CSV parser/stringifier with quoted fields, CRLF, row helpers, and flat arrays.</span>
+      </a>
+      <a class="pkg" href="/packages/toml" data-name="toml">
+        <span class="pkg-name">toml</span>
+        <span class="pkg-summary">Practical TOML parser/stringifier for sections, dotted keys, typed values, and simple arrays.</span>
+      </a>
+      <a class="pkg" href="/packages/dotenv" data-name="dotenv">
+        <span class="pkg-name">dotenv</span>
+        <span class="pkg-summary">.env parser for key/value config strings.</span>
+      </a>
+      <a class="pkg" href="/packages/semver" data-name="semver">
+        <span class="pkg-name">semver</span>
+        <span class="pkg-summary">Semantic Versioning parser, comparator, incrementer, and range evaluator.</span>
+      </a>
+      <a class="pkg" href="/packages/markdown" data-name="markdown">
+        <span class="pkg-name">markdown</span>
+        <span class="pkg-summary">Pure-Lumen Markdown -&gt; HTML renderer (no FFI); render(md).</span>
+      </a>
+      <a class="pkg" href="/packages/pdf" data-name="pdf">
+        <span class="pkg-name">pdf <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span></span>
+        <span class="pkg-summary">PDF text and metadata via Poppler: layout mode, page ranges, document info.</span>
+      </a>
+    </div>
+  </div>
+  <div class="pkg-group" id="data">
+    <h3>Data <span class="pkg-count">3</span></h3>
+    <p class="sub">Databases and stores, over the C FFI.</p>
+    <div class="pkg-grid">
+      <a class="pkg" href="/packages/plume" data-name="plume">
+        <span class="pkg-name">plume <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span></span>
+        <span class="pkg-summary">Typed data-mapper and migration tool over PostgreSQL, SQLite and MySQL via FFI: explicit field/column mapping, projections, relations, checksummed migrations, transactions.</span>
+      </a>
+      <a class="pkg" href="/packages/sqlite" data-name="sqlite">
+        <span class="pkg-name">sqlite <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span></span>
+        <span class="pkg-summary">Typed SQLite access via FFI; open/exec/query int and text over a C shim.</span>
+      </a>
+      <a class="pkg" href="/packages/pgvector" data-name="pgvector">
+        <span class="pkg-name">pgvector <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span></span>
+        <span class="pkg-summary">Persistent vector store on PostgreSQL + pgvector via FFI: upsert, cosine search, distance bounds.</span>
+      </a>
+    </div>
+  </div>
+  <div class="pkg-group" id="servers">
+    <h3>Servers <span class="pkg-count">7</span></h3>
+    <p class="sub">HTTP servers, sockets, templates and validation.</p>
+    <div class="pkg-grid">
+      <a class="pkg" href="/packages/rest" data-name="rest">
+        <span class="pkg-name">rest</span>
+        <span class="pkg-summary">Router and HTTP server: decorated controllers, a route table checked at startup, JSON replies.</span>
+      </a>
+      <a class="pkg" href="/packages/openapi" data-name="openapi">
+        <span class="pkg-name">openapi</span>
+        <span class="pkg-summary">OpenAPI 3.0 document generation for rest controllers: @openapi/@schema decorators, cross-referenced against the real Route[].</span>
+      </a>
+      <a class="pkg" href="/packages/websocket" data-name="websocket">
+        <span class="pkg-name">websocket</span>
+        <span class="pkg-summary">RFC 6455 websockets: handshake, frames, server and client — a browser connects, exchanges and closes clean.</span>
+      </a>
+      <a class="pkg" href="/packages/socketio" data-name="socketio">
+        <span class="pkg-name">socketio</span>
+        <span class="pkg-summary">A socket.io server the official browser client connects to: Engine.IO and Socket.IO framing over websocket.</span>
+      </a>
+      <a class="pkg" href="/packages/sse" data-name="sse">
+        <span class="pkg-name">sse</span>
+        <span class="pkg-summary">Server-sent events: one-way push over an HTTP response that never ends, with resumption.</span>
+      </a>
+      <a class="pkg" href="/packages/press" data-name="press">
+        <span class="pkg-name">press</span>
+        <span class="pkg-summary">Templates for pages: EJS-style tags, escaped by default.</span>
+      </a>
+      <a class="pkg" href="/packages/validation" data-name="validation">
+        <span class="pkg-name">validation</span>
+        <span class="pkg-summary">Rules written on the fields they govern; faults come back as a list.</span>
+      </a>
+    </div>
+  </div>
+  <div class="pkg-group" id="ai-agents">
+    <h3>AI &amp; agents <span class="pkg-count">3</span></h3>
+    <p class="sub">Model APIs, agents and traces.</p>
+    <div class="pkg-grid">
+      <a class="pkg" href="/packages/ai" data-name="ai">
+        <span class="pkg-name">ai</span>
+        <span class="pkg-summary">Typed AI helpers for OpenAI-compatible chat APIs: RAG, conversation memory with context compression, structured output, a live tool-calling agent loop, and an MCP client (HTTP, stdio, SSE).</span>
+      </a>
+      <a class="pkg" href="/packages/agents" data-name="agents">
+        <span class="pkg-name">agents</span>
+        <span class="pkg-summary">Agents, prompts, models, MCP links and sub-agents as database rows — run, evaluated and reconfigured over HTTP without a restart.</span>
+      </a>
+      <a class="pkg" href="/packages/tracing" data-name="tracing">
+        <span class="pkg-name">tracing</span>
+        <span class="pkg-summary">OpenTelemetry traces for AI runs over OTLP/HTTP: spans, generations, tools, token usage — six backends, Langfuse-compatible.</span>
+      </a>
+    </div>
+  </div>
+  <div class="pkg-group" id="tooling">
+    <h3>Tooling <span class="pkg-count">7</span></h3>
+    <p class="sub">Command lines, terminals, schedules and mail.</p>
+    <div class="pkg-grid">
+      <a class="pkg" href="/packages/token-gate" data-name="token-gate">
+        <span class="pkg-name">token-gate</span>
+        <span class="pkg-summary">Token-optimizing command proxy (tkg): per-command handlers for git/ls/find/du/grep/tables/linters/tests, savings ledger, Claude Code hook.</span>
+      </a>
+      <a class="pkg" href="/packages/code-index" data-name="code-index">
+        <span class="pkg-name">code-index</span>
+        <span class="pkg-summary">Codebase symbol index (cidx): map/find/refs/search/rank, persistent cache, 8 languages — AI navigation, no vector DB.</span>
+      </a>
+      <a class="pkg" href="/packages/args" data-name="args">
+        <span class="pkg-name">args</span>
+        <span class="pkg-summary">Command-line flag and option parsing (hasFlag, optionValue, positional).</span>
+      </a>
+      <a class="pkg" href="/packages/quickjs" data-name="quickjs">
+        <span class="pkg-name">quickjs <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span></span>
+        <span class="pkg-summary">Embed a QuickJS JavaScript sandbox via FFI; set/eval/get values across the boundary.</span>
+      </a>
+      <a class="pkg" href="/packages/cron" data-name="cron">
+        <span class="pkg-name">cron <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span></span>
+        <span class="pkg-summary">Schedule expressions and the next time one fires.</span>
+      </a>
+      <a class="pkg" href="/packages/tty" data-name="tty">
+        <span class="pkg-name">tty <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span></span>
+        <span class="pkg-summary">Raw-mode terminal input, key decoding, terminal size, and ANSI cursor/screen control via a C shim (community).</span>
+      </a>
+      <a class="pkg" href="/packages/mail" data-name="mail">
+        <span class="pkg-name">mail</span>
+        <span class="pkg-summary">Sending mail: one Mailer interface, Resend and SendGrid implementations, one HTML shell.</span>
+      </a>
+    </div>
+  </div>
+  <div class="pkg-group" id="small-example">
+    <h3>Small &amp; example <span class="pkg-count">4</span></h3>
+    <p class="sub">Tiny packages that show the import model.</p>
+    <div class="pkg-grid">
+      <a class="pkg" href="/packages/mathx" data-name="mathx">
+        <span class="pkg-name">mathx</span>
+        <span class="pkg-summary">Integer math helpers: gcd, lcm, ipow, isPrime, clampInt.</span>
+      </a>
+      <a class="pkg" href="/packages/geo" data-name="geo">
+        <span class="pkg-name">geo</span>
+        <span class="pkg-summary">2D point helpers: distanceSq, manhattan.</span>
+      </a>
+      <a class="pkg" href="/packages/hello" data-name="hello">
+        <span class="pkg-name">hello</span>
+        <span class="pkg-summary">Minimal greet function; canonical URL-import example.</span>
+      </a>
+      <a class="pkg" href="/packages/greeter" data-name="greeter">
+        <span class="pkg-name">greeter</span>
+        <span class="pkg-summary">Two-file package; demonstrates recursive URL-relative imports.</span>
+      </a>
+    </div>
+  </div>
   <!-- catalog:end -->
   </div>
-  <p class="note">Each name links to the package's own page — what it does, its API,
-  the decisions inside it, and how it is tested. <code>quickjs</code>, <code>sqlite</code>
-  and <code>pdf</code> link native libraries through the C FFI, so they are built locally
-  rather than fetched purely by URL; their pages document the build.</p>
+
+  <div class="pkg-howto" id="using">
+  <h3>Using a package</h3>
+  <p class="sub">Import an export straight from the package's URL and build as usual. The
+  source is fetched over HTTPS at compile time and compiled in.</p>
+<pre data-play><code class="lumen">import greet from "https://lumen-lang.org/package/std-contrib/hello/hello.ts";
+
+console.log(greet("world"));   // Hello, world!</code></pre>
+  <p class="sub"><code>lumen-lang.org/package/std-contrib/&lt;name&gt;/&lt;name&gt;.ts</code>
+  redirects to the package's repository, and the raw GitHub URL works too. Each package's
+  page has its API, the decisions inside it and how it is tested; the FFI packages document
+  their local build there.</p>
 
   <h3>markdown is fast</h3>
   <p class="sub">The pure-Lumen <code>markdown</code> renderer outpaces the popular
@@ -214,9 +258,10 @@ console.log(greet("world"));   // Hello, world!</code></pre>
 
   <h3>Contributing</h3>
   <p class="sub">One package per directory, statically typed, tested, current-language
-  features only, with an entry in the catalog. See
-  <a href="https://github.com/lumen-lang-org/std-contrib/blob/main/CONTRIBUTING.md">CONTRIBUTING</a>
-  in the <a href="https://github.com/lumen-lang-org/std-contrib">std-contrib</a> repository.</p>
+  features only, with an entry in the catalog. The <a href="/community">community page</a>
+  has the short version and links to
+  <a href="https://github.com/lumen-lang-org/std-contrib/blob/main/CONTRIBUTING.md">CONTRIBUTING</a>.</p>
+  </div>
 </section>
 
 <footer><div class="wrap">
@@ -238,24 +283,40 @@ console.log(greet("world"));   // Hello, world!</code></pre>
 <script src="highlight.js?v=25b44fe7"></script>
 <script src="site.js?v=3daeecb8"></script>
 <script>
-// Filter the catalog table by package name or summary.
+// Filter the catalog by package name or summary; a group with no visible
+// card hides with its heading, and the jump chips follow.
 (function () {
   var input = document.getElementById('catalog-filter');
   var count = document.getElementById('catalog-filter-count');
-  var rows = document.querySelectorAll('#catalog tr');
-  if (!input || !rows.length) return;
+  var empty = document.getElementById('catalog-filter-empty');
+  var groups = document.querySelectorAll('#catalog .pkg-group');
+  var cards = document.querySelectorAll('#catalog .pkg');
+  var chips = document.querySelectorAll('.pkg-jump a');
+  if (!input || !cards.length) return;
   function apply() {
     var q = input.value.trim().toLowerCase(), n = 0;
-    rows.forEach(function (r) {
-      if (r.querySelector('th')) return;
-      var m = !q || r.textContent.toLowerCase().indexOf(q) >= 0;
-      r.hidden = !m;
+    cards.forEach(function (c) {
+      var m = !q || c.textContent.toLowerCase().indexOf(q) >= 0 || c.dataset.name.indexOf(q) >= 0;
+      c.hidden = !m;
       if (m) n++;
     });
-    count.textContent = q ? n + (n === 1 ? ' package' : ' packages') : '';
+    groups.forEach(function (g) {
+      g.hidden = !!q && !g.querySelector('.pkg:not([hidden])');
+    });
+    chips.forEach(function (a) {
+      var g = document.getElementById(a.getAttribute('href').slice(1));
+      a.hidden = !!(g && g.hidden);
+    });
+    count.textContent = q ? n + ' of ' + cards.length + (cards.length === 1 ? ' package' : ' packages') : '';
+    if (empty) empty.hidden = !(q && n === 0);
   }
   input.addEventListener('input', apply);
   input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; apply(); } });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { e.preventDefault(); input.focus(); }
+  });
+  var initial = new URLSearchParams(location.search).get('q');
+  if (initial) { input.value = initial; apply(); }
 })();
 </script>
 </body>

@@ -71,7 +71,7 @@ SHELL = """<!DOCTYPE html>
 <script>try{{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}</script>
 <title>{name} · Packages · Lumen</title>
 <meta name="description" content="{desc}">
-<link rel="stylesheet" href="/style.css?v=1fd18e07">
+<link rel="stylesheet" href="/style.css?v=cc47e897">
 <link rel="canonical" href="https://lumen-lang.org/packages/{name}">
 <meta property="og:url" content="https://lumen-lang.org/packages/{name}">
 <meta property="og:title" content="{name} · Packages · Lumen">
@@ -360,14 +360,39 @@ def catalog() -> dict:
     return summaries
 
 
-def catalogTable(summaries: dict) -> str:
-    """The catalog table on packages.html, alphabetical as the page has it."""
-    rows = ["  <table>", "    <tr><th>Package</th><th>What it does</th></tr>"]
-    for n in sorted(summaries):
-        rows.append(f'    <tr>\n      <td><a href="/packages/{n}">{n}</a></td>\n'
-                    f'      <td>{html.escape(summaries[n], quote=False)}</td>\n    </tr>')
-    rows.append("  </table>")
-    return "\n".join(rows)
+GROUP_INTRO = {
+    "Formats": "Parse and write text formats.",
+    "Data": "Databases and stores, over the C FFI.",
+    "Servers": "HTTP servers, sockets, templates and validation.",
+    "AI & agents": "Model APIs, agents and traces.",
+    "Tooling": "Command lines, terminals, schedules and mail.",
+    "Small & example": "Tiny packages that show the import model.",
+}
+
+
+def usesFfi(name: str) -> bool:
+    """A package that links a C library: any of its sources carries // @link."""
+    return any("@link" in p.read_text() for p in (PKGS / name).glob("*.ts"))
+
+
+def catalogCards(summaries: dict) -> str:
+    """The catalog on packages.html: one card per package, grouped as the
+    package pages' sidebar groups them, in that order."""
+    out = []
+    for title, names in GROUPS:
+        gid = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+        out.append(f'  <div class="pkg-group" id="{gid}">')
+        out.append(f'    <h3>{html.escape(title, quote=False)} <span class="pkg-count">{len(names)}</span></h3>')
+        out.append(f'    <p class="sub">{GROUP_INTRO[title]}</p>')
+        out.append('    <div class="pkg-grid">')
+        for n in names:
+            badge = ' <span class="badge badge-ffi" title="Links a C library through the FFI">FFI</span>' if usesFfi(n) else ""
+            out.append(f'      <a class="pkg" href="/packages/{n}" data-name="{n}">\n'
+                       f'        <span class="pkg-name">{n}{badge}</span>\n'
+                       f'        <span class="pkg-summary">{html.escape(summaries[n], quote=False)}</span>\n'
+                       f'      </a>')
+        out.append("    </div>\n  </div>")
+    return "\n".join(out)
 
 
 def emit(path: Path, text: str, stale: list) -> None:
@@ -404,7 +429,7 @@ def main():
     listing = HERE / "packages.html"
     text = listing.read_text()
     fenced = re.sub(r"(?s)(<!-- catalog:start -->\n).*?(\n\s*<!-- catalog:end -->)",
-                    lambda m: m.group(1) + catalogTable(summaries) + m.group(2), text)
+                    lambda m: m.group(1) + catalogCards(summaries) + m.group(2), text)
     if fenced == text and "<!-- catalog:start -->" not in text:
         raise SystemExit(f"{listing}: no <!-- catalog:start --> … <!-- catalog:end --> region")
     emit(listing, fenced, stale)

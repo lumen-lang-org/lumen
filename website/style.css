@@ -275,6 +275,31 @@ p code, li code, td code { background: var(--panel); border: 1px solid var(--bor
 @media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
 
+/* Package catalog: groups of cards, filterable. */
+.pkg-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 8px; }
+.pkg-toolbar .filter-row { margin: 0; flex: 1 1 320px; }
+.pkg-jump { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 30px; }
+.pkg-jump a { font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; }
+.pkg-jump a:hover { color: var(--fg); border-color: var(--accent); text-decoration: none; }
+.pkg-group { margin: 0 0 36px; scroll-margin-top: 76px; }
+.pkg-group h3 { margin: 0 0 4px; font-size: 18px; display: flex; align-items: baseline; gap: 8px; }
+.pkg-group > .sub { margin: 0 0 14px; }
+.pkg-count { font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+.pkg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.pkg {
+  display: flex; flex-direction: column; gap: 6px; padding: 15px 16px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-soft);
+  color: var(--fg); text-decoration: none; min-width: 0;
+}
+.pkg:hover { text-decoration: none; border-color: var(--accent); }
+.pkg-name { font: 600 15px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pkg-summary { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.badge { font: 700 10.5px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; text-transform: uppercase; letter-spacing: 0.03em; padding: 1px 7px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.badge-ffi { color: #6d28d9; border-color: #6d28d966; background: #6d28d91a; }
+.pkg-howto { margin-top: 12px; padding-top: 34px; border-top: 1px solid var(--border); }
+@media (max-width: 900px) { .pkg-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .pkg-grid { grid-template-columns: 1fr; } }
+
 /* Benchmark strip: a few headline numbers, each linking to the source. */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 0 0 18px; }
 .stat { padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-soft); }
