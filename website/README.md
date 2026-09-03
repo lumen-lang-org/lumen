@@ -21,9 +21,15 @@ and no compiler required**.
   site still needs no build step)
 - `style.css` — styling
 - `highlight.js` — tiny self-contained syntax highlighter
-- `site.js` — shared behaviour: current-page nav highlight, Copy buttons on
-  code blocks, and "Open in playground" links on blocks marked `data-play`
-  (the code travels in the URL as `/play#code=<base64url>`)
+- `site.js` — shared behaviour: current-page nav highlight, theme toggle,
+  Copy buttons on code blocks, "Open in playground" links on blocks marked
+  `data-play` (the code travels in the URL as `/play#code=<base64url>`), and
+  the latest-release line
+- `stamp.py` — rewrites every `style.css` / `site.js` / `highlight.js` link
+  with a `?v=<content hash>`. Cloudflare caches those files for five minutes,
+  so without the stamp a browser can pair new HTML with an old stylesheet.
+  **Run `python3 website/stamp.py` after editing any of the three**, before
+  committing; `--check` is the CI form.
 
 ## Local preview
 

@@ -71,7 +71,7 @@ SHELL = """<!DOCTYPE html>
 <script>try{{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}</script>
 <title>{name} · Packages · Lumen</title>
 <meta name="description" content="{desc}">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=1fd18e07">
 <link rel="canonical" href="https://lumen-lang.org/packages/{name}">
 <meta property="og:url" content="https://lumen-lang.org/packages/{name}">
 <meta property="og:title" content="{name} · Packages · Lumen">
@@ -143,8 +143,8 @@ SHELL = """<!DOCTYPE html>
   </p>
 </div></footer>
 
-<script src="/highlight.js"></script>
-<script src="/site.js"></script>
+<script src="/highlight.js?v=25b44fe7"></script>
+<script src="/site.js?v=3daeecb8"></script>
 <script>
 // Mobile package-list toggle: shows/hides the same sidebar nav used on
 // desktop. Closes on link click or an outside click. Same code as stdlib.

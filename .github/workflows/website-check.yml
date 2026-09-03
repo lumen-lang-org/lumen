@@ -1,0 +1,22 @@
+name: website-check
+# style.css, site.js and highlight.js are linked with a content-hash query
+# (see website/stamp.py) so a deploy never pairs new HTML with a stylesheet a
+# browser cached five minutes ago. This fails a change that edits one of
+# those files without re-running the stamp.
+on:
+  pull_request:
+    paths: ['website/**']
+  push:
+    branches: [main]
+    paths: ['website/**']
+
+permissions:
+  contents: read
+
+jobs:
+  stamps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Asset links carry the current content hash
+        run: python3 website/stamp.py --check
