@@ -24,6 +24,7 @@
 <meta name="twitter:image" content="https://lumen-lang.org/og-image.png">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -40,8 +41,8 @@
   </span>
 </div></nav>
 
-<section class="wrap">
-  <h2>Packages</h2>
+<section class="wrap" id="main">
+  <h1>Packages</h1>
   <p class="sub">Community packages live in the
   <a href="https://github.com/lumen-lang-org/std-contrib">std-contrib</a> catalog.
   A package is just a URL: it is fetched over HTTPS and inlined at compile time,
@@ -57,6 +58,11 @@ console.log(greet("world"));   // Hello, world!</code></pre>
   redirects to the package's repository; the raw GitHub URL works too.</p>
 
   <h3>Catalog</h3>
+  <div class="filter-row">
+    <input type="search" id="catalog-filter" placeholder="Filter packages, e.g. csv, http, sqlite" aria-label="Filter the package catalog" autocomplete="off">
+    <span class="filter-count" id="catalog-filter-count" aria-live="polite"></span>
+  </div>
+  <div id="catalog">
   <!-- catalog:start -->
   <table>
     <tr><th>Package</th><th>What it does</th></tr>
@@ -182,6 +188,7 @@ console.log(greet("world"));   // Hello, world!</code></pre>
     </tr>
   </table>
   <!-- catalog:end -->
+  </div>
   <p class="note">Each name links to the package's own page — what it does, its API,
   the decisions inside it, and how it is tested. <code>quickjs</code>, <code>sqlite</code>
   and <code>pdf</code> link native libraries through the C FFI, so they are built locally
@@ -208,9 +215,41 @@ console.log(greet("world"));   // Hello, world!</code></pre>
 </section>
 
 <footer><div class="wrap">
-  <a href="/">← Back to home</a> · <a href="/stdlib">Standard library</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
 
 <script src="highlight.js"></script>
+<script src="site.js"></script>
+<script>
+// Filter the catalog table by package name or summary.
+(function () {
+  var input = document.getElementById('catalog-filter');
+  var count = document.getElementById('catalog-filter-count');
+  var rows = document.querySelectorAll('#catalog tr');
+  if (!input || !rows.length) return;
+  function apply() {
+    var q = input.value.trim().toLowerCase(), n = 0;
+    rows.forEach(function (r) {
+      if (r.querySelector('th')) return;
+      var m = !q || r.textContent.toLowerCase().indexOf(q) >= 0;
+      r.hidden = !m;
+      if (m) n++;
+    });
+    count.textContent = q ? n + (n === 1 ? ' package' : ' packages') : '';
+  }
+  input.addEventListener('input', apply);
+  input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; apply(); } });
+})();
+</script>
 </body>
 </html>

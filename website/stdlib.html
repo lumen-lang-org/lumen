@@ -24,6 +24,7 @@
 <meta name="twitter:image" content="https://lumen-lang.org/og-image.png">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -40,7 +41,7 @@
   </span>
 </div></nav>
 
-<section class="wrap">
+<section class="wrap" id="main">
   <div class="docs">
   <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
     <span id="docs-nav-toggle-label">Jump to section</span>
@@ -81,7 +82,7 @@
   </nav></aside>
   <div class="docs-main">
 
-  <h2>Standard library</h2>
+  <h1>Standard library</h1>
   <p class="sub stdlib-intro">Familiar, conventional APIs
   (<code>fs.readFileSync</code>, <code>path.join</code>, <code>process.cwd</code>),
   statically typed and compiled to native code. Each function carries a
@@ -93,6 +94,11 @@
   (<span class="target-pill target-native-only">Native only</span>
   <span class="target-pill target-wasm-limited">Wasm: limited</span>)
   marking WebAssembly support &mdash; hover either for details.</p>
+  <div class="filter-row">
+    <input type="search" id="docs-filter" placeholder="Filter APIs, e.g. readFile, Map, hmac" aria-label="Filter the standard library reference" autocomplete="off">
+    <span class="filter-count" id="docs-filter-count" aria-live="polite"></span>
+  </div>
+  <p class="filter-empty" id="docs-filter-empty" hidden>Nothing matches. Try a shorter word, or check the <a href="/packages">community packages</a>.</p>
 
   <h3>Available now</h3>
 
@@ -2414,10 +2420,118 @@ async function main(): Promise&lt;void&gt; {
 </section>
 
 <footer><div class="wrap">
-  <a href="/">← Back to home</a> · <a href="/examples">Examples</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
 
 <script src="highlight.js"></script>
+<script src="site.js"></script>
+<script>
+// Filter the reference by substring. Every module heading (h4) owns the
+// elements that follow it up to the next heading; a query keeps a module when
+// its name matches, otherwise only the table rows and per-function blocks
+// that mention the query, and hides sidebar links for hidden modules.
+(function () {
+  var input = document.getElementById('docs-filter');
+  var main = document.querySelector('.docs-main');
+  var count = document.getElementById('docs-filter-count');
+  var empty = document.getElementById('docs-filter-empty');
+  if (!input || !main) return;
+
+  var groups = [], cur = null, before = [];
+  Array.prototype.forEach.call(main.children, function (el) {
+    if (/^H[34]$/.test(el.tagName)) { cur = { head: el, items: [] }; groups.push(cur); return; }
+    if (cur) cur.items.push(el); else before.push(el);
+  });
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.docs-nav a[href^="#"]'));
+
+  function textOf(el) { return el.textContent.toLowerCase(); }
+
+  function apply(q) {
+    q = q.trim().toLowerCase();
+    var hits = 0, shownModules = 0;
+    groups.forEach(function (g) {
+      var isModule = g.head.tagName === 'H4';
+      var headMatch = !q || (isModule && textOf(g.head).indexOf(q) >= 0);
+      var any = false;
+      g.items.forEach(function (el) {
+        if (el.classList.contains('filter-row') || el.classList.contains('filter-empty')) return;
+        var rows = el.tagName === 'TABLE' ? el.querySelectorAll('tr') : [];
+        if (!q) {
+          el.hidden = false;
+          Array.prototype.forEach.call(rows, function (r) { r.hidden = false; });
+          any = true;
+          return;
+        }
+        if (rows.length) {
+          var elAny = false;
+          Array.prototype.forEach.call(rows, function (r) {
+            if (r.querySelector('th')) { r.hidden = false; return; }
+            var m = headMatch || textOf(r).indexOf(q) >= 0;
+            r.hidden = !m;
+            if (m) { elAny = true; hits++; }
+          });
+          el.hidden = !elAny;
+          any = any || elAny;
+        } else if (el.classList.contains('api')) {
+          var m = headMatch || textOf(el).indexOf(q) >= 0;
+          el.hidden = !m;
+          if (m) { any = true; hits++; }
+        } else {
+          // prose, notes, quick-jump lists: shown with the module when the
+          // module itself is kept, never a match on their own
+          el.hidden = !headMatch;
+          any = any || headMatch;
+        }
+      });
+      g.head.hidden = q ? !any : false;
+      if (isModule && !g.head.hidden) shownModules++;
+    });
+    // Sections (h3) with no visible module under them.
+    groups.forEach(function (g) {
+      if (g.head.tagName !== 'H3' || !q) return;
+      var i = groups.indexOf(g), visible = false;
+      for (var j = i + 1; j < groups.length && groups[j].head.tagName !== 'H3'; j++) {
+        if (!groups[j].head.hidden) visible = true;
+      }
+      g.head.hidden = !visible;
+      g.items.forEach(function (el) { el.hidden = !visible; });
+    });
+    navLinks.forEach(function (a) {
+      var el = document.getElementById(a.getAttribute('href').slice(1));
+      a.hidden = !!(q && el && el.hidden);
+    });
+    if (count) count.textContent = q ? (hits + (hits === 1 ? ' entry' : ' entries') + ' in ' + shownModules + (shownModules === 1 ? ' module' : ' modules')) : '';
+    if (empty) empty.hidden = !(q && hits === 0);
+  }
+
+  var timer;
+  input.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { apply(input.value); }, 80);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { input.value = ''; apply(''); }
+  });
+  // "/" focuses the filter, like GitHub.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      e.preventDefault(); input.focus();
+    }
+  });
+  var initial = new URLSearchParams(location.search).get('q');
+  if (initial) { input.value = initial; apply(initial); }
+})();
+</script>
 <script>
 // Highlight the left nav entry for whichever section is currently in view.
 (function () {

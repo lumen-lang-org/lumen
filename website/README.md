@@ -14,6 +14,9 @@ and no compiler required**.
   site still needs no build step)
 - `style.css` — styling
 - `highlight.js` — tiny self-contained syntax highlighter
+- `site.js` — shared behaviour: current-page nav highlight, Copy buttons on
+  code blocks, and "Open in playground" links on blocks marked `data-play`
+  (the code travels in the URL as `/play#code=<base64url>`)
 
 ## Local preview
 

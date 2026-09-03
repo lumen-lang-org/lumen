@@ -23,6 +23,7 @@
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -39,7 +40,7 @@
   </span>
 </div></nav>
 
-<section class="wrap">
+<section class="wrap" id="main">
   <div class="docs">
   <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
     <span id="docs-nav-toggle-label">plume</span>
@@ -87,7 +88,7 @@
   <div class="docs-main">
   <p class="sub"><a href="/packages">Packages</a> / <strong>plume</strong>
   · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/plume">source</a></p>
-  <h2>plume</h2>
+  <h1>plume</h1>
   <p class="sub">An object mapper and migration tool for Lumen, against PostgreSQL, SQLite and MySQL/MariaDB.</p>
   <p class="sub">Nothing is inferred. A table name, a key, every column and every SQL type is written out; plume never guesses a column from a field name or a table from a type. The declaration that states the shape states the mapping with it:</p>
 <pre><code class="lumen">import { entity } from "./entity.ts";
@@ -337,10 +338,21 @@ persist(database, agents(), JSON.stringify(a));</code></pre>
 </section>
 
 <footer><div class="wrap">
-  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
 
 <script src="/highlight.js"></script>
+<script src="/site.js"></script>
 <script>
 // Mobile package-list toggle: shows/hides the same sidebar nav used on
 // desktop. Closes on link click or an outside click. Same code as stdlib.

@@ -27,6 +27,7 @@
 </script>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -43,7 +44,7 @@
   </span>
 </div></nav>
 
-<header class="hero">
+<header class="hero" id="main">
   <div class="wrap hero-grid">
     <div class="hero-copy">
       <h1>Write TypeScript.<br>Compile to a <span class="accent">native binary</span>.</h1>
@@ -51,7 +52,7 @@
       small, dependency&#8209;free executable. No VM, no interpreter, no Node.</p>
       <div class="cta">
         <a class="btn primary" href="#quickstart">Get started</a>
-        <a class="btn ghost" href="/examples">Examples</a>
+        <a class="btn ghost" href="/play">Try it in the browser</a>
       </div>
       <div class="install-row">
         <code id="install-cmd">curl -fsSL https://lumen-lang.org/install.sh | sh</code>
@@ -59,24 +60,7 @@
       </div>
     </div>
     <div class="hero-code">
-<pre><code class="lumen">// Call libm directly -- no bindings, no runtime.
-// @link m
-declare function sqrt(x: number): number;
-
-function hypot(a: number, b: number): number {
-  using _ = defer(() => console.log("computed"));   // runs at scope exit
-  return sqrt(a * a + b * b);
-}
-
-console.log(hypot(3.0, 4.0));   // computed → 5</code></pre>
-    </div>
-  </div>
-</header>
-
-<section class="wrap" id="hello">
-  <h2>Hello, Lumen</h2>
-  <p class="sub">Familiar syntax, fixed static types, no runtime, just a native executable.</p>
-<pre><code class="lumen">interface Point {
+<pre data-play><code class="lumen">interface Point {
   x: int;
   y: int;
 }
@@ -89,7 +73,25 @@ function distanceSq(a: Point, b: Point): int {
 
 let origin: Point = { x: 0, y: 0 };
 let p: Point = { x: 3, y: 4 };
-console.log(`distance² = ${distanceSq(origin, p)}`);  // distance² = 25</code></pre>
+console.log(`distance² = ${distanceSq(origin, p)}`);  // 25</code></pre>
+    </div>
+  </div>
+</header>
+
+<section class="wrap" id="ffi">
+  <h2>Call C directly</h2>
+  <p class="sub">Declare the function, name the library, and the compiler links it, with no
+  bindings to generate and no runtime in between. <code>defer</code> runs cleanup at scope
+  exit. <a href="/stdlib#ffi">How the C FFI works &rarr;</a></p>
+<pre><code class="lumen">// @link m
+declare function sqrt(x: number): number;
+
+function hypot(a: number, b: number): number {
+  using _ = defer(() => console.log("computed"));   // runs at scope exit
+  return sqrt(a * a + b * b);
+}
+
+console.log(hypot(3.0, 4.0));   // computed → 5</code></pre>
 </section>
 
 <section class="wrap" id="features">
@@ -154,30 +156,34 @@ FAIL rounds — expected 4, found 3
 
 <section class="wrap" id="quickstart">
   <h2>Install</h2>
+  <p class="sub">One self-contained binary, no other toolchain required. The script installs
+  on macOS and Linux (x86_64 and arm64); on Windows, download the <code>.zip</code> from the
+  <a href="https://github.com/lumen-lang-org/lumen/releases">releases page</a>.</p>
 <pre><code class="lumen">curl -fsSL https://lumen-lang.org/install.sh | sh</code></pre>
-  <p class="sub">Windows: download the <code>.zip</code> from the
-  <a href="https://github.com/lumen-lang-org/lumen/releases">releases page</a>. Self-contained,
-  no other toolchain required.</p>
-  <p class="sub">Then scaffold a project and run it:</p>
-<pre><code class="lumen">lumen init my-app
-cd my-app
-lumen compile main.ts && ./main</code></pre>
+
+  <h3>Your first program</h3>
   <p class="sub"><code>lumen init</code> writes a starter <code>main.ts</code> plus the ambient
   declarations and <code>tsconfig.json</code>, so the project is editor- and type-checker-clean
   from the first keystroke.</p>
-  <p class="sub">For a live edit loop, <code>lumen watch</code> rebuilds and re-runs the program
-  whenever the entry file or any of its local imports changes:</p>
+<pre><code class="lumen">lumen init my-app
+cd my-app
+lumen compile main.ts && ./main</code></pre>
+
+  <h3>Live edit loop</h3>
+  <p class="sub"><code>lumen watch</code> rebuilds and re-runs the program whenever the entry
+  file or any of its local imports changes:</p>
 <pre><code class="lumen">lumen watch main.ts            # rebuild and re-run on change
 lumen watch --no-run main.ts   # rebuild only</code></pre>
-  <p class="sub">A binary built the plain way links against the host's libc, which makes the
-  machine that compiled it the floor for every machine that runs it. Name a target and ask
-  for a static link and it stops mattering:</p>
+
+  <h3>Cross-compile and static binaries</h3>
+  <p class="sub">A binary built the plain way links against the host's libc, so it runs on
+  machines at least as new as the one that built it. Name a target with <code>--target</code>
+  and ask for <code>--static</code> to get a self-contained binary that runs anywhere:</p>
 <pre><code class="lumen">lumen compile --target x86_64-linux-musl --static main.ts
 lumen compile --library-path ./vendor --link gc main.ts</code></pre>
-  <p class="sub"><code>--target</code> takes a triple, <code>--static</code> asks for a
-  self-contained binary, and <code>--library-path</code> names a directory to search for a
-  library <code>--link</code> asks for &mdash; which is what makes linking a staged
-  collector work without the machine running the program having a package manager.</p>
+  <p class="sub"><code>--library-path</code> names a directory to search for a library that
+  <code>--link</code> asks for, so a vendored C library links without a package manager on the
+  machine that runs the program.</p>
 </section>
 
 <footer><div class="wrap">
@@ -185,23 +191,16 @@ lumen compile --library-path ./vendor --link gc main.ts</code></pre>
   <p>A compiled TypeScript-syntax language.</p>
   <p class="footlinks">
     <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
     <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
     <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
-    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a>
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
   </p>
 </div></footer>
 
 <script src="highlight.js"></script>
-<script>
-  document.querySelectorAll(".copy").forEach(function (b) {
-    b.addEventListener("click", function () {
-      var el = document.getElementById(b.dataset.copy);
-      navigator.clipboard.writeText(el.textContent).then(function () {
-        var t = b.textContent; b.textContent = "Copied"; b.classList.add("ok");
-        setTimeout(function () { b.textContent = t; b.classList.remove("ok"); }, 1400);
-      });
-    });
-  });
-</script>
+<script src="site.js"></script>
 </body>
 </html>

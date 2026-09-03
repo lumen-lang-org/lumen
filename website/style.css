@@ -35,6 +35,8 @@
 }
 
 * { box-sizing: border-box; }
+/* The filters toggle the hidden attribute; it must beat any display rule. */
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 
 body {
@@ -47,6 +49,11 @@ body {
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Keyboard users get a way past the nav; invisible until focused. */
+.skip-link { position: absolute; left: -9999px; top: 10px; z-index: 40; background: var(--accent); color: var(--accent-fg); padding: 9px 14px; border-radius: 8px; font-weight: 600; }
+.skip-link:focus { left: 12px; }
 
 .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
 
@@ -59,6 +66,8 @@ nav .wrap { display: flex; align-items: center; height: 60px; }
 nav .links { margin-left: auto; display: flex; gap: 24px; }
 nav .links a { color: var(--muted); font-size: 14.5px; font-weight: 500; }
 nav .links a:hover { color: var(--fg); text-decoration: none; }
+/* The page being viewed (set by site.js). */
+nav .links a[aria-current="page"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); padding-bottom: 2px; }
 .nav-burger { display: none; }
 
 @media (max-width: 720px) {
@@ -76,7 +85,9 @@ nav .links a:hover { color: var(--fg); text-decoration: none; }
     background: var(--bg); border-bottom: 1px solid var(--border); padding: 6px 0;
   }
   nav .links a { padding: 12px 24px; font-size: 16px; }
+  nav .links a[aria-current="page"] { box-shadow: inset 3px 0 0 var(--accent); padding-bottom: 12px; }
   .nav-toggle:checked ~ .links { display: flex; }
+  .nav-toggle:focus-visible ~ .nav-burger { outline: 2px solid var(--accent); outline-offset: 6px; }
 }
 
 /* Hero — two columns: copy left, code right, flat */
@@ -123,7 +134,8 @@ nav .links a:hover { color: var(--fg); text-decoration: none; }
 
 /* Sections */
 section { padding: 60px 0; border-bottom: 1px solid var(--border); }
-section h2 { font-size: 28px; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 700; }
+/* Inner pages title with an h1 (one per page); it looks like a section h2. */
+section h1, section h2 { font-size: 28px; letter-spacing: -0.02em; margin: 0 0 10px; font-weight: 700; }
 section .sub { color: var(--muted); margin: 0 0 26px; max-width: 700px; }
 .stdlib-intro { max-width: none; }
 h3 { font-size: 17px; margin: 28px 0 12px; font-weight: 650; }
@@ -192,6 +204,24 @@ pre code { color: var(--code-fg); }
 code { font: 13.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 p code, li code, td code { background: var(--panel); border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--fg); }
 
+/* Copy / "Open in playground" tools pinned to a block's top-right corner
+   (site.js wraps each <pre> in .codeblock so the tools don't scroll with
+   wide code). Muted until the block is hovered or a tool is focused. */
+.codeblock { position: relative; margin: 0 0 18px; }
+.codeblock > pre { margin: 0; }
+.pre-tools { position: absolute; top: 9px; right: 9px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s; }
+.codeblock:hover .pre-tools, .pre-tools:focus-within { opacity: 1; }
+.pre-tools a, .pre-tools button {
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #1b212b; color: #9aa7b4; border: 1px solid var(--code-border); border-radius: 6px;
+  padding: 7px 9px; cursor: pointer; text-decoration: none;
+}
+.pre-tools a:hover, .pre-tools button:hover { color: #e8eef5; border-color: #3a4452; text-decoration: none; }
+.pre-tools a { color: #ffb27a; }
+.pre-tools .ok { color: #7cc77c; }
+/* Touch screens have no hover: keep the tools visible. */
+@media (hover: none) { .pre-tools { opacity: 1; } }
+
 .tok-kw { color: #ff9ecb; }
 .tok-type { color: #7cd4ff; }
 .tok-str { color: #b9e88a; }
@@ -214,9 +244,29 @@ p code, li code, td code { background: var(--panel); border: 1px solid var(--bor
 table { width: 100%; max-width: 760px; border-collapse: collapse; margin: 0 0 24px; font-size: 14px; table-layout: fixed; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: break-word; }
 th { color: var(--muted); font-weight: 600; }
+/* Narrow screens: a reference table scrolls sideways instead of breaking
+   `console.log(x)` in the middle of an identifier. */
+@media (max-width: 600px) {
+  table { display: block; overflow-x: auto; table-layout: auto; max-width: none; -webkit-overflow-scrolling: touch; }
+  table tbody { display: table; width: max-content; min-width: 100%; }
+  td:first-child code, th:first-child { white-space: nowrap; }
+  td, th { max-width: 260px; }
+}
 
-.example { margin-bottom: 38px; }
+/* Filter box for long reference pages (stdlib, package catalog). */
+.filter-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 22px; }
+.filter-row input {
+  flex: 1 1 260px; max-width: 420px; font: 15px/1.4 inherit; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg);
+}
+.filter-row input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.filter-count { color: var(--muted); font-size: 13.5px; }
+.filter-empty { color: var(--muted); padding: 24px 0; }
+
+.example { margin-bottom: 38px; scroll-margin-top: 76px; }
 .example h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.example h3 a { color: var(--fg); }
+.example h3 a:hover { color: var(--accent); text-decoration: none; }
 .example .meta { color: var(--muted); font-size: 13px; font-weight: 400; }
 
 .note { background: var(--bg-soft); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 13px 16px; color: var(--muted); font-size: 14px; }
@@ -289,8 +339,13 @@ th { color: var(--muted); font-weight: 600; }
 .play-label { color: var(--muted); font-size: 14px; }
 .play-bar select { font: 14px/1.4 inherit; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); }
 .play-status { color: var(--muted); font-size: 13px; }
+.play-hint { color: var(--muted); font-size: 13px; margin-left: auto; }
+.play-hint kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+.play-output-label { display: flex; align-items: baseline; gap: 10px; margin: 16px 0 6px; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.btn.small { padding: 7px 13px; font-size: 14px; }
+.btn.ghost.ok { border-color: #15803d; color: #15803d; }
 #editor { width: 100%; min-height: 320px; box-sizing: border-box; background: var(--code-bg); color: var(--code-fg); border: 1px solid var(--code-border); border-radius: var(--radius); padding: 15px 17px; font: 13.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; tab-size: 2; -moz-tab-size: 2; }
-#output { background: var(--code-bg); color: var(--code-fg); border: 1px solid var(--code-border); border-radius: var(--radius); padding: 15px 17px; margin: 14px 0 0; min-height: 44px; white-space: pre-wrap; overflow-x: auto; font: 13.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+#output { background: var(--code-bg); color: var(--code-fg); border: 1px solid var(--code-border); border-radius: var(--radius); padding: 15px 17px; margin: 0; min-height: 44px; white-space: pre-wrap; overflow-x: auto; font: 13.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 #output.err { color: #ff9b9b; }
 #run[disabled] { opacity: 0.6; cursor: default; }
 /* CodeMirror editor — match the site's dark code blocks */
@@ -301,6 +356,7 @@ th { color: var(--muted); font-weight: 600; }
 footer { padding: 48px 0 64px; color: var(--muted); font-size: 14px; text-align: center; }
 footer .brand { font-size: 17px; }
 footer p { margin: 10px 0; }
+footer .footlinks { line-height: 2; }
 footer .footlinks a { color: var(--muted); }
 footer .footlinks a:hover { color: var(--fg); }
 

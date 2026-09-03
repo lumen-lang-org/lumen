@@ -24,6 +24,7 @@
 <meta name="twitter:image" content="https://lumen-lang.org/og-image.png">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -40,14 +41,35 @@
   </span>
 </div></nav>
 
-<section class="wrap">
-  <h2>Examples</h2>
+<section class="wrap" id="main">
+  <h1>Examples</h1>
   <p class="sub">Runnable programs from the <code>examples/showcase/</code> folder. Compile with
   <code>lumen compile &lt;file&gt;.ts</code>, or run tests with <code>lumen test</code>.</p>
+  <p class="sub">Programs marked <strong>Open in playground</strong> run in the browser; the rest need the native toolchain (files, C libraries, async).</p>
+  <div class="api-list" aria-label="Jump to example">
+    <a href="#inventory">inventory.ts</a>
+    <a href="#higher-order">higher-order.ts</a>
+    <a href="#config">config.ts</a>
+    <a href="#math-test">math.test.ts</a>
+    <a href="#ffi-math">ffi-math.ts</a>
+    <a href="#url-imports">url-imports.ts</a>
+    <a href="#pipeline">pipeline.ts</a>
+    <a href="#strings">strings.ts</a>
+    <a href="#generics">generics.ts</a>
+    <a href="#shapes">shapes.ts</a>
+    <a href="#inherit">inherit.ts</a>
+    <a href="#errors">errors.ts</a>
+    <a href="#collections">collections.ts</a>
+    <a href="#varargs">varargs.ts</a>
+    <a href="#async">async.ts</a>
+    <a href="#quickjs">quickjs.ts</a>
+    <a href="#wordstats">wordstats.ts</a>
+    <a href="#sqlite">sqlite.ts</a>
+  </div>
 
-  <div class="example">
-    <h3>inventory.ts <span class="meta">enums · interfaces · record arrays · for…of · template literals</span></h3>
-<pre><code class="lumen">enum Category { Food, Tool, Book }
+  <div class="example" id="inventory">
+    <h3><a href="#inventory">inventory.ts</a> <span class="meta">enums · interfaces · record arrays · for…of · template literals</span></h3>
+<pre data-play><code class="lumen">enum Category { Food, Tool, Book }
 
 interface Item {
   name: string;
@@ -73,9 +95,9 @@ for (const item of items) {
 console.log(`total: $${total}`);</code></pre>
   </div>
 
-  <div class="example">
-    <h3>higher-order.ts <span class="meta">function values · arrow functions · ternary</span></h3>
-<pre><code class="lumen">function applyTwice(f: (n: int) => int, v: int): int {
+  <div class="example" id="higher-order">
+    <h3><a href="#higher-order">higher-order.ts</a> <span class="meta">function values · arrow functions · ternary</span></h3>
+<pre data-play><code class="lumen">function applyTwice(f: (n: int) => int, v: int): int {
   return f(f(v));
 }
 
@@ -91,9 +113,9 @@ console.log(clamp(250));   // 100
 console.log(clamp(42));    // 42</code></pre>
   </div>
 
-  <div class="example">
-    <h3>config.ts <span class="meta">optional fields · ?? · null-narrowing · defer</span></h3>
-<pre><code class="lumen">interface Settings {
+  <div class="example" id="config">
+    <h3><a href="#config">config.ts</a> <span class="meta">optional fields · ?? · null-narrowing · defer</span></h3>
+<pre data-play><code class="lumen">interface Settings {
   host: string;
   port?: int;
 }
@@ -117,8 +139,8 @@ console.log(label("ada"));                        // ada
 console.log(label(null));                         // anonymous</code></pre>
   </div>
 
-  <div class="example">
-    <h3>math.test.ts <span class="meta">test blocks · expect, run with <code>lumen test</code></span></h3>
+  <div class="example" id="math-test">
+    <h3><a href="#math-test">math.test.ts</a> <span class="meta">test blocks · expect, run with <code>lumen test</code></span></h3>
 <pre><code class="lumen">function gcd(a: int, b: int): int {
   let x = a;
   let y = b;
@@ -136,8 +158,8 @@ test "gcd computes greatest common divisor" {
 }</code></pre>
   </div>
 
-  <div class="example">
-    <h3>ffi-math.ts <span class="meta">declare functions · linking libm, <code>lumen compile</code></span></h3>
+  <div class="example" id="ffi-math">
+    <h3><a href="#ffi-math">ffi-math.ts</a> <span class="meta">declare functions · linking libm, <code>lumen compile</code></span></h3>
 <pre><code class="lumen">// @link m
 declare function pow(base: number, exp: number): number;
 declare function sqrt(x: number): number;
@@ -147,18 +169,18 @@ console.log(sqrt(hypotSq));   // 5
 console.log(pow(2.0, 10.0));  // 1024</code></pre>
   </div>
 
-  <div class="example">
-    <h3>url-imports.ts <span class="meta">import from a URL · fetched and inlined at compile time</span></h3>
-<pre><code class="lumen">// The .ts is fetched over HTTPS at compile time and inlined into the build --
+  <div class="example" id="url-imports">
+    <h3><a href="#url-imports">url-imports.ts</a> <span class="meta">import from a URL · fetched and inlined at compile time</span></h3>
+<pre data-play><code class="lumen">// The .ts is fetched over HTTPS at compile time and inlined into the build --
 // no package manager, no install step. A package is just a URL.
 import greet from "https://lumen-lang.org/package/std-contrib/hello/hello.ts";
 
 console.log(greet("world"));   // Hello, world!</code></pre>
   </div>
 
-  <div class="example">
-    <h3>pipeline.ts <span class="meta">array methods · map · filter · reduce · join</span></h3>
-<pre><code class="lumen">let nums: int[] = [1, 2, 3, 4, 5, 6];
+  <div class="example" id="pipeline">
+    <h3><a href="#pipeline">pipeline.ts</a> <span class="meta">array methods · map · filter · reduce · join</span></h3>
+<pre data-play><code class="lumen">let nums: int[] = [1, 2, 3, 4, 5, 6];
 
 let evens = nums.filter((n: int) => n % 2 == 0);
 let doubled = evens.map((n: int) => n * 2);
@@ -168,9 +190,9 @@ console.log(doubled.join(", "));   // 4, 8, 12
 console.log(total);                // 24</code></pre>
   </div>
 
-  <div class="example">
-    <h3>strings.ts <span class="meta">string methods · split · toUpperCase · includes · for…of</span></h3>
-<pre><code class="lumen">let csv = "ada,grace,linus";
+  <div class="example" id="strings">
+    <h3><a href="#strings">strings.ts</a> <span class="meta">string methods · split · toUpperCase · includes · for…of</span></h3>
+<pre data-play><code class="lumen">let csv = "ada,grace,linus";
 let names = csv.split(",");
 
 for (const name of names) {
@@ -181,9 +203,9 @@ console.log(names.length);                       // 3
 console.log("grace,hopper".includes("grace"));   // true</code></pre>
   </div>
 
-  <div class="example">
-    <h3>generics.ts <span class="meta">generic function · generic class · type arguments</span></h3>
-<pre><code class="lumen">function firstOf&lt;T&gt;(xs: T[]): T {
+  <div class="example" id="generics">
+    <h3><a href="#generics">generics.ts</a> <span class="meta">generic function · generic class · type arguments</span></h3>
+<pre data-play><code class="lumen">function firstOf&lt;T&gt;(xs: T[]): T {
   return xs[0];
 }
 
@@ -204,9 +226,9 @@ let boxed = new Box&lt;string&gt;("hello");
 console.log(boxed.get());                     // hello</code></pre>
   </div>
 
-  <div class="example">
-    <h3>shapes.ts <span class="meta">discriminated union · type alias · switch on tag</span></h3>
-<pre><code class="lumen">type Circle = { kind: "circle", radius: int };
+  <div class="example" id="shapes">
+    <h3><a href="#shapes">shapes.ts</a> <span class="meta">discriminated union · type alias · switch on tag</span></h3>
+<pre data-play><code class="lumen">type Circle = { kind: "circle", radius: int };
 type Square = { kind: "square", side: int };
 type Shape = Circle | Square;
 
@@ -224,9 +246,9 @@ console.log(area({ kind: "circle", radius: 4 }));   // 48
 console.log(area({ kind: "square", side: 5 }));     // 25</code></pre>
   </div>
 
-  <div class="example">
-    <h3>inherit.ts <span class="meta">classes · extends · super · method override</span></h3>
-<pre><code class="lumen">class Animal {
+  <div class="example" id="inherit">
+    <h3><a href="#inherit">inherit.ts</a> <span class="meta">classes · extends · super · method override</span></h3>
+<pre data-play><code class="lumen">class Animal {
   protected name: string;
   constructor(name: string) {
     this.name = name;
@@ -251,9 +273,9 @@ console.log(a.speak());   // Cat makes a sound
 console.log(d.speak());   // Rex makes a sound (woof)</code></pre>
   </div>
 
-  <div class="example">
-    <h3>errors.ts <span class="meta">error handling · throw · try / catch / finally</span></h3>
-<pre><code class="lumen">try {
+  <div class="example" id="errors">
+    <h3><a href="#errors">errors.ts</a> <span class="meta">error handling · throw · try / catch / finally</span></h3>
+<pre data-play><code class="lumen">try {
   console.log("parsing");
   throw Error("empty port");
   console.log("unreached");
@@ -269,9 +291,9 @@ console.log(d.speak());   // Rex makes a sound (woof)</code></pre>
 // done</code></pre>
   </div>
 
-  <div class="example">
-    <h3>collections.ts <span class="meta">Map · Set · typed keys and values</span></h3>
-<pre><code class="lumen">let scores: Map&lt;string, int&gt; = new Map&lt;string, int&gt;();
+  <div class="example" id="collections">
+    <h3><a href="#collections">collections.ts</a> <span class="meta">Map · Set · typed keys and values</span></h3>
+<pre data-play><code class="lumen">let scores: Map&lt;string, int&gt; = new Map&lt;string, int&gt;();
 scores.set("ada", 90);
 scores.set("linus", 85);
 scores.set("ada", 95);
@@ -288,9 +310,9 @@ console.log(tags.size);            // 2
 console.log(tags.has("blue"));     // true</code></pre>
   </div>
 
-  <div class="example">
-    <h3>varargs.ts <span class="meta">rest parameters · spread call · default params</span></h3>
-<pre><code class="lumen">function sum(...nums: int[]): int {
+  <div class="example" id="varargs">
+    <h3><a href="#varargs">varargs.ts</a> <span class="meta">rest parameters · spread call · default params</span></h3>
+<pre data-play><code class="lumen">function sum(...nums: int[]): int {
   let total: int = 0;
   for (const n of nums) {
     total = total + n;
@@ -309,8 +331,8 @@ console.log(greet("World"));        // Hello, World
 console.log(greet("World", "Hi"));  // Hi, World</code></pre>
   </div>
 
-  <div class="example">
-    <h3>async.ts <span class="meta">async / await · Promise, runs on a native event loop</span></h3>
+  <div class="example" id="async">
+    <h3><a href="#async">async.ts</a> <span class="meta">async / await · Promise, runs on a native event loop</span></h3>
 <pre><code class="lumen">async function fetchBase(): Promise&lt;int&gt; {
   return 10;
 }
@@ -325,9 +347,9 @@ console.log(await total(5));      // 15
 console.log(await total(32));     // 42</code></pre>
   </div>
 
-  <div class="example">
-    <h3>quickjs.ts <span class="meta">embed a JavaScript sandbox via FFI · community package</span></h3>
-<pre><code class="lumen">// The quickjs package runs JavaScript inside a native Lumen binary and passes
+  <div class="example" id="quickjs">
+    <h3><a href="#quickjs">quickjs.ts</a> <span class="meta">embed a JavaScript sandbox via FFI · community package</span></h3>
+<pre data-play><code class="lumen">// The quickjs package runs JavaScript inside a native Lumen binary and passes
 // values both ways. It links a C library, so it is built locally.
 import { open, close, setInt, evalNumber, getString } from "./quickjs.ts";
 
@@ -341,8 +363,8 @@ evalNumber("globalThis.greeting = 'hi ' + base");
 console.log(getString("greeting"));                    // hi 21</code></pre>
   </div>
 
-  <div class="example">
-    <h3>wordstats.ts <span class="meta">a real CLI · args · fs.readFileSync · Map · Set · classes</span></h3>
+  <div class="example" id="wordstats">
+    <h3><a href="#wordstats">wordstats.ts</a> <span class="meta">a real CLI · args · fs.readFileSync · Map · Set · classes</span></h3>
 <pre><code class="lumen">// A command-line tool: counts words in a file and prints the most frequent.
 // Build with `lumen compile wordstats.ts`, then run `./wordstats sample.txt`.
 let text = fs.readFileSync(arg(1), "utf8");
@@ -363,8 +385,8 @@ for (const ch of text.toLowerCase().split("")) {
 console.log(`unique words: ${counts.size}`);</code></pre>
   </div>
 
-  <div class="example">
-    <h3>sqlite.ts <span class="meta">talk to SQLite over FFI · links libsqlite3 · built locally</span></h3>
+  <div class="example" id="sqlite">
+    <h3><a href="#sqlite">sqlite.ts</a> <span class="meta">talk to SQLite over FFI · links libsqlite3 · built locally</span></h3>
 <pre><code class="lumen">// A typed wrapper over SQLite through the C FFI. A small C shim hides the
 // library's out-pointers behind plain functions; the pragmas below link it.
 // @link ./sqlite_shim.o
@@ -385,9 +407,20 @@ console.log(db_query_text("SELECT title FROM books LIMIT 1"));         // Crafti
 </section>
 
 <footer><div class="wrap">
-  <a href="/">← Back to home</a> · <a href="/stdlib">Standard library</a> · <a href="/packages">Packages</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
 
 <script src="highlight.js"></script>
+<script src="site.js"></script>
 </body>
 </html>

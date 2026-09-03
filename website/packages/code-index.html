@@ -23,6 +23,7 @@
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -39,7 +40,7 @@
   </span>
 </div></nav>
 
-<section class="wrap">
+<section class="wrap" id="main">
   <div class="docs">
   <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
     <span id="docs-nav-toggle-label">code-index</span>
@@ -87,7 +88,7 @@
   <div class="docs-main">
   <p class="sub"><a href="/packages">Packages</a> / <strong>code-index</strong>
   · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/code-index">source</a></p>
-  <h2>code-index</h2>
+  <h1>code-index</h1>
   <p class="sub">Compact codebase symbol index (<code>cidx</code>) for AI navigation — the aider-repomap / ctags idea in pure Lumen. An assistant reads one map line or queries one symbol instead of grepping a whole tree.</p>
   <p class="sub">Measured on the Lumen compiler source (1.4 MB, 28k lines of Zig): the full map is 10.5 KB — <strong>139x smaller</strong> — and <code>cidx find exprType</code> answers in ~11 ms with exact <code>file:line</code> hits.</p>
   <h3>Commands</h3>
@@ -150,10 +151,21 @@ const syms = outlineSource(fs.readFileSync("src/app.ts"), "ts");</code></pre>
 </section>
 
 <footer><div class="wrap">
-  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
 
 <script src="/highlight.js"></script>
+<script src="/site.js"></script>
 <script>
 // Mobile package-list toggle: shows/hides the same sidebar nav used on
 // desktop. Closes on link click or an outside click. Same code as stdlib.

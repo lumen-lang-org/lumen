@@ -87,6 +87,7 @@ SHELL = """<!DOCTYPE html>
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -103,7 +104,7 @@ SHELL = """<!DOCTYPE html>
   </span>
 </div></nav>
 
-<section class="wrap">
+<section class="wrap" id="main">
   <div class="docs">
   <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
     <span id="docs-nav-toggle-label">{name}</span>
@@ -122,10 +123,21 @@ SHELL = """<!DOCTYPE html>
 </section>
 
 <footer><div class="wrap">
-  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
 
 <script src="/highlight.js"></script>
+<script src="/site.js"></script>
 <script>
 // Mobile package-list toggle: shows/hides the same sidebar nav used on
 // desktop. Closes on link click or an outside click. Same code as stdlib.
@@ -244,7 +256,8 @@ def render(md: str, name: str, where: str = ""):
             depth = len(m.group(1))
             text = inline(html.escape(m.group(2), quote=False), name)
             if depth == 1:
-                out.append(f"  <h2>{text}</h2>")
+                # The README title is the page title: the one h1 on the page.
+                out.append(f"  <h1>{text}</h1>")
             else:
                 # h2 in the README is a section: h3 on the page, one level
                 # under the package name.

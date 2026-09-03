@@ -22,6 +22,7 @@
 <meta name="theme-color" content="#ea580c">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -38,24 +39,26 @@
   </span>
 </div></nav>
 
-<section class="wrap">
-  <h2>Playground</h2>
-  <p class="sub">Write Lumen (TypeScript syntax that compiles to a single
-  WebAssembly module) and run it right here in your browser. Import packages
-  straight from a URL; some embed real C libraries (QuickJS, SQLite) into the wasm.
-  Try the <strong>Markdown &rarr; HTML</strong> or <strong>Embed JavaScript</strong>
-  examples below, or edit freely. (Async isn&rsquo;t available in the in-browser
-  target yet.)</p>
+<section class="wrap no-tools" id="main">
+  <h1>Playground</h1>
+  <p class="sub">Write Lumen and run it in your browser: the program is compiled to a single
+  WebAssembly module and executed here. Packages import straight from a URL, and some
+  (QuickJS, SQLite) embed real C libraries into the wasm. Pick an example or edit freely;
+  <strong>Share</strong> copies a link to whatever is in the editor. Async isn&rsquo;t
+  available in the in-browser target yet.</p>
 
   <div class="play-bar">
     <label for="examples" class="play-label">Example</label>
     <select id="examples" aria-label="Choose an example"></select>
     <button id="run" class="btn primary">Run</button>
-    <span id="status" class="play-status"></span>
+    <button id="share" class="btn ghost small" type="button" title="Copy a link to this program">Share</button>
+    <span id="status" class="play-status" aria-live="polite"></span>
+    <span class="play-hint"><kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> + <kbd>Enter</kbd> runs</span>
   </div>
 
-  <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
-  <pre id="output" aria-live="polite"></pre>
+  <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Lumen source"></textarea>
+  <p class="play-output-label">Output</p>
+  <pre id="output" aria-live="polite">Press Run to compile and execute the program.</pre>
 </section>
 
 <!-- Prefilled, feature-showcasing examples (raw Lumen source; not executed here). -->
@@ -179,8 +182,19 @@ close();</script>
 </div>
 
 <footer><div class="wrap">
-  <a href="/">← Back to home</a> · <a href="/examples">Examples</a> · <a href="/stdlib">Standard library</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
+<script src="site.js"></script>
 
 <!-- CodeMirror 5 (classic global build) for syntax highlighting. Loads before the
      module below, so `window.CodeMirror` is defined when the module runs. -->
@@ -188,14 +202,48 @@ close();</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 
 <script type="module">
-import { WASI, OpenFile, File, ConsoleStdout } from "https://cdn.jsdelivr.net/npm/@bjorn3/browser_wasi_shim@0.3.0/+esm";
+// The WASI shim is fetched on the first Run rather than up front: a blocked
+// or slow CDN then costs one failed run, not an empty editor with no examples.
+const WASI_SHIM = "https://cdn.jsdelivr.net/npm/@bjorn3/browser_wasi_shim@0.3.0/+esm";
+let wasiShim = null;
+async function loadWasi() {
+  if (!wasiShim) wasiShim = await import(WASI_SHIM);
+  return wasiShim;
+}
 
 const ENDPOINT = "https://play-api.lumen-lang.org/compile";
+const HEALTH = "https://play-api.lumen-lang.org/health";
 const editorEl = document.getElementById("editor");
 const out = document.getElementById("output");
 const statusEl = document.getElementById("status");
 const select = document.getElementById("examples");
 const runBtn = document.getElementById("run");
+const shareBtn = document.getElementById("share");
+const SHARED = "Shared program";
+
+// The compile service scales to zero; poke it while the reader is still
+// looking at the page so the first Run doesn't pay the wake-up.
+fetch(HEALTH, { mode: "no-cors" }).catch(() => {});
+
+// Programs travel in the URL fragment as base64url UTF-8 (#code=…), written
+// by the Share button and by "Open in playground" links on the other pages.
+function encodeCode(src) {
+  const bytes = new TextEncoder().encode(src);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function decodeCode(s) {
+  try {
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(b64 + "=".repeat((4 - b64.length % 4) % 4));
+    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  } catch (e) { return null; }
+}
+function codeFromHash() {
+  const m = /(?:^#|&)code=([^&]+)/.exec(location.hash);
+  return m ? decodeCode(m[1]) : null;
+}
 
 // Load the prefilled examples.
 const examples = {};
@@ -230,12 +278,42 @@ if (window.CodeMirror) {
   setDoc = (v) => { editorEl.value = v; };
 }
 
-setDoc(examples[titles[0]]);
-select.value = titles[0];
+// A shared program (from the URL) takes precedence over the first example.
+function loadShared() {
+  const code = codeFromHash();
+  if (code == null) return false;
+  if (!examples[SHARED]) {
+    const opt = document.createElement("option");
+    opt.value = SHARED;
+    opt.textContent = SHARED;
+    select.insertBefore(opt, select.firstChild);
+  }
+  examples[SHARED] = code;
+  select.value = SHARED;
+  setDoc(code);
+  return true;
+}
+if (!loadShared()) {
+  setDoc(examples[titles[0]]);
+  select.value = titles[0];
+}
+window.addEventListener("hashchange", loadShared);
+
 select.addEventListener("change", () => {
   setDoc(examples[select.value]);
   out.textContent = "";
   out.classList.remove("err");
+});
+
+shareBtn.addEventListener("click", () => {
+  const url = location.origin + location.pathname + "#code=" + encodeCode(getDoc());
+  history.replaceState(null, "", url);
+  const done = () => {
+    shareBtn.textContent = "Link copied";
+    shareBtn.classList.add("ok");
+    setTimeout(() => { shareBtn.textContent = "Share"; shareBtn.classList.remove("ok"); }, 1600);
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, done); else done();
 });
 
 function setStatus(t) { statusEl.textContent = t; }
@@ -248,6 +326,7 @@ function show(text, isErr) {
 // uses (e.g. the quickjs package) is linked into the module at compile time, so
 // there is no engine to load here -- the only import is WASI.
 async function runWasm(bytes) {
+  const { WASI, OpenFile, File, ConsoleStdout } = await loadWasi();
   let text = "";
   const wasi = new WASI([], [], [
     new OpenFile(new File([])),
@@ -263,7 +342,10 @@ async function compileAndRun() {
   runBtn.disabled = true;
   out.classList.remove("err");
   out.textContent = "";
-  setStatus("Compiling… (the service may take a few seconds to wake)");
+  setStatus("Compiling… (a cold service takes a few seconds to wake)");
+  // Keep the URL in step with the editor so a refresh or a copied address
+  // bar brings the same program back.
+  history.replaceState(null, "", location.pathname + "#code=" + encodeCode(getDoc()));
   let res;
   try {
     res = await fetch(ENDPOINT, { method: "POST", body: getDoc() });

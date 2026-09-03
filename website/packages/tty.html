@@ -23,6 +23,7 @@
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 <nav><div class="wrap">
   <a class="brand" href="/">Lumen<span class="dot">.</span></a>
@@ -39,7 +40,7 @@
   </span>
 </div></nav>
 
-<section class="wrap">
+<section class="wrap" id="main">
   <div class="docs">
   <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
     <span id="docs-nav-toggle-label">tty</span>
@@ -87,7 +88,7 @@
   <div class="docs-main">
   <p class="sub"><a href="/packages">Packages</a> / <strong>tty</strong>
   · <a href="https://github.com/lumen-lang-org/std-contrib/tree/main/packages/tty">source</a></p>
-  <h2>tty</h2>
+  <h1>tty</h1>
   <p class="sub">Raw-mode terminal input and control for Lumen programs: raw mode, key decoding, terminal size, and ANSI cursor/screen control. Enough to build a real TUI (persistent input region, scrollback, in-place redraw), not just single-keypress detection.</p>
   <p class="sub">By default a terminal is in "cooked" mode: the OS buffers input a line at a time and only hands it to your program once Enter is pressed — this is what <code>readline.question</code> relies on. Raw mode delivers bytes as they're typed, <code>readKey</code> turns those bytes into decoded keypresses (arrow keys, Enter, Backspace, Ctrl-C, UTF-8 characters, ...), and the ANSI helpers let you redraw in place instead of only ever scrolling.</p>
   <h3>Why a shim</h3>
@@ -146,10 +147,21 @@ if (isatty(STDIN)) {
 </section>
 
 <footer><div class="wrap">
-  <a href="/packages">← All packages</a> · <a href="/stdlib">Standard library</a>
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/issues">Issues</a>
+  </p>
 </div></footer>
 
 <script src="/highlight.js"></script>
+<script src="/site.js"></script>
 <script>
 // Mobile package-list toggle: shows/hides the same sidebar nav used on
 // desktop. Closes on link click or an outside click. Same code as stdlib.

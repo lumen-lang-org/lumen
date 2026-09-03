@@ -1,0 +1,83 @@
+// Shared page behaviour, loaded by every page after the content:
+//   1. mark the top-nav link for the page being viewed (aria-current), so a
+//      reader on /stdlib can see where they are;
+//   2. give every code block a Copy button, and any block marked
+//      data-play an "Open in playground" link that carries the code over in
+//      the URL fragment (play.html reads #code=…);
+//   3. the older "copy this element's text" buttons (the hero install row).
+// No dependencies; the page works without it.
+(function () {
+  // Base64url of a UTF-8 string, the encoding play.html decodes.
+  function encodeCode(src) {
+    var bytes = new TextEncoder().encode(src);
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function flash(btn, text) {
+    var was = btn.textContent;
+    btn.textContent = text;
+    btn.classList.add("ok");
+    setTimeout(function () { btn.textContent = was; btn.classList.remove("ok"); }, 1400);
+  }
+
+  function copyText(text, btn) {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(text).then(function () { flash(btn, "Copied"); });
+  }
+
+  // 1. Current page in the top nav. Hash links (Features, Install) only
+  //    count on the home page itself.
+  var path = location.pathname.replace(/\.html$/, "").replace(/\/index$/, "/");
+  document.querySelectorAll("nav .links a").forEach(function (a) {
+    var href = a.getAttribute("href") || "";
+    if (/^https?:/.test(href)) return;
+    var target = href.split("#")[0] || "/";
+    if (href.indexOf("#") >= 0 && target === "/") return;
+    var here = target === "/" ? path === "/" : (path === target || path.indexOf(target + "/") === 0);
+    if (here) a.setAttribute("aria-current", "page");
+  });
+
+  // 2. Code-block tools. The <pre> is wrapped so the buttons stay put while
+  //    a wide block scrolls horizontally underneath them.
+  document.querySelectorAll("pre").forEach(function (pre) {
+    if (pre.id === "output" || pre.closest(".no-tools")) return;
+    var code = pre.querySelector("code");
+    var src = (code || pre).textContent;
+    if (!src.trim()) return;
+
+    var wrap = document.createElement("div");
+    wrap.className = "codeblock";
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+
+    var tools = document.createElement("div");
+    tools.className = "pre-tools";
+
+    if (pre.hasAttribute("data-play")) {
+      var run = document.createElement("a");
+      run.href = "/play#code=" + encodeCode(src);
+      run.textContent = "Open in playground";
+      run.title = "Load this program in the browser playground";
+      tools.appendChild(run);
+    }
+
+    var copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.setAttribute("aria-label", "Copy code");
+    copy.addEventListener("click", function () { copyText(src, copy); });
+    tools.appendChild(copy);
+
+    wrap.appendChild(tools);
+  });
+
+  // 3. Buttons that copy a named element's text (the install one-liner).
+  document.querySelectorAll(".copy[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.dataset.copy);
+      if (el) copyText(el.textContent, b);
+    });
+  });
+})();
