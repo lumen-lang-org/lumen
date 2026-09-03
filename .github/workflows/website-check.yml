@@ -18,5 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Per-module stdlib pages match stdlib.html
+        run: python3 website/genstdlib.py --check
       - name: Asset links carry the current content hash
         run: python3 website/stamp.py --check

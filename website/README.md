@@ -11,7 +11,12 @@ and no compiler required**.
   allows, compiled and run to confirm the output comments)
 - `examples.html` — runnable example programs
 - `play.html` — browser playground (compiles via `play-api.lumen-lang.org`)
-- `stdlib.html` — standard-library reference
+- `stdlib.html` — standard-library reference, the whole library on one page;
+  `stdlib/<module>.html` — one page per module, generated from it by
+  `genstdlib.py` (**run `python3 website/genstdlib.py` after editing
+  stdlib.html**, then `stamp.py`; it also fills the module index at the top
+  of stdlib.html and the module entries in sitemap.xml; `--check` is the CI
+  form)
 - `roadmap.html` — what is not there yet and why, module by module
 - `community.html` — repository, issues, releases, how to contribute
 - `404.html` — served by Cloudflare Pages for unknown paths

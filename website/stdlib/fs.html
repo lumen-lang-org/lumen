@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>fs · Standard library · Lumen</title>
+<meta name="description" content="Lumen standard library: fs — readFileSync, readFile, writeFile, appendFile, …. Statically typed, compiled to native code.">
+<link rel="stylesheet" href="/style.css?v=cc47e897">
+<link rel="canonical" href="https://lumen-lang.org/stdlib/fs">
+<meta property="og:url" content="https://lumen-lang.org/stdlib/fs">
+<meta property="og:title" content="fs · Standard library · Lumen">
+<meta property="og:description" content="Lumen standard library: fs — readFileSync, readFile, writeFile, appendFile, …. Statically typed, compiled to native code.">
+<meta name="twitter:title" content="fs · Standard library · Lumen">
+<meta name="twitter:description" content="Lumen standard library: fs — readFileSync, readFile, writeFile, appendFile, …. Statically typed, compiled to native code.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <span class="links">
+    <a href="/learn">Learn</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+  <button type="button" class="theme-toggle" aria-label="Switch between light and dark theme" title="Switch theme">
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+</div></nav>
+
+<section class="wrap" id="main">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">fs</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/stdlib">All modules</a></p>
+    <p class="docs-nav-title">Modules</p>
+    <a href="/stdlib/console">console</a>
+    <a href="/stdlib/math">Math</a>
+    <a href="/stdlib/strings">String methods</a>
+    <a href="/stdlib/arrays">Array methods</a>
+    <a href="/stdlib/collections">Collections</a>
+    <a href="/stdlib/events">events</a>
+    <a href="/stdlib/async">async · await</a>
+    <a href="/stdlib/ffi">C FFI</a>
+    <a href="/stdlib/errors">Errors</a>
+    <a href="/stdlib/fs" class="active">fs</a>
+    <a href="/stdlib/path">path</a>
+    <a href="/stdlib/process">process</a>
+    <a href="/stdlib/stdio-streams">stdio streams</a>
+    <a href="/stdlib/readline">readline</a>
+    <a href="/stdlib/os">os</a>
+    <a href="/stdlib/crypto">crypto</a>
+    <a href="/stdlib/url">url</a>
+    <a href="/stdlib/child_process">child_process</a>
+    <a href="/stdlib/assert">assert</a>
+    <a href="/stdlib/time">time</a>
+    <a href="/stdlib/http">http</a>
+    <a href="/stdlib/net">net</a>
+    <a href="/stdlib/json">JSON</a>
+    <a href="/stdlib/zlib">zlib</a>
+    <a href="/stdlib/buffer">Buffer</a>
+    <a href="/stdlib/worker">worker_threads</a>
+    <p class="docs-nav-title">More</p>
+    <a href="/roadmap">Roadmap</a>
+    <a href="/packages">Packages</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/stdlib">Standard library</a> / <strong>fs</strong>
+  · <a href="/stdlib#fs">on the one-page reference</a></p>
+  <h1 id="fs">fs</h1>
+  <p class="stability-note stability-stable">Stable &mdash; the
+  synchronous core (everything except the individually-marked functions
+  below) wraps long-stable POSIX syscalls (<code>open</code>,
+  <code>read</code>, <code>stat</code>, ...) that predate the runtime's newer
+  async I/O layer.</p>
+  <p class="sub">Mostly synchronous, statically typed and Node-conventional, plus
+  a small async trio (<code>readFile</code>/<code>writeFile</code>/<code>appendFile</code>),
+  file watching (<code>watch</code>), and file-backed streams
+  (<code>createReadStream</code>/<code>createWriteStream</code>). This is a
+  practical subset, not the full <a href="https://nodejs.org/docs/latest/api/fs.html">Node <code>fs</code> API</a>
+  (a Lumen "fd" is a plain <code>int</code> index, not a raw OS handle)
+  &mdash; see the <a href="/roadmap">roadmap</a> for what is next.</p>
+
+  <div class="api-list">
+    <a href="#fs-readFileSync">readFileSync</a>
+    <a href="#fs-readFile">readFile</a>
+    <a href="#fs-writeFile">writeFile</a>
+    <a href="#fs-appendFile">appendFile</a>
+    <a href="#fs-unlink">unlink</a>
+    <a href="#fs-mkdir">mkdir</a>
+    <a href="#fs-rmdir">rmdir</a>
+    <a href="#fs-stat">stat</a>
+    <a href="#fs-writeFileSync">writeFileSync</a>
+    <a href="#fs-appendFileSync">appendFileSync</a>
+    <a href="#fs-existsSync">existsSync</a>
+    <a href="#fs-mkdirSync">mkdirSync</a>
+    <a href="#fs-unlinkSync">unlinkSync</a>
+    <a href="#fs-renameSync">renameSync</a>
+    <a href="#fs-copyFileSync">copyFileSync</a>
+    <a href="#fs-rmdirSync">rmdirSync</a>
+    <a href="#fs-rmSync">rmSync</a>
+    <a href="#fs-truncateSync">truncateSync</a>
+    <a href="#fs-linkSync">linkSync</a>
+    <a href="#fs-symlinkSync">symlinkSync</a>
+    <a href="#fs-readlinkSync">readlinkSync</a>
+    <a href="#fs-chmodSync">chmodSync</a>
+    <a href="#fs-accessSync">accessSync</a>
+    <a href="#fs-cpSync">cpSync</a>
+    <a href="#fs-mkdtempSync">mkdtempSync</a>
+    <a href="#fs-statSync">statSync</a>
+    <a href="#fs-openSync">openSync</a>
+    <a href="#fs-closeSync">closeSync</a>
+    <a href="#fs-readSync">readSync</a>
+    <a href="#fs-writeSync">writeSync</a>
+    <a href="#fs-lstatSync">lstatSync</a>
+    <a href="#fs-fstatSync">fstatSync</a>
+    <a href="#fs-fchmodSync">fchmodSync</a>
+    <a href="#fs-lchmodSync">lchmodSync</a>
+    <a href="#fs-fchownSync">fchownSync</a>
+    <a href="#fs-chownSync">chownSync</a>
+    <a href="#fs-lchownSync">lchownSync</a>
+    <a href="#fs-realpathSync">realpathSync</a>
+    <a href="#fs-writevSync">writevSync</a>
+    <a href="#fs-readvSync">readvSync</a>
+    <a href="#fs-fsyncSync">fsyncSync</a>
+    <a href="#fs-fdatasyncSync">fdatasyncSync</a>
+    <a href="#fs-ftruncateSync">ftruncateSync</a>
+    <a href="#fs-futimesSync">futimesSync</a>
+    <a href="#fs-utimesSync">utimesSync</a>
+    <a href="#fs-lutimesSync">lutimesSync</a>
+    <a href="#fs-readdirSync">readdirSync</a>
+    <a href="#fs-watch">watch</a>
+    <a href="#fs-createReadStream">createReadStream</a>
+    <a href="#fs-createWriteStream">createWriteStream</a>
+  </div>
+
+  <div class="api" id="fs-readFileSync">
+    <h5><code>fs.readFileSync(path, encoding?)</code></h5>
+    <p class="sub">(string, string?) → string &mdash; UTF-8 text; <strong>throws a catchable <code>Error</code></strong> naming the path if the file can't be read.</p>
+<pre><code class="lumen">try {
+  const data: string = fs.readFileSync("notes.txt");
+  console.log(data);
+} catch (e) {
+  console.log(e.message); // cannot read 'notes.txt': FileNotFound
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-readFile">
+    <h5><code>fs.readFile(path)</code> <span class="stability-pill stability-experimental" title="Runs on the event loop's io_uring backend: no tagged releases yet, still the newest corner of the async runtime.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;string&gt;</code> &mdash; true
+    non-blocking I/O, no thread pool, unlike Node's
+    <code>fs.promises.readFile</code>.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  const data: string = await fs.readFile("notes.txt");
+  console.log(data);
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-writeFile">
+    <h5><code>fs.writeFile(path, data)</code> <span class="stability-pill stability-experimental" title="Same async runtime as fs.readFile.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">(string, string) → <code>Promise&lt;void&gt;</code> &mdash;
+    the async counterpart to <code>fs.writeFileSync</code>; creates the file
+    or truncates it first, same as the sync version.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.writeFile("notes.txt", "hello async world");
+  console.log("done");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-appendFile">
+    <h5><code>fs.appendFile(path, data)</code> <span class="stability-pill stability-experimental" title="Same async runtime as fs.readFile.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">(string, string) → <code>Promise&lt;void&gt;</code> &mdash;
+    the async counterpart to <code>fs.appendFileSync</code>; creates the file
+    if it does not exist yet.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.appendFile("log.txt", "line one\n");
+  await fs.appendFile("log.txt", "line two\n");
+  console.log("done");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-unlink">
+    <h5><code>fs.unlink(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested, including 5 concurrent thread-pool calls in flight at once.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;void&gt;</code> &mdash;
+    <strong>runs on a real thread pool</strong>, unlike
+    <code>readFile</code>/<code>writeFile</code>/<code>appendFile</code>
+    above, so it never blocks the main thread &mdash; the same approach
+    Node's own async <code>fs</code> uses. Genuinely cross-platform, not a
+    Linux-only shortcut.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.unlink("stale.txt");
+  console.log("gone");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-mkdir">
+    <h5><code>fs.mkdir(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;void&gt;</code> &mdash; thread-pool
+    backed, see <code>fs.unlink</code> above. No <code>recursive</code>
+    option this pass, matching <code>mkdirSync</code>'s default-false
+    convention.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.mkdir("build");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-rmdir">
+    <h5><code>fs.rmdir(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;void&gt;</code> &mdash; thread-pool
+    backed, see <code>fs.unlink</code> above.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  await fs.rmdir("build");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-stat">
+    <h5><code>fs.stat(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested, cross-checked against statSync on the same paths.">Experimental</span> <span class="target-pill target-native-only" title="Rejected at compile time under --wasm: the playground's target does not support async yet.">Native only</span></h5>
+    <p class="sub">string → <code>Promise&lt;Stats&gt;</code> &mdash; thread-pool
+    backed, see <code>fs.unlink</code> above. Same <code>Stats</code> shape
+    as <code>fs.statSync</code>.</p>
+<pre><code class="lumen">async function main(): Promise&lt;void&gt; {
+  const st = await fs.stat("notes.txt");
+  console.log(st.size);
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-writeFileSync">
+    <h5><code>fs.writeFileSync(path, data)</code></h5>
+    <p class="sub">(string, string) → void &mdash; creates the file or truncates it first; throws a catchable <code>Error</code> on an I/O failure.</p>
+<pre><code class="lumen">fs.writeFileSync("notes.txt", "hello world");</code></pre>
+  </div>
+
+  <div class="api" id="fs-appendFileSync">
+    <h5><code>fs.appendFileSync(path, data)</code></h5>
+    <p class="sub">(string, string) → void &mdash; creates the file if it does not exist yet.</p>
+<pre><code class="lumen">fs.appendFileSync("log.txt", "new line\n");</code></pre>
+  </div>
+
+  <div class="api" id="fs-existsSync">
+    <h5><code>fs.existsSync(path)</code></h5>
+    <p class="sub">string → bool</p>
+<pre><code class="lumen">if (fs.existsSync("config.json")) {
+  console.log("found it");
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-mkdirSync">
+    <h5><code>fs.mkdirSync(path, recursive?)</code></h5>
+    <p class="sub">(string, bool?) → void &mdash; <code>recursive</code> defaults to <code>false</code>.</p>
+<pre><code class="lumen">fs.mkdirSync("build/output", true);</code></pre>
+  </div>
+
+  <div class="api" id="fs-unlinkSync">
+    <h5><code>fs.unlinkSync(path)</code></h5>
+    <p class="sub">string → void &mdash; delete a file.</p>
+<pre><code class="lumen">fs.unlinkSync("scratch.tmp");</code></pre>
+  </div>
+
+  <div class="api" id="fs-renameSync">
+    <h5><code>fs.renameSync(oldPath, newPath)</code></h5>
+    <p class="sub">(string, string) → void</p>
+<pre><code class="lumen">fs.renameSync("draft.md", "final.md");</code></pre>
+  </div>
+
+  <div class="api" id="fs-copyFileSync">
+    <h5><code>fs.copyFileSync(src, dest)</code></h5>
+    <p class="sub">(string, string) → void</p>
+<pre><code class="lumen">fs.copyFileSync("template.txt", "output.txt");</code></pre>
+  </div>
+
+  <div class="api" id="fs-rmdirSync">
+    <h5><code>fs.rmdirSync(path)</code></h5>
+    <p class="sub">string → void &mdash; removes an empty directory.</p>
+<pre><code class="lumen">fs.rmdirSync("empty-dir");</code></pre>
+  </div>
+
+  <div class="api" id="fs-rmSync">
+    <h5><code>fs.rmSync(path, recursive?)</code></h5>
+    <p class="sub">(string, bool?) → void &mdash; recursive removes a whole directory tree.</p>
+<pre><code class="lumen">fs.rmSync("build", true);</code></pre>
+  </div>
+
+  <div class="api" id="fs-truncateSync">
+    <h5><code>fs.truncateSync(path, len)</code></h5>
+    <p class="sub">(string, int) → void</p>
+<pre><code class="lumen">fs.truncateSync("log.txt", 0);</code></pre>
+  </div>
+
+  <div class="api" id="fs-linkSync">
+    <h5><code>fs.linkSync(existingPath, newPath)</code></h5>
+    <p class="sub">(string, string) → void &mdash; hard link.</p>
+<pre><code class="lumen">fs.linkSync("original.txt", "alias.txt");</code></pre>
+  </div>
+
+  <div class="api" id="fs-symlinkSync">
+    <h5><code>fs.symlinkSync(target, path)</code></h5>
+    <p class="sub">(string, string) → void</p>
+<pre><code class="lumen">fs.symlinkSync("/etc/hosts", "hosts-link");</code></pre>
+  </div>
+
+  <div class="api" id="fs-readlinkSync">
+    <h5><code>fs.readlinkSync(path)</code></h5>
+    <p class="sub">string → string</p>
+<pre><code class="lumen">console.log(fs.readlinkSync("hosts-link"));  // /etc/hosts</code></pre>
+  </div>
+
+  <div class="api" id="fs-chmodSync">
+    <h5><code>fs.chmodSync(path, mode)</code></h5>
+    <p class="sub">(string, int) → void &mdash; POSIX mode bits.</p>
+<pre><code class="lumen">fs.chmodSync("script.sh", 0o755);  // rwxr-xr-x</code></pre>
+  </div>
+
+  <div class="api" id="fs-accessSync">
+    <h5><code>fs.accessSync(path, mode?)</code></h5>
+    <p class="sub">(string, int?) → bool &mdash; mode bitmask <code>R_OK=4 W_OK=2 X_OK=1</code>; returns
+    bool rather than throwing.</p>
+<pre><code class="lumen">console.log(fs.accessSync("data.csv", 4));  // readable?</code></pre>
+  </div>
+
+  <div class="api" id="fs-cpSync">
+    <h5><code>fs.cpSync(src, dest, recursive?)</code></h5>
+    <p class="sub">(string, string, bool?) → void &mdash; falls back to a single file copy when
+    <code>src</code> is not a directory.</p>
+<pre><code class="lumen">fs.cpSync("assets", "dist/assets", true);</code></pre>
+  </div>
+
+  <div class="api" id="fs-mkdtempSync">
+    <h5><code>fs.mkdtempSync(prefix)</code></h5>
+    <p class="sub">string → string &mdash; unique suffix from a timestamp + counter, not
+    cryptographic; returns the created path.</p>
+<pre><code class="lumen">const dir: string = fs.mkdtempSync("/tmp/build-");
+console.log(dir);  // /tmp/build-1a2b3c4d</code></pre>
+  </div>
+
+  <div class="api" id="fs-statSync">
+    <h5><code>fs.statSync(path)</code></h5>
+    <p class="sub">string → <code>{ size, isFile, isDirectory, mtimeMs }</code> &mdash; the first
+    record-returning builtin; <code>isFile</code>/<code>isDirectory</code> are bool fields, not
+    methods.</p>
+<pre><code class="lumen">const info = fs.statSync("report.pdf");
+console.log(info.size);
+console.log(info.isFile);</code></pre>
+  </div>
+
+  <div class="api" id="fs-openSync">
+    <h5><code>fs.openSync(path, flags)</code></h5>
+    <p class="sub">(string, string) → int &mdash; a Lumen "fd" is an index into an internal
+    file table, not a raw OS handle. <code>flags</code> is <code>"r"</code> (read, must exist),
+    <code>"w"</code> (write, create/truncate), or <code>"a"</code> (append,
+    create if missing, existing content kept, every <code>writeSync</code>
+    lands at the current end of file &mdash; verified across separate
+    open/close cycles, each reopen correctly re-seeks to wherever the file
+    ends at that point, not just where it ended at the first open).</p>
+<pre><code class="lumen">const fd: int = fs.openSync("data.bin", "r");
+const logFd: int = fs.openSync("app.log", "a");
+fs.writeSync(logFd, "another line\n");
+fs.closeSync(logFd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-closeSync">
+    <h5><code>fs.closeSync(fd)</code></h5>
+    <p class="sub">int → void</p>
+<pre><code class="lumen">fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-readSync">
+    <h5><code>fs.readSync(fd, length)</code></h5>
+    <p class="sub">(int, int) → string &mdash; reads up to <code>length</code> bytes from the
+    current file position; works on <code>string</code>, not a Buffer (Lumen has none yet).</p>
+<pre><code class="lumen">const fd: int = fs.openSync("data.bin", "r");
+const chunk: string = fs.readSync(fd, 1024);
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-writeSync">
+    <h5><code>fs.writeSync(fd, data)</code></h5>
+    <p class="sub">(int, string) → int &mdash; writes at the current file position, returns
+    bytes written.</p>
+<pre><code class="lumen">const fd: int = fs.openSync("out.bin", "w");
+const n: int = fs.writeSync(fd, "hello");
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-lstatSync">
+    <h5><code>fs.lstatSync(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">string → <code>{ size, isFile, isDirectory, mtimeMs }</code> &mdash; like
+    <code>statSync</code>, but does not follow a symlink at <code>path</code>; stats the
+    link itself.</p>
+<pre><code class="lumen">const info = fs.lstatSync("hosts-link");
+console.log(info.isFile);  // false: the link itself isn't a regular file</code></pre>
+  </div>
+
+  <div class="api" id="fs-fstatSync">
+    <h5><code>fs.fstatSync(fd)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">int → <code>{ size, isFile, isDirectory, mtimeMs }</code> &mdash; stats an
+    already-open fd instead of resolving a path again.</p>
+<pre><code class="lumen">const fd: int = fs.openSync("data.bin", "r");
+console.log(fs.fstatSync(fd).size);
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-fchmodSync">
+    <h5><code>fs.fchmodSync(fd, mode)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(int, int) → void &mdash; fd-based form of <code>chmodSync</code>.</p>
+<pre><code class="lumen">const fd: int = fs.openSync("script.sh", "w");
+fs.fchmodSync(fd, 0o755);
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-lchmodSync">
+    <h5><code>fs.lchmodSync(path, mode)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(string, int) → void &mdash; chmod without following a symlink at
+    <code>path</code>; best effort (not every OS lets you chmod a symlink directly).</p>
+<pre><code class="lumen">fs.lchmodSync("hosts-link", 0o644);</code></pre>
+  </div>
+
+  <div class="api" id="fs-fchownSync">
+    <h5><code>fs.fchownSync(fd, uid, gid)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(int, int, int) → void &mdash; pass <code>-1</code> for either id to leave
+    it unchanged.</p>
+<pre><code class="lumen">const fd: int = fs.openSync("data.bin", "w");
+fs.fchownSync(fd, 1000, -1);  // change owner, leave group alone
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-chownSync">
+    <h5><code>fs.chownSync(path, uid, gid)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only, including a real ownership change verified with stat.">Experimental</span></h5>
+    <p class="sub">(string, int, int) → void &mdash; pass <code>-1</code> for either id
+    to leave it unchanged. Follows symlinks (see <code>fs.lchownSync</code>
+    below for the one that shouldn't). Implemented by opening the file
+    and reusing <code>fchownSync</code>'s working fd-based path, since the
+    path-based owner-change call panics unconditionally in this Zig version's
+    runtime.</p>
+<pre><code class="lumen">fs.chownSync("data.bin", 1000, 1000);</code></pre>
+  </div>
+
+  <div class="api" id="fs-lchownSync">
+    <h5><code>fs.lchownSync(path, uid, gid)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only, including a real ownership change verified with stat on the symlink itself, not its target.">Experimental</span></h5>
+    <p class="sub">(string, int, int) → void &mdash; like <code>chownSync</code>
+    but changes the symlink itself, not what it points to. Linux only (raw
+    <code>lchown</code>, no libc) &mdash; unlike <code>chownSync</code>, this
+    can't be built by opening the file first, since opening a symlink path
+    normally follows it.</p>
+<pre><code class="lumen">fs.symlinkSync("/data/real.bin", "link.bin");
+fs.lchownSync("link.bin", 1000, 1000);</code></pre>
+  </div>
+
+  <div class="api" id="fs-realpathSync">
+    <h5><code>fs.realpathSync(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested including real symlink resolution.">Experimental</span></h5>
+    <p class="sub">string → string &mdash; resolves symlinks and returns the
+    canonical path. Returns <code>path</code> unchanged if it doesn't exist or
+    can't be resolved.</p>
+<pre><code class="lumen">console.log(fs.realpathSync("./current-link"));</code></pre>
+  </div>
+
+  <div class="api" id="fs-writevSync">
+    <h5><code>fs.writevSync(fd, buffers)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(int, string[]) → int &mdash; writes every chunk in
+    <code>buffers</code> in a single syscall, returns the total bytes
+    written. Linux only (raw <code>writev</code>, no libc).</p>
+<pre><code class="lumen">const fd: int = fs.openSync("out.bin", "w");
+const n: int = fs.writevSync(fd, ["hello ", "world"]);
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-readvSync">
+    <h5><code>fs.readvSync(fd, sizes)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only, including a short-read case where the requested sizes exceed the available data.">Experimental</span></h5>
+    <p class="sub">(int, int[]) → string[] &mdash; reads into
+    <code>sizes.length</code> chunks in a single syscall, returning that many
+    strings sized to what was actually read. <strong>Deviation from
+    Node</strong>: Node's <code>readv</code> fills caller-provided mutable
+    buffers; Lumen's <code>string</code> is immutable, so this takes desired
+    chunk sizes instead and owns the buffers itself &mdash; same underlying
+    vectored read, a shape that fits the type system. Linux only (raw
+    <code>readv</code>, no libc).</p>
+<pre><code class="lumen">const fd: int = fs.openSync("data.bin", "r");
+const chunks: string[] = fs.readvSync(fd, [4, 100]);  // header, then the rest
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-fsyncSync">
+    <h5><code>fs.fsyncSync(fd)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">int → void &mdash; flush file data and metadata to disk.</p>
+<pre><code class="lumen">fs.fsyncSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-fdatasyncSync">
+    <h5><code>fs.fdatasyncSync(fd)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">int → void &mdash; aliases <code>fsyncSync</code> (no
+    data-only sync separate from a full sync is exposed here).</p>
+<pre><code class="lumen">fs.fdatasyncSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-ftruncateSync">
+    <h5><code>fs.ftruncateSync(fd, len)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(int, int) → void &mdash; fd-based form of <code>truncateSync</code>.</p>
+<pre><code class="lumen">const fd: int = fs.openSync("log.txt", "w");
+fs.ftruncateSync(fd, 0);
+fs.closeSync(fd);</code></pre>
+  </div>
+
+  <div class="api" id="fs-futimesSync">
+    <h5><code>fs.futimesSync(fd, atimeMs, mtimeMs)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(int, int, int) → void &mdash; set access/modify times (milliseconds
+    since epoch) on an open fd.</p>
+<pre><code class="lumen">fs.futimesSync(fd, 1700000000000, 1700000000000);</code></pre>
+  </div>
+
+  <div class="api" id="fs-utimesSync">
+    <h5><code>fs.utimesSync(path, atimeMs, mtimeMs)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(string, int, int) → void &mdash; path-based form, follows symlinks.</p>
+<pre><code class="lumen">fs.utimesSync("notes.txt", 1700000000000, 1700000000000);</code></pre>
+  </div>
+
+  <div class="api" id="fs-lutimesSync">
+    <h5><code>fs.lutimesSync(path, atimeMs, mtimeMs)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">(string, int, int) → void &mdash; like <code>utimesSync</code>, but sets
+    the timestamps on a symlink itself rather than its target.</p>
+<pre><code class="lumen">fs.lutimesSync("hosts-link", 1700000000000, 1700000000000);</code></pre>
+  </div>
+
+  <div class="api" id="fs-readdirSync">
+    <h5><code>fs.readdirSync(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested only.">Experimental</span></h5>
+    <p class="sub">string → <code>string[]</code> &mdash; entry names in a directory, in no
+    particular order.</p>
+<pre><code class="lumen">const names: string[] = fs.readdirSync(".");
+for (const n of names) {
+  console.log(n);
+}</code></pre>
+  </div>
+
+  <div class="api" id="fs-watch">
+    <h5><code>fs.watch(path, listener)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested with real filesystem operations.">Experimental</span> <span class="target-pill target-wasm-limited" title="Compiles under --wasm, but exits immediately at startup there: WASI has no equivalent watch capability, matching http.createServer's precedent for the same reason.">Wasm: limited</span></h5>
+    <p class="sub">(string, (string, string) → void) → void &mdash; blocking,
+    never returns; calls <code>listener</code> with the name of the file that
+    changed and an event type (<code>"change"</code> for a data
+    modification, <code>"rename"</code> for a create/delete/move &mdash;
+    matching Node's own <code>fs.watch</code> convention, not inotify's full
+    granularity) on every event under <code>path</code>. Linux only (raw
+    <code>inotify</code>, no libc). Not <code>EventEmitter</code>-based like
+    Node's real <code>FSWatcher</code> &mdash; nothing drives an emitter
+    asynchronously on its own here, so this calls the listener directly in a
+    blocking loop instead, the same shape as <code>http.createServer</code>.</p>
+<pre><code class="lumen">function onChange(name: string, eventType: string): void {
+  console.log(name + " " + eventType);
+}
+
+fs.watch("./src", onChange);</code></pre>
+  </div>
+
+  <div class="api" id="fs-createReadStream">
+    <h5><code>fs.createReadStream(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested with a real, multi-chunk file.">Experimental</span></h5>
+    <p class="sub">string → <code>ReadableStream</code> &mdash; built the
+    same way <code>Map</code>/<code>Set</code>/<code>EventEmitter</code>
+    are, a real dedicated type. <code>.read()</code> returns the next
+    chunk (up to 64KB), an empty string at EOF; <code>.close()</code>
+    closes the file. A missing/unopenable file degrades to a stream that
+    always reads <code>""</code> rather than crashing, the same fallback
+    shape every other <code>fs</code> function already uses.
+    Synchronous/blocking, no async or backpressure integration yet.</p>
+<pre><code class="lumen">const r = fs.createReadStream("large.log");
+let chunk: string = r.read();
+while (chunk != "") {
+  console.log(chunk.length);
+  chunk = r.read();
+}
+r.close();</code></pre>
+  </div>
+
+  <div class="api" id="fs-createWriteStream">
+    <h5><code>fs.createWriteStream(path)</code> <span class="stability-pill stability-experimental" title="New this milestone, not yet covered by the conformance suite -- manually smoke-tested with a real, multi-write file.">Experimental</span></h5>
+    <p class="sub">string → <code>WritableStream</code> &mdash;
+    <code>.write(chunk)</code> appends a chunk to the file (opens/
+    truncates on creation); <code>.close()</code> flushes and closes.</p>
+<pre><code class="lumen">const w = fs.createWriteStream("out.log");
+w.write("line one\n");
+w.write("line two\n");
+w.close();</code></pre>
+  </div>
+
+  <div class="next">
+    <a class="btn ghost" href="/stdlib/errors">&larr; Errors</a>
+    <a class="btn ghost" href="/stdlib/path">path &rarr;</a>
+  </div>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/learn">Learn</a> ·
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="/roadmap">Roadmap</a> ·
+    <a href="/community">Community</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a>
+  </p>
+</div></footer>
+
+<script src="/highlight.js?v=25b44fe7"></script>
+<script src="/site.js?v=3daeecb8"></script>
+<script>
+// Mobile module-list toggle, as on the other docs pages.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!panel.classList.contains('open')); });
+  panel.addEventListener('click', function (e) { if (e.target.tagName === 'A') setOpen(false); });
+  document.addEventListener('click', function (e) { if (!panel.contains(e.target) && e.target !== toggle) setOpen(false); });
+})();
+</script>
+</body>
+</html>

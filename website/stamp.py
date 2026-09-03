@@ -27,7 +27,8 @@ def stamp(text: str) -> str:
     return pattern.sub(lambda m: f'{m.group(1)}{m.group(2)}?v={hashes[m.group(2)]}"', text)
 
 stale = []
-for path in sorted([*HERE.glob("*.html"), *HERE.glob("packages/*.html"), HERE / "genpages.py"]):
+for path in sorted([*HERE.glob("*.html"), *HERE.glob("packages/*.html"), *HERE.glob("stdlib/*.html"),
+                    HERE / "genpages.py", HERE / "genstdlib.py"]):
     old = path.read_text()
     new = stamp(old)
     if new == old:

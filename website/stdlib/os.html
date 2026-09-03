@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>os · Standard library · Lumen</title>
+<meta name="description" content="Lumen standard library: os — platform, arch, type, release, …. Statically typed, compiled to native code.">
+<link rel="stylesheet" href="/style.css?v=cc47e897">
+<link rel="canonical" href="https://lumen-lang.org/stdlib/os">
+<meta property="og:url" content="https://lumen-lang.org/stdlib/os">
+<meta property="og:title" content="os · Standard library · Lumen">
+<meta property="og:description" content="Lumen standard library: os — platform, arch, type, release, …. Statically typed, compiled to native code.">
+<meta name="twitter:title" content="os · Standard library · Lumen">
+<meta name="twitter:description" content="Lumen standard library: os — platform, arch, type, release, …. Statically typed, compiled to native code.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <span class="links">
+    <a href="/learn">Learn</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+  <button type="button" class="theme-toggle" aria-label="Switch between light and dark theme" title="Switch theme">
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+</div></nav>
+
+<section class="wrap" id="main">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">os</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/stdlib">All modules</a></p>
+    <p class="docs-nav-title">Modules</p>
+    <a href="/stdlib/console">console</a>
+    <a href="/stdlib/math">Math</a>
+    <a href="/stdlib/strings">String methods</a>
+    <a href="/stdlib/arrays">Array methods</a>
+    <a href="/stdlib/collections">Collections</a>
+    <a href="/stdlib/events">events</a>
+    <a href="/stdlib/async">async · await</a>
+    <a href="/stdlib/ffi">C FFI</a>
+    <a href="/stdlib/errors">Errors</a>
+    <a href="/stdlib/fs">fs</a>
+    <a href="/stdlib/path">path</a>
+    <a href="/stdlib/process">process</a>
+    <a href="/stdlib/stdio-streams">stdio streams</a>
+    <a href="/stdlib/readline">readline</a>
+    <a href="/stdlib/os" class="active">os</a>
+    <a href="/stdlib/crypto">crypto</a>
+    <a href="/stdlib/url">url</a>
+    <a href="/stdlib/child_process">child_process</a>
+    <a href="/stdlib/assert">assert</a>
+    <a href="/stdlib/time">time</a>
+    <a href="/stdlib/http">http</a>
+    <a href="/stdlib/net">net</a>
+    <a href="/stdlib/json">JSON</a>
+    <a href="/stdlib/zlib">zlib</a>
+    <a href="/stdlib/buffer">Buffer</a>
+    <a href="/stdlib/worker">worker_threads</a>
+    <p class="docs-nav-title">More</p>
+    <a href="/roadmap">Roadmap</a>
+    <a href="/packages">Packages</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/stdlib">Standard library</a> / <strong>os</strong>
+  · <a href="/stdlib#os">on the one-page reference</a></p>
+  <h1 id="os">os</h1>
+  <p class="stability-note stability-stable">Stable &mdash;
+  almost the entire namespace is two raw Linux syscalls
+  (<code>uname()</code> covers <code>type</code>/<code>release</code>/
+  <code>version</code>/<code>machine</code>/<code>hostname</code> in one
+  call; <code>sysinfo()</code> covers <code>uptime</code>/<code>loadavg</code>/
+  <code>totalmem</code>/<code>freemem</code> in one call), no libc.</p>
+  <p class="sub">A practical subset of
+  <a href="https://nodejs.org/docs/latest/api/os.html">Node's <code>os</code>
+  module</a>. All called as functions, not read as properties, the same
+  deviation as <code>path.sep()</code>/<code>process.platform()</code>.
+  <code>os.platform()</code>/<code>os.arch()</code> duplicate
+  <code>process.platform()</code>/<code>process.arch()</code> intentionally
+  &mdash; Node itself defines both independently with identical values.</p>
+
+  <div class="api-list">
+    <a href="#os-platform">platform</a>
+    <a href="#os-arch">arch</a>
+    <a href="#os-type">type</a>
+    <a href="#os-release">release</a>
+    <a href="#os-version">version</a>
+    <a href="#os-machine">machine</a>
+    <a href="#os-hostname">hostname</a>
+    <a href="#os-endianness">endianness</a>
+    <a href="#os-tmpdir">tmpdir</a>
+    <a href="#os-homedir">homedir</a>
+    <a href="#os-uptime">uptime</a>
+    <a href="#os-totalmem">totalmem</a>
+    <a href="#os-freemem">freemem</a>
+    <a href="#os-loadavg">loadavg</a>
+    <a href="#os-availableParallelism">availableParallelism</a>
+    <a href="#os-EOL">EOL</a>
+    <a href="#os-devNull">devNull</a>
+  </div>
+
+  <div class="api" id="os-platform">
+    <h5><code>os.platform()</code></h5>
+    <p class="sub">→ string &mdash; same as <code>process.platform()</code>.</p>
+<pre><code class="lumen">console.log(os.platform()); // linux</code></pre>
+  </div>
+
+  <div class="api" id="os-arch">
+    <h5><code>os.arch()</code></h5>
+    <p class="sub">→ string &mdash; same as <code>process.arch()</code>.</p>
+<pre><code class="lumen">console.log(os.arch()); // x64</code></pre>
+  </div>
+
+  <div class="api" id="os-type">
+    <h5><code>os.type()</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ string &mdash; the kernel name, via <code>uname(2)</code>.</p>
+<pre><code class="lumen">console.log(os.type()); // Linux</code></pre>
+  </div>
+
+  <div class="api" id="os-release">
+    <h5><code>os.release()</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ string &mdash; the kernel release string.</p>
+<pre><code class="lumen">console.log(os.release());</code></pre>
+  </div>
+
+  <div class="api" id="os-version">
+    <h5><code>os.version()</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ string</p>
+<pre><code class="lumen">console.log(os.version());</code></pre>
+  </div>
+
+  <div class="api" id="os-machine">
+    <h5><code>os.machine()</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ string</p>
+<pre><code class="lumen">console.log(os.machine()); // x86_64</code></pre>
+  </div>
+
+  <div class="api" id="os-hostname">
+    <h5><code>os.hostname()</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ string</p>
+<pre><code class="lumen">console.log(os.hostname());</code></pre>
+  </div>
+
+  <div class="api" id="os-endianness">
+    <h5><code>os.endianness()</code></h5>
+    <p class="sub">→ string &mdash; <code>"LE"</code> or <code>"BE"</code>.</p>
+<pre><code class="lumen">console.log(os.endianness()); // LE</code></pre>
+  </div>
+
+  <div class="api" id="os-tmpdir">
+    <h5><code>os.tmpdir()</code></h5>
+    <p class="sub">→ string &mdash; checks <code>TMPDIR</code>, <code>TMP</code>,
+    <code>TEMP</code>, falls back to <code>"/tmp"</code>.</p>
+<pre><code class="lumen">console.log(os.tmpdir());</code></pre>
+  </div>
+
+  <div class="api" id="os-homedir">
+    <h5><code>os.homedir()</code></h5>
+    <p class="sub">→ string &mdash; the <code>HOME</code> environment
+    variable. <strong>Deviation from Node</strong>: Node falls back to a
+    passwd-database lookup when <code>HOME</code> is unset; Lumen returns
+    <code>""</code> instead, rather than introduce the compiler's first libc
+    dependency for one rarely-hit fallback path.</p>
+<pre><code class="lumen">console.log(os.homedir());</code></pre>
+  </div>
+
+  <div class="api" id="os-uptime">
+    <h5><code>os.uptime()</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ int &mdash; system uptime in seconds.</p>
+<pre><code class="lumen">console.log(os.uptime() > 0); // true</code></pre>
+  </div>
+
+  <div class="api" id="os-totalmem">
+    <h5><code>os.totalmem()</code> <span class="stability-pill stability-experimental" title="Truncates to Lumen's 32-bit int. On a host with more than ~2GB of RAM the truncated value can be negative -- a real, observed deviation, not just a theoretical one.">Experimental</span> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ int &mdash; total system memory in bytes.
+    <strong>Deviation from Node</strong>: truncates to a 32-bit <code>int</code>
+    (the same tradeoff as <code>fs.statSync</code>'s <code>size</code> field);
+    on a host with more than ~2GB of RAM the value can come out negative.</p>
+<pre><code class="lumen">console.log(os.totalmem() != 0);</code></pre>
+  </div>
+
+  <div class="api" id="os-freemem">
+    <h5><code>os.freemem()</code> <span class="stability-pill stability-experimental" title="Same 32-bit truncation as totalmem().">Experimental</span> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ int &mdash; same 32-bit truncation caveat as
+    <code>totalmem()</code>.</p>
+<pre><code class="lumen">console.log(os.freemem() != 0);</code></pre>
+  </div>
+
+  <div class="api" id="os-loadavg">
+    <h5><code>os.loadavg()</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but returns a fallback/zeroed value there: the underlying call is Linux-specific and is skipped on other targets.">Wasm: limited</span></h5>
+    <p class="sub">→ <code>number[]</code> &mdash; 1, 5, and 15 minute load
+    averages, always exactly 3 elements.</p>
+<pre><code class="lumen">const loads: number[] = os.loadavg();
+console.log(loads[0]);</code></pre>
+  </div>
+
+  <div class="api" id="os-availableParallelism">
+    <h5><code>os.availableParallelism()</code></h5>
+    <p class="sub">→ int</p>
+<pre><code class="lumen">console.log(os.availableParallelism() > 0); // true</code></pre>
+  </div>
+
+  <div class="api" id="os-EOL">
+    <h5><code>os.EOL()</code></h5>
+    <p class="sub">→ string &mdash; always <code>"\n"</code> (Lumen is
+    POSIX-only).</p>
+<pre><code class="lumen">console.log(os.EOL() == "\n"); // true</code></pre>
+  </div>
+
+  <div class="api" id="os-devNull">
+    <h5><code>os.devNull()</code></h5>
+    <p class="sub">→ string &mdash; always <code>"/dev/null"</code>.</p>
+<pre><code class="lumen">console.log(os.devNull());</code></pre>
+  </div>
+
+  <div class="next">
+    <a class="btn ghost" href="/stdlib/readline">&larr; readline</a>
+    <a class="btn ghost" href="/stdlib/crypto">crypto &rarr;</a>
+  </div>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/learn">Learn</a> ·
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="/roadmap">Roadmap</a> ·
+    <a href="/community">Community</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a>
+  </p>
+</div></footer>
+
+<script src="/highlight.js?v=25b44fe7"></script>
+<script src="/site.js?v=3daeecb8"></script>
+<script>
+// Mobile module-list toggle, as on the other docs pages.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!panel.classList.contains('open')); });
+  panel.addEventListener('click', function (e) { if (e.target.tagName === 'A') setOpen(false); });
+  document.addEventListener('click', function (e) { if (!panel.contains(e.target) && e.target !== toggle) setOpen(false); });
+})();
+</script>
+</body>
+</html>

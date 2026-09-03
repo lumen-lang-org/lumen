@@ -5,6 +5,34 @@
   <url><loc>https://lumen-lang.org/examples</loc></url>
   <url><loc>https://lumen-lang.org/play</loc></url>
   <url><loc>https://lumen-lang.org/stdlib</loc></url>
+  <!-- stdlib:start -->
+  <url><loc>https://lumen-lang.org/stdlib/console</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/math</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/strings</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/arrays</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/collections</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/events</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/async</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/ffi</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/errors</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/fs</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/path</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/process</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/stdio-streams</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/readline</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/os</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/crypto</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/url</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/child_process</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/assert</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/time</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/http</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/net</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/json</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/zlib</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/buffer</loc></url>
+  <url><loc>https://lumen-lang.org/stdlib/worker</loc></url>
+  <!-- stdlib:end -->
   <url><loc>https://lumen-lang.org/packages</loc></url>
   <url><loc>https://lumen-lang.org/roadmap</loc></url>
   <url><loc>https://lumen-lang.org/community</loc></url>

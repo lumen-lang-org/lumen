@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>net · Standard library · Lumen</title>
+<meta name="description" content="Lumen standard library: net — connect, createServer, Socket.read, Socket.write, …. Statically typed, compiled to native code.">
+<link rel="stylesheet" href="/style.css?v=cc47e897">
+<link rel="canonical" href="https://lumen-lang.org/stdlib/net">
+<meta property="og:url" content="https://lumen-lang.org/stdlib/net">
+<meta property="og:title" content="net · Standard library · Lumen">
+<meta property="og:description" content="Lumen standard library: net — connect, createServer, Socket.read, Socket.write, …. Statically typed, compiled to native code.">
+<meta name="twitter:title" content="net · Standard library · Lumen">
+<meta name="twitter:description" content="Lumen standard library: net — connect, createServer, Socket.read, Socket.write, …. Statically typed, compiled to native code.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ea580c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lumen">
+<meta property="og:image" content="https://lumen-lang.org/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav><div class="wrap">
+  <a class="brand" href="/">Lumen<span class="dot">.</span></a>
+  <input type="checkbox" id="nav" class="nav-toggle" hidden>
+  <span class="links">
+    <a href="/learn">Learn</a>
+    <a href="/examples">Examples</a>
+    <a href="/play">Playground</a>
+    <a href="/stdlib">Stdlib</a>
+    <a href="/packages">Packages</a>
+    <a href="/#quickstart">Install</a>
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a>
+  </span>
+  <button type="button" class="theme-toggle" aria-label="Switch between light and dark theme" title="Switch theme">
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+  <label for="nav" class="nav-burger" aria-label="Menu"></label>
+</div></nav>
+
+<section class="wrap" id="main">
+  <div class="docs">
+  <button type="button" class="docs-nav-toggle" id="docs-nav-toggle" aria-expanded="false" aria-controls="docs-nav">
+    <span id="docs-nav-toggle-label">net</span>
+    <svg width="11" height="7" viewBox="0 0 11 7" fill="none" aria-hidden="true"><path d="M1 1l4.5 4.5L10 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <aside class="docs-nav" id="docs-nav"><nav>
+    <p class="docs-nav-title"><a href="/stdlib">All modules</a></p>
+    <p class="docs-nav-title">Modules</p>
+    <a href="/stdlib/console">console</a>
+    <a href="/stdlib/math">Math</a>
+    <a href="/stdlib/strings">String methods</a>
+    <a href="/stdlib/arrays">Array methods</a>
+    <a href="/stdlib/collections">Collections</a>
+    <a href="/stdlib/events">events</a>
+    <a href="/stdlib/async">async · await</a>
+    <a href="/stdlib/ffi">C FFI</a>
+    <a href="/stdlib/errors">Errors</a>
+    <a href="/stdlib/fs">fs</a>
+    <a href="/stdlib/path">path</a>
+    <a href="/stdlib/process">process</a>
+    <a href="/stdlib/stdio-streams">stdio streams</a>
+    <a href="/stdlib/readline">readline</a>
+    <a href="/stdlib/os">os</a>
+    <a href="/stdlib/crypto">crypto</a>
+    <a href="/stdlib/url">url</a>
+    <a href="/stdlib/child_process">child_process</a>
+    <a href="/stdlib/assert">assert</a>
+    <a href="/stdlib/time">time</a>
+    <a href="/stdlib/http">http</a>
+    <a href="/stdlib/net" class="active">net</a>
+    <a href="/stdlib/json">JSON</a>
+    <a href="/stdlib/zlib">zlib</a>
+    <a href="/stdlib/buffer">Buffer</a>
+    <a href="/stdlib/worker">worker_threads</a>
+    <p class="docs-nav-title">More</p>
+    <a href="/roadmap">Roadmap</a>
+    <a href="/packages">Packages</a>
+  </nav></aside>
+  <div class="docs-main">
+  <p class="sub"><a href="/stdlib">Standard library</a> / <strong>net</strong>
+  · <a href="/stdlib#net">on the one-page reference</a></p>
+  <h1 id="net">net</h1>
+  <p class="stability-note stability-experimental">Experimental &mdash;
+  new, manually tested rather than conformance-suite covered.</p>
+  <p class="sub">Raw TCP sockets &mdash; the layer <code>http</code>'s own
+  client/server are already built on, exposed directly for protocols that
+  aren't HTTP. No TLS (matching Node's own split between <code>net</code>
+  and <code>tls</code>).</p>
+
+  <div class="api-list">
+    <a href="#net-connect">connect</a>
+    <a href="#net-createServer">createServer</a>
+    <a href="#net-Socket-read">Socket.read</a>
+    <a href="#net-Socket-write">Socket.write</a>
+    <a href="#net-Socket-close">Socket.close</a>
+  </div>
+
+  <div class="api" id="net-connect">
+    <h5><code>net.connect(host, port)</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm and runs without crashing, but the connect step always fails there: WASI has no network access, matching http.request's own precedent for the same reason.">Wasm: limited</span></h5>
+    <p class="sub">(string, int) → <code>Socket</code> &mdash; blocking
+    connect, real DNS resolution for hostnames (via the same
+    <code>std.Io.net.HostName.connect</code> path Lumen's own
+    <code>http.request</code> client already uses internally to reach a
+    hostname, not a new, unverified code path) as well as literal IPs. A
+    failed connect (refused, unknown host, timeout) doesn't throw &mdash;
+    it degrades to a <code>Socket</code> whose <code>.read()</code>
+    always returns <code>""</code> and <code>.write()</code> is a no-op,
+    the same "fallback, don't crash" convention
+    <code>fs.createReadStream</code> already established for a
+    missing file.</p>
+<pre><code class="lumen">const sock: Socket = net.connect("127.0.0.1", 9301);
+sock.write("hello\n");
+console.log(sock.read());
+sock.close();</code></pre>
+  </div>
+
+  <div class="api" id="net-createServer">
+    <h5><code>net.createServer(port, handler)</code> <span class="target-pill target-wasm-limited" title="Same reason as net.connect and http.createServer under --wasm: no WASI network access.">Wasm: limited</span></h5>
+    <p class="sub">(int, (Socket) → void) → void &mdash; accepts
+    connections forever, never returns. Unlike
+    <code>http.createServer</code>'s <code>(HttpRequest) → HttpResponse</code>
+    handler (a call-and-return shape that fits HTTP's own framing), a raw
+    TCP handler gets the <code>Socket</code> itself and drives it in
+    whatever order its own protocol needs. The socket is closed
+    automatically once <code>handler</code> returns, whether or not the
+    handler already called <code>.close()</code> itself (idempotent,
+    no double-close error) &mdash; a handler that forgets to close won't
+    leak the connection for the life of the server.</p>
+<pre><code class="lumen">function handleConn(sock: Socket): void {
+  const line = sock.read();
+  sock.write("echo:" + line);
+}
+
+net.createServer(9301, handleConn);</code></pre>
+    <p class="sub"><strong>Single connection at a time</strong>, unlike
+    <code>http.createServer</code>'s thread-pool-backed concurrency:
+    nothing analogous has been benchmarked yet for a raw-bytes protocol
+    with no request/response cadence to measure against, so a slow or
+    long-lived handler blocks new connections from being accepted until
+    it returns. The same worker-thread-pool mechanism
+    <code>http.createServer</code> already uses is a direct, mechanical
+    extension here later; not attempted this pass so the <code>Socket</code>
+    type itself stayed the focus of this slice.</p>
+  </div>
+
+  <div class="api" id="net-Socket-read">
+    <h5><code>Socket.read()</code></h5>
+    <p class="sub">() → <code>string</code> &mdash; the next chunk
+    (bounded by a fixed 64KB internal buffer, matching
+    <code>ReadableStream.read()</code>'s exact convention).
+    <code>""</code> at EOF, on a closed socket, or on a socket that never
+    connected &mdash; a real empty chunk and end-of-stream are
+    indistinguishable here, the same simplification Streams (spec 046)
+    already documented and accepted.</p>
+  </div>
+
+  <div class="api" id="net-Socket-write">
+    <h5><code>Socket.write(chunk)</code></h5>
+    <p class="sub">string → <code>void</code> &mdash; writes and flushes
+    immediately on every call, unlike <code>WritableStream.write()</code>
+    (which defers flushing to <code>.close()</code>): a long-lived socket
+    conversation has no single "I'm done" moment the way a one-shot file
+    write does, so buffering until some later <code>.close()</code> could
+    mean the peer never sees the bytes in time. No-op on a closed or
+    never-connected socket.</p>
+  </div>
+
+  <div class="api" id="net-Socket-close">
+    <h5><code>Socket.close()</code></h5>
+    <p class="sub">() → <code>void</code> &mdash; closes the underlying
+    connection. Safe to call more than once, or on a socket that never
+    connected.</p>
+  </div>
+
+  <div class="next">
+    <a class="btn ghost" href="/stdlib/http">&larr; http</a>
+    <a class="btn ghost" href="/stdlib/json">JSON &rarr;</a>
+  </div>
+  </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <span class="brand">Lumen<span class="dot">.</span></span>
+  <p>A compiled TypeScript-syntax language.</p>
+  <p class="footlinks">
+    <a href="/learn">Learn</a> ·
+    <a href="/examples">Examples</a> ·
+    <a href="/play">Playground</a> ·
+    <a href="/stdlib">Standard library</a> ·
+    <a href="/packages">Packages</a> ·
+    <a href="/roadmap">Roadmap</a> ·
+    <a href="/community">Community</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen">GitHub</a> ·
+    <a href="https://github.com/lumen-lang-org/lumen/releases">Releases</a>
+  </p>
+</div></footer>
+
+<script src="/highlight.js?v=25b44fe7"></script>
+<script src="/site.js?v=3daeecb8"></script>
+<script>
+// Mobile module-list toggle, as on the other docs pages.
+(function () {
+  var toggle = document.getElementById('docs-nav-toggle');
+  var panel = document.getElementById('docs-nav');
+  if (!toggle || !panel) return;
+  function setOpen(open) {
+    panel.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  toggle.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!panel.classList.contains('open')); });
+  panel.addEventListener('click', function (e) { if (e.target.tagName === 'A') setOpen(false); });
+  document.addEventListener('click', function (e) { if (!panel.contains(e.target) && e.target !== toggle) setOpen(false); });
+})();
+</script>
+</body>
+</html>
