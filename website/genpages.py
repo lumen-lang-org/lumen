@@ -71,7 +71,7 @@ SHELL = """<!DOCTYPE html>
 <script>try{{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}</script>
 <title>{name} · Packages · Lumen</title>
 <meta name="description" content="{desc}">
-<link rel="stylesheet" href="/style.css?v=cc47e897">
+<link rel="stylesheet" href="/style.css?v=268ce722">
 <link rel="canonical" href="https://lumen-lang.org/packages/{name}">
 <meta property="og:url" content="https://lumen-lang.org/packages/{name}">
 <meta property="og:title" content="{name} · Packages · Lumen">

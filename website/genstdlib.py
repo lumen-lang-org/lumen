@@ -35,7 +35,7 @@ SHELL = """<!DOCTYPE html>
 <script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>@@TITLE@@ · Standard library · Lumen</title>
 <meta name="description" content="@@DESC@@">
-<link rel="stylesheet" href="/style.css?v=cc47e897">
+<link rel="stylesheet" href="/style.css?v=268ce722">
 <link rel="canonical" href="https://lumen-lang.org/stdlib/@@ID@@">
 <meta property="og:url" content="https://lumen-lang.org/stdlib/@@ID@@">
 <meta property="og:title" content="@@TITLE@@ · Standard library · Lumen">

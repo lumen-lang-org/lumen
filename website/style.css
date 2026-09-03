@@ -73,7 +73,8 @@ a:hover { text-decoration: underline; }
 .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
 
 /* Nav */
-nav { border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 20; }
+/* The site header only: other <nav>s (group chips, docs sidebars) are plain. */
+body > nav { border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 20; }
 nav .wrap { display: flex; align-items: center; height: 60px; }
 .brand { font-weight: 700; font-size: 18px; letter-spacing: -0.02em; color: var(--fg); }
 .brand:hover { text-decoration: none; }
