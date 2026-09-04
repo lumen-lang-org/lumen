@@ -22,3 +22,6 @@ zig-pkg/
 .lumen-gc-*/
 
 .lumen-packages/
+# Compiled examples left beside their sources by `lumen run`
+specs/*/examples/valid/*
+!specs/*/examples/valid/*.*
