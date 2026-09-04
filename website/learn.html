@@ -57,6 +57,7 @@
     <a href="#types">Types you already know</a>
     <a href="#records">Records, unions and enums</a>
     <a href="#control">Control flow</a>
+    <a href="#iteration">Choosing a loop</a>
     <a href="#null">Null safety</a>
     <a href="#functions">Functions and closures</a>
     <a href="#classes">Classes and inheritance</a>
@@ -183,6 +184,295 @@ outer: for (let a = 0; a &lt; 3; a += 1) {
     if (a * b == 2) { console.log(`${a}*${b}`); break outer; }
   }
 }</code></pre>
+
+<h2 id="iteration">Choosing a loop</h2>
+<p class="sub">Lumen gives you every loop TypeScript does, which means most of
+the time more than one of them would work. This section is the house answer to
+"which one", and it is careful to say which kind of statement each rule is.
+A <strong>rule</strong> is something the compiler enforces, and cites the spec
+or the diagnostic that backs it. A <strong>preference</strong> is a choice
+among forms the compiler treats as equal, and is marked as one &mdash; you can
+ignore a preference and your program still compiles.</p>
+
+<h3>Reach for this, not that</h3>
+<table>
+  <tr><th>You want</th><th>Reach for</th></tr>
+  <tr><td>each element of an array</td><td><code>for (const x of xs)</code></td></tr>
+  <tr><td>each character of a string</td><td><code>for (const ch of s)</code></td></tr>
+  <tr><td>the index as well as the element</td><td><code>for (const [i, x] of xs.entries())</code></td></tr>
+  <tr><td>the index only</td><td><code>for (const i of xs.keys())</code></td></tr>
+  <tr><td>index arithmetic, or a step other than 1</td><td>the C-style <code>for</code></td></tr>
+  <tr><td>a count you do not know up front</td><td><code>while</code></td></tr>
+  <tr><td>a body that must run at least once</td><td><code>do…while</code></td></tr>
+  <tr><td>a map's keys</td><td><code>for (const k of m.keys())</code></td></tr>
+  <tr><td>a map's keys and values</td><td><code>for (const [k, v] of m)</code></td></tr>
+  <tr><td>a record's field names</td><td><code>for (const k of Object.keys(r))</code></td></tr>
+  <tr><td>a side effect per element, no early exit</td><td><code>xs.forEach(…)</code></td></tr>
+  <tr><td>a multi-way branch on a literal union or enum</td><td><code>switch</code></td></tr>
+</table>
+
+<h3><code>for…of</code> — the one to reach for first</h3>
+<p class="sub"><strong>Rule.</strong> <code>for…of</code> accepts an array, a
+string, a <code>Set</code>, or a <code>Map</code>; anything else is
+<code>E_TYPE_MISMATCH</code>, and the message lists what it does accept. A
+string yields its characters, and a <code>Set</code> yields its values in
+insertion order (spec 268). <strong>Preference.</strong> Use it whenever the
+loop just visits each element, because it is the only form with no index to
+get wrong. <code>break</code> and <code>continue</code> work normally, so
+"needs an early exit" is not a reason to reach past it.</p>
+<pre data-play><code class="lumen">const words: string[] = ["ada", "grace", "alan"];
+for (const w of words) {
+  console.log(w);                       // ada, grace, alan
+}
+
+for (const ch of "hi") {
+  console.log(ch);                      // h, i
+}
+
+const seen: Set&lt;int&gt; = new Set&lt;int&gt;();
+seen.add(3);
+seen.add(1);
+seen.add(3);
+for (const n of seen) {
+  console.log(`${n}`);                  // 3, 1 -- insertion order, no duplicate
+}</code></pre>
+<p class="sub">It is the wrong choice when the loop is not really "each
+element in order": when you need to step by something other than one, walk two
+cursors, or index a second array by the same counter.</p>
+
+<h3>The C-style <code>for</code>, when the index is the point</h3>
+<p class="sub"><strong>Preference.</strong> Reach for it only when the loop
+body needs the index arithmetically &mdash; a step, a window, two cursors. If
+the index is only there to read <code>xs[i]</code>, use
+<code>for…of</code> instead. <strong>Rule.</strong> All three clauses are
+optional, so <code>for (;;)</code> is a valid infinite loop (spec 206), the
+init and update clauses may both be comma-separated lists (spec 155), and
+<code>++</code>/<code>--</code> are real expressions here, not merely
+statements (spec 164) &mdash; though <code>i += 1</code> is what the rest of
+this tour uses.</p>
+<pre data-play><code class="lumen">const xs: int[] = [1, 2, 3, 4, 5, 6];
+
+// A step other than 1: every other element.
+let evens = 0;
+for (let i = 0; i &lt; xs.length; i += 2) {
+  evens += xs[i];
+}
+console.log(`${evens}`);                // 9
+
+// Two cursors walking toward each other.
+let pairs = 0;
+for (let lo = 0, hi = xs.length - 1; lo &lt; hi; lo += 1, hi -= 1) {
+  pairs += 1;
+}
+console.log(`${pairs}`);                // 3</code></pre>
+
+<h3><code>while</code> and <code>do…while</code></h3>
+<p class="sub"><strong>Preference.</strong> <code>while</code> is for a loop
+whose trip count is not known when it starts &mdash; drain a queue, converge on
+a value, read until end of input. A <code>while</code> that counts is a
+C-style <code>for</code> written the long way. <code>do…while</code> earns its
+keep in exactly one case: the body must run before the condition can be
+judged. <strong>Rule.</strong> A <code>while</code> condition narrows its
+subject for the body, so looping until a <code>T | null</code> runs out needs
+no non-null assertion inside (spec 265).</p>
+<pre data-play><code class="lumen">// The count is not known up front: keep halving until it reaches 1.
+let n = 27;
+let steps = 0;
+while (n != 1) {
+  n = n % 2 == 0 ? n / 2 : 3 * n + 1;
+  steps += 1;
+}
+console.log(`${steps}`);                // 111
+
+// The body must run at least once.
+let attempts = 0;
+do {
+  attempts += 1;
+} while (attempts &lt; 1);
+console.log(`${attempts}`);             // 1</code></pre>
+
+<h3>Getting the index without a hand-rolled counter</h3>
+<p class="sub"><strong>Rule.</strong> <code>keys()</code>,
+<code>values()</code> and <code>entries()</code> on an array exist as
+<code>for…of</code> iterables (specs 177 and 360). They are not standalone
+values &mdash; you cannot bind one to a variable, only iterate it.
+<strong>Preference.</strong> Prefer them to declaring a counter beside the
+loop and remembering to bump it; the counter is a second thing to keep
+correct, and it outlives the loop.</p>
+<pre data-play><code class="lumen">const words: string[] = ["ada", "grace"];
+
+// The index alone.
+for (const i of words.keys()) {
+  console.log(`${i}`);                  // 0, 1
+}
+
+// Index and element together.
+for (const [i, w] of words.entries()) {
+  console.log(`${i}: ${w}`);            // 0: ada, 1: grace
+}</code></pre>
+<p class="sub"><strong>Rule, and the trap worth knowing.</strong>
+<code>for…in</code> binds the key as a <strong><code>string</code></strong>,
+exactly as JavaScript does. Array indices in Lumen are integers, so the
+binding from a <code>for…in</code> over an array <em>cannot be used to index
+it</em> &mdash; <code>xs[i]</code> is <code>E_TYPE_MISMATCH</code>. That makes
+<code>for…in</code> the wrong tool for arrays here, and the right one for
+walking a record's field names.</p>
+<pre data-play><code class="lumen">const words: string[] = ["ada", "grace"];
+
+// `for...in` binds the key as a *string*, exactly as JavaScript does.
+for (const i of words.keys()) {
+  console.log(`${i} ${words[i]}`);      // 0 ada, 1 grace
+}
+
+// Over a record it binds each field name -- which is what it is good for.
+type Person = { name: string, city: string };
+const p: Person = { name: "Ada", city: "London" };
+for (const field in p) {
+  console.log(field);                   // name, city
+}</code></pre>
+
+<h3>Maps, sets and records</h3>
+<p class="sub"><strong>Rule.</strong> A <code>for…of</code> over a
+<code>Map</code> must destructure: <code>for (const [k, v] of m)</code> (spec
+168). A single binding is <code>E_TYPE_MISMATCH</code>, because there is no
+entry type to hand you. <code>for…in</code> over a <code>Map</code> is
+rejected too, and the message points at <code>for…of</code>.
+<code>forEach</code> takes the <strong>value first, then the key</strong>, as
+JavaScript's does (spec 363).</p>
+<pre data-play><code class="lumen">const ages: Map&lt;string, int&gt; = new Map&lt;string, int&gt;();
+ages.set("ada", 36);
+ages.set("grace", 45);
+
+// Keys and values together.
+for (const [name, age] of ages) {
+  console.log(`${name} is ${age}`);     // ada is 36, grace is 45
+}
+
+// One side only.
+for (const name of ages.keys()) {
+  console.log(name);                    // ada, grace
+}
+
+// A side effect per entry, with no early exit: value first, then key.
+ages.forEach((age: int, name: string) =&gt; {
+  console.log(`${name}=${age}`);
+});</code></pre>
+<p class="sub">A record is not a <code>Map</code>: its shape is fixed at
+compile time, so <code>Object.keys</code>/<code>values</code>/
+<code>entries</code> are resolved from the type rather than by walking a
+run-time object (specs 264, 393, 409). Reach for a <code>Map</code> when the
+keys are data, and a record when they are part of the type.</p>
+<pre data-play><code class="lumen">type Person = { name: string, city: string };
+const p: Person = { name: "Ada", city: "London" };
+
+// A record's shape is static, so these are resolved at compile time.
+for (const k of Object.keys(p)) {
+  console.log(k);                       // name, city
+}
+for (const v of Object.values(p)) {
+  console.log(v);                       // Ada, London
+}
+for (const [k, v] of Object.entries(p)) {
+  console.log(`${k}=${v}`);             // name=Ada, city=London
+}</code></pre>
+
+<h3>Building a result</h3>
+<p class="sub"><strong>Rule.</strong> Arrays are immutable values, so
+<code>push</code> is a <em>statement</em> that rebuilds the binding, and its
+target must therefore be <code>let</code>, not <code>const</code> &mdash;
+otherwise <code>E_CONST_ASSIGNMENT</code>, which says so in as many words
+(specs 441&ndash;443). In a loop the optimizer turns the rebuild back into an
+amortized-O(1) append, so this is not the quadratic thing it looks like.
+<strong>Preference.</strong> When the loop only filters or maps, say that
+instead: the array method needs no mutable binding at all.</p>
+<pre data-play><code class="lumen">// Building a list: `push` is a statement, and its target must be `let`.
+let kept: string[] = [];
+for (const w of ["ada", "al", "grace"]) {
+  if (w.length &lt; 3) { continue; }
+  kept.push(w);
+}
+console.log(kept.join(","));            // ada,grace
+
+// Or say it as a transform, with no loop and no mutable binding at all.
+const same: string[] = ["ada", "al", "grace"].filter((w: string) =&gt; w.length &gt;= 3);
+console.log(same.join(","));            // ada,grace</code></pre>
+
+<h3><code>switch</code></h3>
+<p class="sub"><strong>Rule.</strong> A <code>switch</code> over an enum or a
+literal union is exhaustive. A function that returns from every case needs no
+trailing <code>return</code> and no <code>default</code>; leave a case out and
+the missing path is reported as <code>E_MISSING_RETURN</code> (specs 200, 316,
+359). Consecutive <em>empty</em> cases group onto the next body, so
+<code>case 1: case 2: return …</code> does what it looks like (spec 201).</p>
+<pre data-play><code class="lumen">type Status = "open" | "closed" | "merged";
+
+function label(s: Status): string {
+  switch (s) {                          // every variant handled: no `default` needed
+    case "open": return "Open";
+    case "closed": return "Closed";
+    case "merged": return "Merged";
+  }
+}
+console.log(label("merged"));           // Merged
+
+// Empty cases group onto the next body.
+function band(n: int): string {
+  switch (n) {
+    case 1: case 2: return "low";
+    case 3: return "high";
+    default: return "?";
+  }
+}
+console.log(band(2));                   // low</code></pre>
+
+<h3>Where this differs from TypeScript, on purpose</h3>
+<p class="sub"><strong>A case with a body of its own does not fall through.</strong>
+Each non-empty case lowers to its own branch, so there is an implicit
+<code>break</code> at the end of one. Only empty cases group. This is the one
+place a TypeScript reader's instinct will be wrong, and it is a decision, not
+an omission: fallthrough from a case that ran code is the source of the bug
+every linter in that language has a rule against.</p>
+<pre data-play><code class="lumen">// A case with a body of its own does NOT fall into the next one.
+// In TypeScript this prints one, two, other. Here it prints one.
+function f(n: int): void {
+  switch (n) {
+    case 1:
+      console.log("one");
+    case 2:
+      console.log("two");
+    default:
+      console.log("other");
+  }
+}
+f(1);                                   // one</code></pre>
+<p class="sub"><strong>There is no <code>undefined</code>.</strong> Absence is
+<code>T | null</code>, so a loop that might not find anything ends in a
+<code>null</code> check, <code>??</code>, or <code>?.</code> &mdash; never a
+comparison against <code>undefined</code>. See <a href="#null">Null
+safety</a>.</p>
+<p class="sub"><strong><code>for…in</code> gives you a string</strong>, and
+arrays are indexed by integers, so the two do not compose. TypeScript hides
+this because its array index signature accepts a string; Lumen's types do
+not.</p>
+<p class="sub"><strong>The mutating array methods are absent.</strong>
+<code>pop</code>, <code>shift</code> and <code>splice</code> each remove an
+element <em>and</em> hand it back, which an immutable value cannot do. The
+compiler names the replacement at the call site rather than failing
+generically.</p>
+
+<h3>Rejected, and what to write instead</h3>
+<table>
+  <tr><th>Rejected</th><th>Diagnostic</th><th>Write</th></tr>
+  <tr><td><code>xs.pop()</code></td><td><code>array.pop</code> is not supported</td><td><code>xs[xs.length - 1]</code>, then <code>xs.slice(0, -1)</code></td></tr>
+  <tr><td><code>xs.shift()</code></td><td><code>array.shift</code> is not supported</td><td><code>xs[0]</code>, then <code>xs.slice(1)</code></td></tr>
+  <tr><td><code>xs.splice(…)</code></td><td><code>array.splice</code> is not supported</td><td><code>slice</code>/<code>concat</code>/<code>with</code></td></tr>
+  <tr><td><code>const n = xs.push(x)</code></td><td><code>array.push</code> is not supported</td><td><code>xs.push(x)</code> as a statement</td></tr>
+  <tr><td><code>xs.push(x)</code> on a <code>const</code></td><td><code>E_CONST_ASSIGNMENT</code></td><td>declare <code>xs</code> with <code>let</code></td></tr>
+  <tr><td><code>for (const e of m)</code> on a <code>Map</code></td><td><code>E_TYPE_MISMATCH</code></td><td><code>for (const [k, v] of m)</code></td></tr>
+  <tr><td><code>for (const k in m)</code> on a <code>Map</code></td><td><code>E_TYPE_MISMATCH</code></td><td><code>for (const k of m.keys())</code></td></tr>
+  <tr><td><code>xs[i]</code> where <code>i</code> came from <code>for…in</code></td><td><code>E_TYPE_MISMATCH</code></td><td><code>for (const i of xs.keys())</code></td></tr>
+  <tr><td>a <code>switch</code> missing a variant</td><td><code>E_MISSING_RETURN</code></td><td>handle it, or add a <code>default</code></td></tr>
+</table>
 
 <h2 id="null">Null safety</h2>
 <p class="sub">There is no <code>undefined</code>. A value that may be absent is
