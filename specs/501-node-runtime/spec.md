@@ -270,6 +270,32 @@ daemon come across.
 - **SC-005**: the native target is unchanged: `zig build conformance` is
   green.
 
+## Alternatives considered
+
+Five routes were weighed. They differ mainly in where the two hard gaps
+(byte strings, blocking I/O on threads) get closed and in what the consumer
+must install.
+
+| Route | Byte strings | Blocking I/O and threads | Consumer needs | Verdict |
+| --- | --- | --- | --- | --- |
+| **1. JS backend in the compiler** (this spec) | emitter converts at stdlib boundaries | worker-thread broker in the runtime package | Node | recommended for a Node target |
+| **2. Converge the language on JavaScript** | language changes: code-unit strings plus a `Buffer` type; programs rewrite | stdlib grows async twins; socket loops rewrite | Node | only if "Lumen is a TypeScript subset" outranks native strengths |
+| **3. wasm on Node** (extends spec 030) | exact, same Zig runtime | broker behind a narrow host-import ABI; `net`/`http`/`child_process`/`Worker` preludes need wasm variants | Node; artifact also runs on Deno, Bun, browsers | preferred if multi-runtime portability is the goal; risks: collector under wasm, startup, opaque traces |
+| **4. N-API addon** (`--target node-addon`) | exact | exact, native threads | Node plus a per-platform binary | small side deliverable: lets Node call Lumen libraries in-process; not "no native binary" |
+| **5. `tsc` transformer as backend** | same work as route 1, in a second tool | same broker as route 1 | Node plus TypeScript | duplicates the checker and drifts; rejected |
+
+Route 2 was the only one that removes the emitter, and it does so by moving
+the cost into every existing program: Joule alone has 116 byte-oriented
+string sites and a socket layer written against blocking reads.
+
+What every route except 4 shares is the runtime package with Lumen's call
+shapes (§3) and a loader for `https://` imports. That is the no-regret first
+slice; the probe shows it alone loads a quarter of Joule's test files. The
+choice between routes 1 and 3 then turns on one question: is Node the
+target, or any JavaScript runtime? For Node, route 1 wins on debuggable
+output and a plain-JavaScript runtime. If browsers and Bun matter, route 3
+reuses more of what already exists.
+
 ## Not planned
 
 | Item | Why |
