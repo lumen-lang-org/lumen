@@ -117,6 +117,7 @@
     <a href="#process-args">argsCount / arg</a>
     <a href="#process-uptime">uptime</a>
     <a href="#process-hrtime">hrtime</a>
+    <a href="#process-sleep">sleep</a>
     <a href="#process-memoryUsage">memoryUsage</a>
     <a href="#process-kill">kill</a>
     <a href="#process-umask">umask / setUmask</a>
@@ -217,6 +218,27 @@ console.log(arg(0));</code></pre>
 <pre><code class="lumen">const start: i64 = process.hrtime();
 const end: i64 = process.hrtime();
 console.log(end > start);</code></pre>
+  </div>
+
+  <div class="api" id="process-sleep">
+    <h5><code>process.sleep(ms)</code></h5>
+    <p class="sub">int → void &mdash; pauses <em>this thread</em> for
+    <code>ms</code> milliseconds. Zero and negative values are no-ops.</p>
+    <p class="sub">This is the pause a plain loop needs.
+    <code>setTimeout</code>/<code>setInterval</code> schedule on the event
+    loop, so they cannot space out the iterations of an ordinary
+    <code>while</code>: the loop never yields, so the timer never fires.
+    Without <code>sleep</code>, a worker that polls a queue has to be
+    rewritten inside out as an interval callback &mdash; and because a
+    <code>throw</code> does not cross a lambda boundary, that callback then
+    needs a <code>try</code> of its own.</p>
+<pre><code class="lumen">// A poll loop that does not spin.
+let attempts: int = 0;
+while (attempts &lt; 3) {
+  process.sleep(250);
+  attempts = attempts + 1;
+}
+console.log(`${attempts}`); // 3</code></pre>
   </div>
 
   <div class="api" id="process-memoryUsage">

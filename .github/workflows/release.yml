@@ -131,9 +131,28 @@ jobs:
             python3 -m zipfile -c "lumen-${{ matrix.name }}.zip" "lumen-${{ matrix.name }}"
           fi
 
+      # The release notes are the CHANGELOG section for this tag. Every matrix
+      # job writes the same body, which is harmless — they agree. A tag with no
+      # matching section leaves the file empty, which is what the release body
+      # was before this step existed, so a missing entry never fails a release.
+      - name: Take the release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { want = 1; next }
+            want && /^## / { exit }
+            want { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md || true
+          if [ -s RELEASE_NOTES.md ]; then
+            echo "Release notes for $version:"; cat RELEASE_NOTES.md
+          else
+            echo "No CHANGELOG.md section for $version; publishing with an empty body."
+          fi
+
       - name: Upload to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: RELEASE_NOTES.md
           files: |
             lumen-${{ matrix.name }}.tar.gz
             lumen-${{ matrix.name }}.zip

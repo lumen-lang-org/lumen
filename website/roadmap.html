@@ -96,8 +96,8 @@
   <h3 id="language">Language-level gaps the modules wait on</h3>
   <table>
     <tr><th>Gap</th><th>What it unblocks</th></tr>
-    <tr><td>Growable arrays (<code>push</code>, <code>pop</code>, <code>sort</code>)</td><td>the remaining <code>Array</code> methods, <code>Buffer.concat</code>, simpler collection code</td></tr>
-    <tr><td>A general <code>Stream</code> abstraction</td><td><code>process.stdout</code>-style objects, <code>Console</code> instances, streaming <code>zlib</code>, streaming HTTP bodies, <code>child_process.spawn</code></td></tr>
+    <tr><td>Mutating array methods that also return a value (<code>pop</code>, <code>shift</code>, <code>splice</code>)</td><td>arrays are immutable values, so these have no shape here yet: each both removes an element and hands it back. <code>push</code>/<code>unshift</code> shipped (specs 441&ndash;443) precisely because the statement form needs no return value &mdash; it desugars to a reassignment, which the optimizer turns back into an amortized-O(1) append</td></tr>
+    <tr><td>A general <code>Stream</code> abstraction</td><td><code>Console</code> instances, streaming <code>zlib</code> transforms, and a network-backed <code>ReadableStream</code>/<code>WritableStream</code>. Narrower than it was: file-backed streams (spec 046), <code>process.stdin</code>/<code>stdout</code>/<code>stderr</code> (spec 053), <code>http.stream</code> (specs 452, 494&ndash;496) and <code>child_process.spawn</code> (spec 450) all shipped their own handle types rather than waiting for one shared abstraction</td></tr>
     <tr><td>A locking primitive (a <code>Mutex</code>-shaped type)</td><td>safe shared state across a concurrent <code>http.createServer</code> and across <code>Worker</code> threads</td></tr>
     <tr><td>A cross-thread message channel</td><td><code>new Worker(...)</code> with <code>postMessage</code>, worker pools, non-scalar results from <code>Worker.run</code></td></tr>
     <tr><td>Async on the wasm target</td><td><code>async</code>/<code>await</code>, timers and <code>Worker.run</code> in the browser playground</td></tr>
@@ -112,7 +112,7 @@
     <tr><td><code>console.group</code>/<code>groupEnd</code></td><td>needs indentation state threaded through every log call site, a bigger, cross-cutting change</td></tr>
     <tr><td><code>console.table</code> · <code>console.dir</code></td><td>need structured/tabular object formatting; today's <code>printFormat</code> is a flat per-type format-string lookup</td></tr>
     <tr><td><code>console.clear</code></td><td>terminal-control-code territory, low value</td></tr>
-    <tr><td><code>Console</code> class / custom-stream constructor (<code>new Console(stdout, stderr)</code>)</td><td>needs a <code>Stream</code> abstraction Lumen doesn't have (the same gap blocking <code>process.stdout</code>/<code>stdin</code>/<code>stderr</code>)</td></tr>
+    <tr><td><code>Console</code> class / custom-stream constructor (<code>new Console(stdout, stderr)</code>)</td><td>needs a general <code>Stream</code> abstraction to construct one <em>over</em>. <code>process.stdout</code>/<code>stderr</code> themselves shipped (spec 053), so the destinations exist; what is missing is a writable-stream type a <code>Console</code> could accept as a parameter</td></tr>
   </table>
 
   <h4 id="fs">fs</h4>
@@ -136,7 +136,11 @@
   <h4 id="process">process</h4>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
-    <tr><td><code>process.stdout</code> / <code>stdin</code> / <code>stderr</code></td><td>no <code>Stream</code> abstraction in the language</td></tr>
+    <tr><td><code>process.stdout.on('data', …)</code> and other stream <em>events</em></td><td>the three streams themselves shipped (spec 053) as
+    <code>process.stdin</code>/<code>stdout</code>/<code>stderr</code> with
+    <code>read</code>/<code>readLine</code>/<code>write</code>/<code>close</code>;
+    what is missing is the event/listener half, the same gap as the signal
+    row below</td></tr>
     <tr><td>signal events, <code>process.on(...)</code></td><td><code>process.kill()</code> can send a signal now, but nothing can receive one back into user code &mdash; no event/listener infrastructure yet</td></tr>
     <tr><td><code>process.nextTick(fn)</code></td><td>needs a design decision about what happens when it's called in a program with no other async machinery running (a plain sync-looking program never starts the event loop today)</td></tr>
     <tr><td><code>process.resourceUsage()</code> · <code>process.cpuUsage()</code> · <code>process.threadCpuUsage()</code></td><td>no per-thread/per-process CPU-time accounting primitive vetted yet; <code>memoryUsage()</code> covers the highest-value single field</td></tr>
@@ -159,9 +163,9 @@
   <h4 id="crypto">crypto</h4>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
-    <tr><td><code>crypto.createCipheriv</code>/streaming AEAD</td><td>a stateful encrypt/decrypt object is a real, separate shape (associated-data ordering, partial-block buffering) from <code>createHash</code>/<code>createHmac</code>'s pure hash accumulator (spec 060); not attempted yet</td></tr>
+    <tr><td><code>crypto.createCipheriv</code> / <em>streaming</em> AEAD</td><td>one-shot AES-256-GCM shipped, in two forms: <code>encrypt</code>/<code>decrypt</code> over strings, which manage the nonce themselves (spec 467), and <code>encryptSync</code>/<code>decryptSync</code> over <code>Buffer</code>, where the caller supplies it. What is still missing is the <em>stateful</em> object: a real, separate shape (associated-data ordering, partial-block buffering) from <code>createHash</code>/<code>createHmac</code>'s pure hash accumulator (spec 060)</td></tr>
     <tr><td><code>crypto.sign()</code>/<code>verify()</code></td><td>asymmetric/keyed crypto, a much larger surface than this milestone's scope</td></tr>
-    <tr><td><code>crypto.pbkdf2()</code> · <code>crypto.scrypt()</code></td><td>deliberately deferred rather than rushed; picking the right default cost parameters deserves its own pass</td></tr>
+    <tr><td><code>crypto.pbkdf2()</code> · <code>crypto.scrypt()</code> (the async callback forms)</td><td>the synchronous <code>pbkdf2Sync</code>/<code>scryptSync</code> shipped (spec 061); as everywhere else in the stdlib, the <code>*Sync</code> function lands first and its async twin gets a dedicated pass</td></tr>
     <tr><td>Algorithms beyond md5/sha1/sha256/sha512</td><td><code>createHash</code>/<code>createHmac</code> (spec 060) cover those four; sha224/sha384/blake2/blake3/etc. are a real, separable expansion once there's a concrete need</td></tr>
   </table>
 
@@ -177,15 +181,18 @@
   <table>
     <tr><th>API</th><th>Notes</th></tr>
     <tr><td><code>exec</code>/<code>execSync</code> (shell-string form)</td><td>needs shell-quoting/escaping logic to be safe; <code>spawnSync</code>'s array-of-args form sidesteps this for v1</td></tr>
-    <tr><td><code>spawn</code> (async, streaming stdio)</td><td>needs the same event-loop integration the async <code>fs</code> trio got, plus a design for streaming stdio</td></tr>
-    <tr><td><code>cwd</code>/<code>env</code>/<code>timeout</code> options</td><td>the underlying primitive already supports these; just not exposed as <code>spawnSync</code> parameters yet</td></tr>
-    <tr><td>stdin piping · signal-based exit status</td><td><code>spawnSync</code>'s one-shot model doesn't need stdin; no optional-string-or-int union exists yet to represent a signal-based exit</td></tr>
+    <tr><td><code>await</code>-able reads on a <code>ChildProcess</code></td><td><code>child_process.spawn</code> shipped (spec 450) with stdin piping and a persistent <code>write</code>/<code>writeLine</code>/<code>readLine</code>/<code>close</code> handle, but <code>readLine()</code> is a <em>blocking</em> read; wiring it to the event loop is the same integration the async <code>fs</code> trio got, not yet done for this handle</td></tr>
+    <tr><td><code>cwd</code>/<code>env</code>/<code>timeout</code> options</td><td>the underlying primitive already supports these; just not exposed as <code>spawnSync</code>/<code>spawn</code> parameters yet</td></tr>
+    <tr><td>stderr capture · <code>kill</code>/timeout · signal-based exit status</td><td><code>spawn</code> inherits stderr deliberately, so an undrained pipe can never deadlock the child; <code>close()</code> waits for exit with no kill or timeout escape hatch; and no optional-string-or-int union exists yet to represent a signal-based exit</td></tr>
+    <tr><td>Pseudo-terminal (pty)</td><td>out of scope for the piped-stdio model both <code>spawnSync</code> and <code>spawn</code> use</td></tr>
   </table>
 
   <h4 id="array-more">Array (more)</h4>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
-    <tr><td><code>a.push/pop/sort</code></td><td>needs growable arrays</td></tr>
+    <tr><td><code>a.pop()</code> · <code>a.shift()</code> · <code>a.splice(...)</code></td><td>arrays are immutable values and each of these both mutates and returns. The compiler names the immutable equivalent at the call site rather than failing generically &mdash; <code>a[a.length - 1]</code> then <code>a.slice(0, -1)</code> for <code>pop</code>, <code>a[0]</code> then <code>a.slice(1)</code> for <code>shift</code>, and <code>slice</code>/<code>concat</code>/<code>with</code> for <code>splice</code></td></tr>
+    <tr><td><code>const n = a.push(x)</code> (the length-returning expression form)</td><td><code>push</code>/<code>unshift</code> are supported as <em>statements</em>, where they desugar to a reassignment (specs 441&ndash;443); the expression form would have to return a length the desugar never produces</td></tr>
+    <tr><td><code>a.toSpliced(...)</code> · standalone <code>a.keys()</code>/<code>values()</code>/<code>entries()</code> iterator objects</td><td>the three iterators exist as <code>for…of</code> iterables (specs 177, 360), not as values you can hold; <code>toSpliced</code> is simply not written yet</td></tr>
   </table>
 
   <h4 id="http">http</h4>
@@ -197,9 +204,9 @@
     <tr><td>A general-purpose locking primitive for handler-shared state</td><td>concurrent serving (shipped) means a handler now genuinely runs on multiple OS threads; a handler that mutates shared global state without its own synchronization has a real data race. <code>Map</code>/<code>Set</code> now detect an overlapping access and fail loudly instead of corrupting or crashing unpredictably (spec 492), but that is a diagnostic, not a fix -- a handler still cannot safely share mutable state across a concurrent server's connections, since Lumen has no <code>Mutex</code>-shaped stdlib type yet</td></tr>
     <tr><td>Real <code>Server</code>/<code>IncomingMessage</code>/<code>ServerResponse</code>/<code>ClientRequest</code>/<code>Agent</code> classes</td><td>Node's classes bundle request/response data with an event mechanism; <code>EventEmitter</code> alone doesn't supply the data half, which still needs the header-collection/streaming gaps closed first</td></tr>
     <tr><td>Server lifecycle events (<code>'error'</code>, <code>'close'</code>) via <code>EventEmitter&lt;T&gt;</code></td><td>genuinely reachable now that <code>EventEmitter</code> exists &mdash; a real follow-up</td></tr>
-    <tr><td>Streaming request/response bodies</td><td>needs a <em>network</em>-backed <code>ReadableStream</code>/<code>WritableStream</code> (spec 046 shipped file-backed streams only, a deliberately separate backing type -- see spec 046's "why file-backed only")</td></tr>
+    <tr><td>Streaming bodies on the <em>server</em> side</td><td>the client side shipped: <code>http.stream(...)</code> returns an <code>HttpStream</code> with <code>status</code>/<code>header</code>/<code>readLine</code>/<code>read</code>/<code>write</code>/<code>done</code>/<code>close</code>, over plaintext and TLS alike (specs 452, 494&ndash;496), which is what carries a WebSocket upgrade past a <code>101</code>. A handler passed to <code>http.createServer</code> still receives and returns whole bodies</td></tr>
     <tr><td>HTTPS/TLS-specific configuration</td><td><code>std.http.Client</code> already handles basic TLS internally for <code>https://</code> URLs; exposing it as configurable is a real, separate feature, disproportionately large for a single pass</td></tr>
-    <tr><td>WebSocket upgrade</td><td>a full protocol implementation (handshake, frame parsing/masking, ping/pong) -- a separate feature on the scale of <code>http</code> itself, not an extension of it</td></tr>
+    <tr><td>WebSocket upgrade <em>in the stdlib</em></td><td>a full protocol implementation (handshake, frame parsing/masking, ping/pong) is a feature on the scale of <code>http</code> itself, not an extension of it &mdash; so it shipped as a package rather than a module. <a href="/packages/websocket">std-contrib's <code>websocket</code></a> has both halves, judged against RFC 6455's published bytes and against Chromium and an independent Python peer. The stdlib's job was the primitives underneath it: <code>crypto.sha1Bytes</code>/<code>base64Encode</code> for the handshake (spec 474) and <code>HttpStream.read</code>/<code>write</code> past a <code>101</code> (specs 494&ndash;496)</td></tr>
   </table>
 
   <h4 id="zlib">zlib</h4>

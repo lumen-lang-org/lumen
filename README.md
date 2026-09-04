@@ -195,12 +195,17 @@ compares output, and checks the expected diagnostics for the invalid ones.
 
 ## Releasing
 
-Push a tag; CI cross-compiles every platform from one runner and uploads
-self-contained archives to the GitHub Release (`.github/workflows/release.yml`):
+Move the `CHANGELOG.md` entry, bump `.version` in `build.zig.zon`, then push
+an annotated tag. CI (`.github/workflows/release.yml`) cross-compiles the five
+targets in parallel and uploads a self-contained archive per target to the
+GitHub Release, with the changelog section as the notes:
 
 ```sh
-git tag v0.1.0 && git push origin v0.1.0
+git tag -a v0.7.7 -m "Lumen 0.7.7" && git push origin v0.7.7
 ```
+
+The full procedure, and what the version numbers promise, is in
+[`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Development
 

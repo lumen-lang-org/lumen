@@ -6,14 +6,14 @@
 <meta name="color-scheme" content="light dark">
 <script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>async · await · Standard library · Lumen</title>
-<meta name="description" content="Lumen standard library: async · await — async function f, await expr, Promise.resolve, setTimeout, …. Statically typed, compiled to native code.">
+<meta name="description" content="Lumen standard library: async · await — async function f, await expr, Promise.resolve, Promise.all, …. Statically typed, compiled to native code.">
 <link rel="stylesheet" href="/style.css?v=268ce722">
 <link rel="canonical" href="https://lumen-lang.org/stdlib/async">
 <meta property="og:url" content="https://lumen-lang.org/stdlib/async">
 <meta property="og:title" content="async · await · Standard library · Lumen">
-<meta property="og:description" content="Lumen standard library: async · await — async function f, await expr, Promise.resolve, setTimeout, …. Statically typed, compiled to native code.">
+<meta property="og:description" content="Lumen standard library: async · await — async function f, await expr, Promise.resolve, Promise.all, …. Statically typed, compiled to native code.">
 <meta name="twitter:title" content="async · await · Standard library · Lumen">
-<meta name="twitter:description" content="Lumen standard library: async · await — async function f, await expr, Promise.resolve, setTimeout, …. Statically typed, compiled to native code.">
+<meta name="twitter:description" content="Lumen standard library: async · await — async function f, await expr, Promise.resolve, Promise.all, …. Statically typed, compiled to native code.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -97,6 +97,7 @@
     <tr><td><code>async function f(): Promise&lt;T&gt; { … }</code></td><td>declares an async function</td></tr>
     <tr><td><code>await expr</code></td><td>awaits a <code>Promise&lt;T&gt;</code>, yields <code>T</code></td></tr>
     <tr><td><code>Promise.resolve(x)</code></td><td>T → Promise&lt;T&gt;</td></tr>
+    <tr><td><code>Promise.all([a(), b()])</code></td><td>Promise&lt;T&gt;[] → Promise&lt;T[]&gt; &mdash; awaits several promises and collects their results in order. Takes an <strong>array literal</strong> so the element types are known positionally, needs at least one element, and every element must resolve to the same <code>T</code>. Promises are eager here (they schedule on the shared event loop the moment they are created), so the calls make progress concurrently either way &mdash; <code>Promise.all</code> is how you collect them.</td></tr>
     <tr><td><code>setTimeout(fn, ms)</code></td><td>(() =&gt; void, int) → int &mdash; schedules a callback after a delay, returns a handle</td></tr>
     <tr><td><code>clearTimeout(id)</code></td><td>int → void &mdash; cancels a pending <code>setTimeout</code></td></tr>
     <tr><td><code>setInterval(fn, ms)</code></td><td>(() =&gt; void, int) → int &mdash; repeats a callback every delay until cancelled</td></tr>
