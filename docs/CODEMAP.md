@@ -288,4 +288,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 490-net-server-concurrency 491-fs-append-real-append 491-version-stamping 492-map-set-thread-safety 
 492-readfilesync-shrink-abort 493-static-and-cross-target-builds 494-http-stream-write 
 495-http-stream-read 496-http-stream-read-tls 497-library-search-path 
-498-runtime-event-loop-backend 499-must-use 500-json-parse-open 
+498-runtime-event-loop-backend 499-must-use 500-json-parse-open 501-node-runtime 
