@@ -89,8 +89,11 @@
   · <a href="/stdlib#arrays">on the one-page reference</a></p>
   <h1 id="arrays">Array methods</h1>
   <p class="stability-note stability-stable">Stable &mdash;
-  fixed-size <code>[]const T</code> slices underneath; no allocation, no
-  growable-array machinery, conformance-covered.</p>
+  immutable <code>[]const T</code> slices underneath,
+  conformance-covered. Every method here returns a <em>new</em> array
+  rather than mutating the receiver;
+  <code>push</code>/<code>unshift</code> are statement-level sugar for
+  that rebuild, not an exception to it.</p>
   <p class="sub">Called directly on any <code>T[]</code> value; callbacks are
   written as typed arrow functions.</p>
   <table>
@@ -105,6 +108,8 @@
     <tr><td><code>a.findLast(fn)</code> · <code>a.findLastIndex(fn)</code></td><td>same predicate, scanning from the end → T | null · int</td></tr>
     <tr><td><code>a.indexOf(x, from?)</code> · <code>a.lastIndexOf(x, from?)</code> · <code>a.includes(x, from?)</code></td><td>→ int · int · bool (<code>from</code> allows negative index; <code>lastIndexOf</code> searches backward from it)</td></tr>
     <tr><td><code>a.slice(start, end?)</code> · <code>a.reverse()</code> · <code>a.concat(b)</code> · <code>a.with(i, v)</code> · <code>a.fill(v, start?, end?)</code> · <code>a.copyWithin(target, start?, end?)</code></td><td>→ T[] (new array; source unchanged; <code>with</code> replaces index <code>i</code>; <code>fill</code> sets [start, end); <code>copyWithin</code> copies a block to <code>target</code>; negatives from the end)</td></tr>
+    <tr><td><code>a.push(x, …)</code> · <code>a.unshift(x, …)</code></td><td>statement only → void &mdash; appends (or prepends) in place on a <code>let</code> local or a class-field array. Arrays are immutable values, so this is <em>desugared</em> to <code>a = [...a, x]</code> and the target must be <code>let</code>; in a loop the optimizer turns the rebuild back into an amortized-O(1) append. The length-returning expression form <code>const n = a.push(x)</code> is not supported</td></tr>
+    <tr><td><code>for (const i of a.keys())</code> · <code>for (const v of a.values())</code> · <code>for (const [i, v] of a.entries())</code></td><td>for…of iterables only &mdash; index, element, and index/element pairs. They are not standalone values you can bind</td></tr>
     <tr><td><code>a.sort(cmp)</code> · <code>a.toSorted(cmp)</code></td><td>((T, T) =&gt; int) → T[] (new, stable; cmp&lt;0 ⇒ a first)</td></tr>
     <tr><td><code>a.toReversed()</code></td><td>→ T[] (alias of <code>reverse</code>; new array)</td></tr>
     <tr><td><code>a.join(sep?)</code> · <code>a.toString()</code></td><td>→ string (<code>sep</code> defaults to <code>","</code>; <code>toString</code> is the comma-joined form)</td></tr>

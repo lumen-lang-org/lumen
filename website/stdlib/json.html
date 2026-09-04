@@ -6,14 +6,14 @@
 <meta name="color-scheme" content="light dark">
 <script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>JSON · Standard library · Lumen</title>
-<meta name="description" content="Lumen standard library: JSON — stringify, parse. Statically typed, compiled to native code.">
+<meta name="description" content="Lumen standard library: JSON — stringify, parse, parseOpen. Statically typed, compiled to native code.">
 <link rel="stylesheet" href="/style.css?v=268ce722">
 <link rel="canonical" href="https://lumen-lang.org/stdlib/json">
 <meta property="og:url" content="https://lumen-lang.org/stdlib/json">
 <meta property="og:title" content="JSON · Standard library · Lumen">
-<meta property="og:description" content="Lumen standard library: JSON — stringify, parse. Statically typed, compiled to native code.">
+<meta property="og:description" content="Lumen standard library: JSON — stringify, parse, parseOpen. Statically typed, compiled to native code.">
 <meta name="twitter:title" content="JSON · Standard library · Lumen">
-<meta name="twitter:description" content="Lumen standard library: JSON — stringify, parse. Statically typed, compiled to native code.">
+<meta name="twitter:description" content="Lumen standard library: JSON — stringify, parse, parseOpen. Statically typed, compiled to native code.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -103,6 +103,7 @@
   <div class="api-list">
     <a href="#json-stringify">stringify</a>
     <a href="#json-parse">parse</a>
+    <a href="#json-parseOpen">parseOpen</a>
   </div>
 
   <div class="api" id="json-stringify">
@@ -128,6 +129,38 @@ try {
   const broken: Person = JSON.parse&lt;Person&gt;("not json");
 } catch (e) {
   console.log(e.message); // JSON.parse: invalid JSON (...)
+}</code></pre>
+  </div>
+
+  <div class="api" id="json-parseOpen">
+    <h5><code>JSON.parseOpen&lt;T&gt;(text)</code></h5>
+    <p class="sub">string → T &mdash; <code>JSON.parse&lt;T&gt;</code> in
+    every respect but one: a member <code>T</code> does not declare is
+    <strong>ignored</strong> instead of refused. Everything else is
+    deliberately unchanged &mdash; a missing required field is still refused
+    and still named, a field of the wrong type is still refused and still
+    named, and malformed JSON still throws.</p>
+    <p class="sub">Reach for <code>parse</code> when you control both ends
+    and a stray field is a typo worth catching: a request body against a
+    route's own type. Reach for <code>parseOpen</code> when the payload is
+    written by something that is not this build of this program &mdash; an
+    older or newer peer, another service, or a model asked to emit JSON.
+    A sender that adds a field would otherwise break every receiver
+    compiled against the older type, totally and immediately.</p>
+<pre><code class="lumen">type Hello = { name: string, version: string };
+
+// The peer added a "build" field this binary was not compiled against.
+const text = '{"name":"lumen","version":"0.7.6","build":"a1b2c3"}';
+
+const open: Hello = JSON.parseOpen&lt;Hello&gt;(text);
+console.log(open.name); // lumen
+
+try {
+  const strict: Hello = JSON.parse&lt;Hello&gt;(text);
+  console.log(strict.name); // not reached
+} catch (e) {
+  console.log(e.message);
+  // JSON.parse: the field "build" is not one this accepts
 }</code></pre>
   </div>
 

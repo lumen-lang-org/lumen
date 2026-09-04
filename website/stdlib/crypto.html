@@ -6,14 +6,14 @@
 <meta name="color-scheme" content="light dark">
 <script>try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>crypto · Standard library · Lumen</title>
-<meta name="description" content="Lumen standard library: crypto — randomBytes, randomUUID, sha256, randomBytesBuffer, …. Statically typed, compiled to native code.">
+<meta name="description" content="Lumen standard library: crypto — randomBytes, randomUUID, sha256, sha1, …. Statically typed, compiled to native code.">
 <link rel="stylesheet" href="/style.css?v=268ce722">
 <link rel="canonical" href="https://lumen-lang.org/stdlib/crypto">
 <meta property="og:url" content="https://lumen-lang.org/stdlib/crypto">
 <meta property="og:title" content="crypto · Standard library · Lumen">
-<meta property="og:description" content="Lumen standard library: crypto — randomBytes, randomUUID, sha256, randomBytesBuffer, …. Statically typed, compiled to native code.">
+<meta property="og:description" content="Lumen standard library: crypto — randomBytes, randomUUID, sha256, sha1, …. Statically typed, compiled to native code.">
 <meta name="twitter:title" content="crypto · Standard library · Lumen">
-<meta name="twitter:description" content="Lumen standard library: crypto — randomBytes, randomUUID, sha256, randomBytesBuffer, …. Statically typed, compiled to native code.">
+<meta name="twitter:description" content="Lumen standard library: crypto — randomBytes, randomUUID, sha256, sha1, …. Statically typed, compiled to native code.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#ea580c">
 <meta property="og:type" content="website">
@@ -97,12 +97,25 @@
   <code>crypto</code> module</a>: mostly static one-shot functions, plus
   (spec 060) two real streaming builder objects,
   <code>createHash</code>/<code>createHmac</code>, for hashing data
-  incrementally without holding it all in memory at once.</p>
+  incrementally without holding it all in memory at once. Symmetric
+  encryption comes in two shapes:
+  <code>encrypt</code>/<code>decrypt</code> seal a string under a key and
+  handle the nonce for you, while
+  <code>encryptSync</code>/<code>decryptSync</code> are the
+  <code>Buffer</code> form of the same cipher with the nonce in your
+  hands.</p>
 
   <div class="api-list">
     <a href="#crypto-randomBytes">randomBytes</a>
     <a href="#crypto-randomUUID">randomUUID</a>
     <a href="#crypto-sha256">sha256</a>
+    <a href="#crypto-sha1">sha1</a>
+    <a href="#crypto-sha1Bytes">sha1Bytes</a>
+    <a href="#crypto-base64Encode">base64Encode</a>
+    <a href="#crypto-base64Decode">base64Decode</a>
+    <a href="#crypto-randomKey">randomKey</a>
+    <a href="#crypto-encrypt">encrypt</a>
+    <a href="#crypto-decrypt">decrypt</a>
     <a href="#crypto-randomBytesBuffer">randomBytesBuffer</a>
     <a href="#crypto-hmacSync">hmacSync</a>
     <a href="#crypto-encryptSync">encryptSync</a>
@@ -140,6 +153,112 @@ console.log(token.length); // 32</code></pre>
 // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824</code></pre>
   </div>
 
+  <div class="api" id="crypto-sha1">
+    <h5><code>crypto.sha1(data)</code></h5>
+    <p class="sub">string → string &mdash; hex digest of the SHA-1 hash of
+    <code>data</code>'s bytes. <strong>SHA-1 is broken for anything that
+    relies on collision resistance</strong>; it is here for the protocols
+    that specify it by name and cannot choose otherwise &mdash; the
+    WebSocket handshake above all, where the input is a random key the peer
+    just sent and the output is only compared for equality. Reach for
+    <code>sha256</code> everywhere else.</p>
+<pre><code class="lumen">console.log(crypto.sha1("hello"));
+// aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d</code></pre>
+  </div>
+
+  <div class="api" id="crypto-sha1Bytes">
+    <h5><code>crypto.sha1Bytes(data)</code></h5>
+    <p class="sub">string → string &mdash; the same digest as
+    <code>sha1</code>, but as the raw 20 bytes rather than 40 hex
+    characters. The WebSocket handshake wants exactly this: the digest
+    base64-encoded, not the hex text of it.</p>
+<pre><code class="lumen">// The Sec-WebSocket-Accept value: sha1 of the client key + the RFC 6455
+// GUID, base64-encoded.
+const clientKey = "dGhlIHNhbXBsZSBub25jZQ==";
+const guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+console.log(crypto.base64Encode(crypto.sha1Bytes(clientKey + guid)));
+// s3pPLMBiTxaQ9kYGzzhZRbK+xOo=</code></pre>
+  </div>
+
+  <div class="api" id="crypto-base64Encode">
+    <h5><code>crypto.base64Encode(data)</code></h5>
+    <p class="sub">string → string &mdash; standard base64 of
+    <code>data</code>'s bytes, with padding. It lives on <code>crypto</code>
+    rather than <code>String</code> because it is an encoding protocols and
+    credentials need, not a string operation.</p>
+<pre><code class="lumen">console.log(crypto.base64Encode("hello"));  // aGVsbG8=</code></pre>
+  </div>
+
+  <div class="api" id="crypto-base64Decode">
+    <h5><code>crypto.base64Decode(data)</code></h5>
+    <p class="sub">string → string &mdash; the inverse of
+    <code>base64Encode</code>.</p>
+<pre><code class="lumen">console.log(crypto.base64Decode("aGVsbG8="));  // hello
+
+// Basic auth.
+const user = "ada";
+const password = "hunter2";
+const header = "Basic " + crypto.base64Encode(`${user}:${password}`);
+console.log(header);  // Basic YWRhOmh1bnRlcjI=</code></pre>
+  </div>
+
+  <div class="api" id="crypto-randomKey">
+    <h5><code>crypto.randomKey()</code></h5>
+    <p class="sub">() → string &mdash; a fresh 32-byte key for
+    <code>encrypt</code>/<code>decrypt</code>, from the same entropy source
+    as <code>randomBytes</code>. It exists so a caller never has to invent a
+    master key by hand: nothing else here produces one of the right length,
+    and a key of any other length is <em>rejected</em> rather than padded or
+    truncated.</p>
+<pre><code class="lumen">const key = crypto.randomKey();
+console.log(key.length);  // 32</code></pre>
+  </div>
+
+  <div class="api" id="crypto-encrypt">
+    <h5><code>crypto.encrypt(plaintext, key)</code></h5>
+    <p class="sub">(string, string) → string &mdash; seals
+    <code>plaintext</code> under a 32-byte <code>key</code> with AES-256-GCM
+    and returns a base64 envelope of
+    <code>nonce&nbsp;‖&nbsp;ciphertext&nbsp;‖&nbsp;tag</code>. The nonce is
+    fresh on every call, so the same plaintext under the same key never
+    produces the same envelope twice &mdash; identical envelopes under one
+    key are exactly what breaks GCM.</p>
+    <p class="sub">A <strong>string literal</strong> of the wrong length is
+    a compile error, not a run-time one: a key the caller typed is the one
+    case where the 32-byte requirement can be settled before the program
+    runs.</p>
+    <p class="sub">This is the pair to reach for when you want a secret
+    stored safely and do not want to think about nonces.
+    <code>encryptSync</code>/<code>decryptSync</code> below are the
+    lower-level <code>Buffer</code> form of the same cipher, where you
+    supply and track the nonce yourself.</p>
+<pre><code class="lumen">const key = crypto.randomKey();
+const sealed = crypto.encrypt("sk-fake-not-a-real-key", key);
+console.log(crypto.decrypt(sealed, key)); // sk-fake-not-a-real-key
+
+// Same plaintext, same key, different envelope every time.
+console.log(crypto.encrypt("x", key) !== crypto.encrypt("x", key));  // true</code></pre>
+  </div>
+
+  <div class="api" id="crypto-decrypt">
+    <h5><code>crypto.decrypt(envelope, key)</code></h5>
+    <p class="sub">(string, string) → string &mdash; opens an envelope
+    <code>encrypt</code> produced under the same key, and returns
+    <strong><code>""</code> for anything else</strong>: the wrong key, a
+    tampered or truncated envelope, or input that is not base64 at all. It
+    does not throw and does not say which check rejected it.</p>
+    <p class="sub">This is the property a plain cipher does not have.
+    Without the authentication tag a flipped byte would decrypt to a
+    different plaintext and the caller would have no way to tell.</p>
+<pre><code class="lumen">const key = crypto.randomKey();
+const secret = "sk-fake-not-a-real-key";
+const sealed = crypto.encrypt(secret, key);
+
+console.log(crypto.decrypt(sealed, key) === secret);      // true
+console.log(crypto.decrypt(sealed, crypto.randomKey()));  // "" — wrong key
+console.log(crypto.decrypt("not base64 at all!!", key));  // "" — not an envelope</code></pre>
+  </div>
+
   <div class="api" id="crypto-randomBytesBuffer">
     <h5><code>crypto.randomBytesBuffer(n)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
     <p class="sub">int → <code>Buffer</code> &mdash; the same entropy source
@@ -174,6 +293,10 @@ console.log(crypto.hmacSync(key, data).toString("hex"));
     concatenated into one <code>Buffer</code> &mdash; the simplest
     single-value shape, since <code>decryptSync</code> re-splits it
     internally.</p>
+    <p class="sub">You own the nonce here: it must be fresh for every
+    message under a given key, and reusing one breaks GCM. If you do not
+    need that control, <code>encrypt</code>/<code>decrypt</code> above take
+    and return strings and generate the nonce for you.</p>
 <pre><code class="lumen">const key = Buffer.alloc(32);  // in real use, crypto.randomBytesBuffer(32)
 const iv = Buffer.alloc(12);   // in real use, a fresh nonce per message
 const ct = crypto.encryptSync(key, iv, Buffer.from("attack at dawn"));

@@ -136,7 +136,7 @@
     </a>
     <a class="pkg" href="/stdlib/async">
       <span class="pkg-name">async · await</span>
-      <span class="pkg-summary">async function f, await expr, Promise.resolve, setTimeout, …</span>
+      <span class="pkg-summary">async function f, await expr, Promise.resolve, Promise.all, …</span>
     </a>
     <a class="pkg" href="/stdlib/ffi">
       <span class="pkg-name">C FFI</span>
@@ -172,7 +172,7 @@
     </a>
     <a class="pkg" href="/stdlib/crypto">
       <span class="pkg-name">crypto</span>
-      <span class="pkg-summary">randomBytes, randomUUID, sha256, randomBytesBuffer, …</span>
+      <span class="pkg-summary">randomBytes, randomUUID, sha256, sha1, …</span>
     </a>
     <a class="pkg" href="/stdlib/url">
       <span class="pkg-name">url</span>
@@ -180,7 +180,7 @@
     </a>
     <a class="pkg" href="/stdlib/child_process">
       <span class="pkg-name">child_process</span>
-      <span class="pkg-summary">spawnSync</span>
+      <span class="pkg-summary">spawnSync, spawn, ChildProcess methods</span>
     </a>
     <a class="pkg" href="/stdlib/assert">
       <span class="pkg-name">assert</span>
@@ -200,7 +200,7 @@
     </a>
     <a class="pkg" href="/stdlib/json">
       <span class="pkg-name">JSON</span>
-      <span class="pkg-summary">stringify, parse</span>
+      <span class="pkg-summary">stringify, parse, parseOpen</span>
     </a>
     <a class="pkg" href="/stdlib/zlib">
       <span class="pkg-name">zlib</span>
@@ -287,8 +287,11 @@
 
   <h4 id="arrays">Array methods</h4>
   <p class="stability-note stability-stable">Stable &mdash;
-  fixed-size <code>[]const T</code> slices underneath; no allocation, no
-  growable-array machinery, conformance-covered.</p>
+  immutable <code>[]const T</code> slices underneath,
+  conformance-covered. Every method here returns a <em>new</em> array
+  rather than mutating the receiver;
+  <code>push</code>/<code>unshift</code> are statement-level sugar for
+  that rebuild, not an exception to it.</p>
   <p class="sub">Called directly on any <code>T[]</code> value; callbacks are
   written as typed arrow functions.</p>
   <table>
@@ -303,6 +306,8 @@
     <tr><td><code>a.findLast(fn)</code> · <code>a.findLastIndex(fn)</code></td><td>same predicate, scanning from the end → T | null · int</td></tr>
     <tr><td><code>a.indexOf(x, from?)</code> · <code>a.lastIndexOf(x, from?)</code> · <code>a.includes(x, from?)</code></td><td>→ int · int · bool (<code>from</code> allows negative index; <code>lastIndexOf</code> searches backward from it)</td></tr>
     <tr><td><code>a.slice(start, end?)</code> · <code>a.reverse()</code> · <code>a.concat(b)</code> · <code>a.with(i, v)</code> · <code>a.fill(v, start?, end?)</code> · <code>a.copyWithin(target, start?, end?)</code></td><td>→ T[] (new array; source unchanged; <code>with</code> replaces index <code>i</code>; <code>fill</code> sets [start, end); <code>copyWithin</code> copies a block to <code>target</code>; negatives from the end)</td></tr>
+    <tr><td><code>a.push(x, …)</code> · <code>a.unshift(x, …)</code></td><td>statement only → void &mdash; appends (or prepends) in place on a <code>let</code> local or a class-field array. Arrays are immutable values, so this is <em>desugared</em> to <code>a = [...a, x]</code> and the target must be <code>let</code>; in a loop the optimizer turns the rebuild back into an amortized-O(1) append. The length-returning expression form <code>const n = a.push(x)</code> is not supported</td></tr>
+    <tr><td><code>for (const i of a.keys())</code> · <code>for (const v of a.values())</code> · <code>for (const [i, v] of a.entries())</code></td><td>for…of iterables only &mdash; index, element, and index/element pairs. They are not standalone values you can bind</td></tr>
     <tr><td><code>a.sort(cmp)</code> · <code>a.toSorted(cmp)</code></td><td>((T, T) =&gt; int) → T[] (new, stable; cmp&lt;0 ⇒ a first)</td></tr>
     <tr><td><code>a.toReversed()</code></td><td>→ T[] (alias of <code>reverse</code>; new array)</td></tr>
     <tr><td><code>a.join(sep?)</code> · <code>a.toString()</code></td><td>→ string (<code>sep</code> defaults to <code>","</code>; <code>toString</code> is the comma-joined form)</td></tr>
@@ -384,6 +389,7 @@ console.log(emitter.listenerCount("greet")); // 1</code></pre>
     <tr><td><code>async function f(): Promise&lt;T&gt; { … }</code></td><td>declares an async function</td></tr>
     <tr><td><code>await expr</code></td><td>awaits a <code>Promise&lt;T&gt;</code>, yields <code>T</code></td></tr>
     <tr><td><code>Promise.resolve(x)</code></td><td>T → Promise&lt;T&gt;</td></tr>
+    <tr><td><code>Promise.all([a(), b()])</code></td><td>Promise&lt;T&gt;[] → Promise&lt;T[]&gt; &mdash; awaits several promises and collects their results in order. Takes an <strong>array literal</strong> so the element types are known positionally, needs at least one element, and every element must resolve to the same <code>T</code>. Promises are eager here (they schedule on the shared event loop the moment they are created), so the calls make progress concurrently either way &mdash; <code>Promise.all</code> is how you collect them.</td></tr>
     <tr><td><code>setTimeout(fn, ms)</code></td><td>(() =&gt; void, int) → int &mdash; schedules a callback after a delay, returns a handle</td></tr>
     <tr><td><code>clearTimeout(id)</code></td><td>int → void &mdash; cancels a pending <code>setTimeout</code></td></tr>
     <tr><td><code>setInterval(fn, ms)</code></td><td>(() =&gt; void, int) → int &mdash; repeats a callback every delay until cancelled</td></tr>
@@ -998,7 +1004,7 @@ console.log(path.basename("/foo/bar/baz.html", ".html")); // baz</code></pre>
     function that reads the real cwd &mdash; every other one stays pure
     string manipulation.</p>
 <pre><code class="lumen">console.log(path.resolve("/foo/bar", "./baz")); // /foo/bar/baz
-console.log(path.resolve("foo", "bar"));        // <cwd>/foo/bar</code></pre>
+console.log(path.resolve("foo", "bar"));        // &lt;cwd&gt;/foo/bar</code></pre>
   </div>
 
   <div class="api" id="path-parse">
@@ -1064,6 +1070,7 @@ console.log(p.name);  // file</code></pre>
     <a href="#process-args">argsCount / arg</a>
     <a href="#process-uptime">uptime</a>
     <a href="#process-hrtime">hrtime</a>
+    <a href="#process-sleep">sleep</a>
     <a href="#process-memoryUsage">memoryUsage</a>
     <a href="#process-kill">kill</a>
     <a href="#process-umask">umask / setUmask</a>
@@ -1164,6 +1171,27 @@ console.log(arg(0));</code></pre>
 <pre><code class="lumen">const start: i64 = process.hrtime();
 const end: i64 = process.hrtime();
 console.log(end > start);</code></pre>
+  </div>
+
+  <div class="api" id="process-sleep">
+    <h5><code>process.sleep(ms)</code></h5>
+    <p class="sub">int → void &mdash; pauses <em>this thread</em> for
+    <code>ms</code> milliseconds. Zero and negative values are no-ops.</p>
+    <p class="sub">This is the pause a plain loop needs.
+    <code>setTimeout</code>/<code>setInterval</code> schedule on the event
+    loop, so they cannot space out the iterations of an ordinary
+    <code>while</code>: the loop never yields, so the timer never fires.
+    Without <code>sleep</code>, a worker that polls a queue has to be
+    rewritten inside out as an interval callback &mdash; and because a
+    <code>throw</code> does not cross a lambda boundary, that callback then
+    needs a <code>try</code> of its own.</p>
+<pre><code class="lumen">// A poll loop that does not spin.
+let attempts: int = 0;
+while (attempts &lt; 3) {
+  process.sleep(250);
+  attempts = attempts + 1;
+}
+console.log(`${attempts}`); // 3</code></pre>
   </div>
 
   <div class="api" id="process-memoryUsage">
@@ -1498,12 +1526,25 @@ console.log(loads[0]);</code></pre>
   <code>crypto</code> module</a>: mostly static one-shot functions, plus
   (spec 060) two real streaming builder objects,
   <code>createHash</code>/<code>createHmac</code>, for hashing data
-  incrementally without holding it all in memory at once.</p>
+  incrementally without holding it all in memory at once. Symmetric
+  encryption comes in two shapes:
+  <code>encrypt</code>/<code>decrypt</code> seal a string under a key and
+  handle the nonce for you, while
+  <code>encryptSync</code>/<code>decryptSync</code> are the
+  <code>Buffer</code> form of the same cipher with the nonce in your
+  hands.</p>
 
   <div class="api-list">
     <a href="#crypto-randomBytes">randomBytes</a>
     <a href="#crypto-randomUUID">randomUUID</a>
     <a href="#crypto-sha256">sha256</a>
+    <a href="#crypto-sha1">sha1</a>
+    <a href="#crypto-sha1Bytes">sha1Bytes</a>
+    <a href="#crypto-base64Encode">base64Encode</a>
+    <a href="#crypto-base64Decode">base64Decode</a>
+    <a href="#crypto-randomKey">randomKey</a>
+    <a href="#crypto-encrypt">encrypt</a>
+    <a href="#crypto-decrypt">decrypt</a>
     <a href="#crypto-randomBytesBuffer">randomBytesBuffer</a>
     <a href="#crypto-hmacSync">hmacSync</a>
     <a href="#crypto-encryptSync">encryptSync</a>
@@ -1541,6 +1582,112 @@ console.log(token.length); // 32</code></pre>
 // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824</code></pre>
   </div>
 
+  <div class="api" id="crypto-sha1">
+    <h5><code>crypto.sha1(data)</code></h5>
+    <p class="sub">string → string &mdash; hex digest of the SHA-1 hash of
+    <code>data</code>'s bytes. <strong>SHA-1 is broken for anything that
+    relies on collision resistance</strong>; it is here for the protocols
+    that specify it by name and cannot choose otherwise &mdash; the
+    WebSocket handshake above all, where the input is a random key the peer
+    just sent and the output is only compared for equality. Reach for
+    <code>sha256</code> everywhere else.</p>
+<pre><code class="lumen">console.log(crypto.sha1("hello"));
+// aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d</code></pre>
+  </div>
+
+  <div class="api" id="crypto-sha1Bytes">
+    <h5><code>crypto.sha1Bytes(data)</code></h5>
+    <p class="sub">string → string &mdash; the same digest as
+    <code>sha1</code>, but as the raw 20 bytes rather than 40 hex
+    characters. The WebSocket handshake wants exactly this: the digest
+    base64-encoded, not the hex text of it.</p>
+<pre><code class="lumen">// The Sec-WebSocket-Accept value: sha1 of the client key + the RFC 6455
+// GUID, base64-encoded.
+const clientKey = "dGhlIHNhbXBsZSBub25jZQ==";
+const guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+console.log(crypto.base64Encode(crypto.sha1Bytes(clientKey + guid)));
+// s3pPLMBiTxaQ9kYGzzhZRbK+xOo=</code></pre>
+  </div>
+
+  <div class="api" id="crypto-base64Encode">
+    <h5><code>crypto.base64Encode(data)</code></h5>
+    <p class="sub">string → string &mdash; standard base64 of
+    <code>data</code>'s bytes, with padding. It lives on <code>crypto</code>
+    rather than <code>String</code> because it is an encoding protocols and
+    credentials need, not a string operation.</p>
+<pre><code class="lumen">console.log(crypto.base64Encode("hello"));  // aGVsbG8=</code></pre>
+  </div>
+
+  <div class="api" id="crypto-base64Decode">
+    <h5><code>crypto.base64Decode(data)</code></h5>
+    <p class="sub">string → string &mdash; the inverse of
+    <code>base64Encode</code>.</p>
+<pre><code class="lumen">console.log(crypto.base64Decode("aGVsbG8="));  // hello
+
+// Basic auth.
+const user = "ada";
+const password = "hunter2";
+const header = "Basic " + crypto.base64Encode(`${user}:${password}`);
+console.log(header);  // Basic YWRhOmh1bnRlcjI=</code></pre>
+  </div>
+
+  <div class="api" id="crypto-randomKey">
+    <h5><code>crypto.randomKey()</code></h5>
+    <p class="sub">() → string &mdash; a fresh 32-byte key for
+    <code>encrypt</code>/<code>decrypt</code>, from the same entropy source
+    as <code>randomBytes</code>. It exists so a caller never has to invent a
+    master key by hand: nothing else here produces one of the right length,
+    and a key of any other length is <em>rejected</em> rather than padded or
+    truncated.</p>
+<pre><code class="lumen">const key = crypto.randomKey();
+console.log(key.length);  // 32</code></pre>
+  </div>
+
+  <div class="api" id="crypto-encrypt">
+    <h5><code>crypto.encrypt(plaintext, key)</code></h5>
+    <p class="sub">(string, string) → string &mdash; seals
+    <code>plaintext</code> under a 32-byte <code>key</code> with AES-256-GCM
+    and returns a base64 envelope of
+    <code>nonce&nbsp;‖&nbsp;ciphertext&nbsp;‖&nbsp;tag</code>. The nonce is
+    fresh on every call, so the same plaintext under the same key never
+    produces the same envelope twice &mdash; identical envelopes under one
+    key are exactly what breaks GCM.</p>
+    <p class="sub">A <strong>string literal</strong> of the wrong length is
+    a compile error, not a run-time one: a key the caller typed is the one
+    case where the 32-byte requirement can be settled before the program
+    runs.</p>
+    <p class="sub">This is the pair to reach for when you want a secret
+    stored safely and do not want to think about nonces.
+    <code>encryptSync</code>/<code>decryptSync</code> below are the
+    lower-level <code>Buffer</code> form of the same cipher, where you
+    supply and track the nonce yourself.</p>
+<pre><code class="lumen">const key = crypto.randomKey();
+const sealed = crypto.encrypt("sk-fake-not-a-real-key", key);
+console.log(crypto.decrypt(sealed, key)); // sk-fake-not-a-real-key
+
+// Same plaintext, same key, different envelope every time.
+console.log(crypto.encrypt("x", key) !== crypto.encrypt("x", key));  // true</code></pre>
+  </div>
+
+  <div class="api" id="crypto-decrypt">
+    <h5><code>crypto.decrypt(envelope, key)</code></h5>
+    <p class="sub">(string, string) → string &mdash; opens an envelope
+    <code>encrypt</code> produced under the same key, and returns
+    <strong><code>""</code> for anything else</strong>: the wrong key, a
+    tampered or truncated envelope, or input that is not base64 at all. It
+    does not throw and does not say which check rejected it.</p>
+    <p class="sub">This is the property a plain cipher does not have.
+    Without the authentication tag a flipped byte would decrypt to a
+    different plaintext and the caller would have no way to tell.</p>
+<pre><code class="lumen">const key = crypto.randomKey();
+const secret = "sk-fake-not-a-real-key";
+const sealed = crypto.encrypt(secret, key);
+
+console.log(crypto.decrypt(sealed, key) === secret);      // true
+console.log(crypto.decrypt(sealed, crypto.randomKey()));  // "" — wrong key
+console.log(crypto.decrypt("not base64 at all!!", key));  // "" — not an envelope</code></pre>
+  </div>
+
   <div class="api" id="crypto-randomBytesBuffer">
     <h5><code>crypto.randomBytesBuffer(n)</code> <span class="stability-note stability-experimental">Experimental</span></h5>
     <p class="sub">int → <code>Buffer</code> &mdash; the same entropy source
@@ -1575,6 +1722,10 @@ console.log(crypto.hmacSync(key, data).toString("hex"));
     concatenated into one <code>Buffer</code> &mdash; the simplest
     single-value shape, since <code>decryptSync</code> re-splits it
     internally.</p>
+    <p class="sub">You own the nonce here: it must be fresh for every
+    message under a given key, and reusing one breaks GCM. If you do not
+    need that control, <code>encrypt</code>/<code>decrypt</code> above take
+    and return strings and generate the nonce for you.</p>
 <pre><code class="lumen">const key = Buffer.alloc(32);  // in real use, crypto.randomBytesBuffer(32)
 const iv = Buffer.alloc(12);   // in real use, a fresh nonce per message
 const ct = crypto.encryptSync(key, iv, Buffer.from("attack at dawn"));
@@ -1733,14 +1884,18 @@ console.log(url.format(u)); // https://example.com/foo?a=1</code></pre>
   <h4 id="child_process">child_process</h4>
   <p class="stability-note stability-experimental">Experimental &mdash;
   new, manually tested rather than conformance-suite covered.</p>
-  <p class="sub">A first, sync-only slice of
+  <p class="sub">A slice of
   <a href="https://nodejs.org/docs/latest/api/child_process.html">Node's
-  <code>child_process</code> module</a>: the biggest capability gap in the
-  stdlib closed so far, since Lumen programs previously couldn't invoke
-  another program at all.</p>
+  <code>child_process</code> module</a>, in two shapes.
+  <code>spawnSync</code> is one-shot: run a command, wait, take its output.
+  <code>spawn</code> keeps the child alive and hands back a
+  <code>ChildProcess</code> you can hold a conversation with &mdash; the
+  same read/write/close shape as a <code>Socket</code>.</p>
 
   <div class="api-list">
     <a href="#child_process-spawnSync">spawnSync</a>
+    <a href="#child_process-spawn">spawn</a>
+    <a href="#child_process-methods">ChildProcess methods</a>
   </div>
 
   <div class="api" id="child_process-spawnSync">
@@ -1755,6 +1910,56 @@ console.log(url.format(u)); // https://example.com/foo?a=1</code></pre>
 <pre><code class="lumen">const r = child_process.spawnSync("echo", ["hello", "world"]);
 console.log(r.stdout); // hello world
 console.log(r.status); // 0</code></pre>
+  </div>
+
+  <div class="api" id="child_process-spawn">
+    <h5><code>child_process.spawn(command, args)</code> <span class="target-pill target-wasm-limited" title="Compiles under --wasm but every call fails at the spawn step there: WASI has no process-spawning capability at all.">Wasm: limited</span></h5>
+    <p class="sub">(string, string[]) → <code>ChildProcess</code> &mdash;
+    starts <code>command</code> and keeps it running, with its stdin and
+    stdout piped and held open. Stderr is <em>inherited</em>, so the child's
+    diagnostics reach your terminal and an undrained stderr pipe can never
+    deadlock it.</p>
+    <p class="sub">This is what a long-lived exchange needs &mdash;
+    newline-delimited JSON-RPC over stdio, say, where one child serves many
+    request/response round trips. <code>spawnSync</code> reads its child to
+    completion and cannot do that.</p>
+<pre><code class="lumen">// `cat` echoes each line of its stdin straight back on stdout.
+let empty: string[] = [];
+let cp = child_process.spawn("cat", empty);
+
+cp.writeLine("ping");
+console.log(cp.readLine()); // ping\n
+
+cp.writeLine("pong");
+console.log(cp.readLine()); // pong\n
+
+cp.close();</code></pre>
+  </div>
+
+  <div class="api" id="child_process-methods">
+    <h5><code>ChildProcess</code> methods</h5>
+    <table>
+      <tr><th>API</th><th>Type</th></tr>
+      <tr><td><code>cp.write(data)</code></td><td>string → void &mdash; raw bytes to the child's stdin, no terminator added</td></tr>
+      <tr><td><code>cp.writeLine(data)</code></td><td>string → void &mdash; <code>data</code> followed by <code>"\n"</code></td></tr>
+      <tr><td><code>cp.readLine()</code></td><td>() → string &mdash; one <code>\n</code>-delimited line from stdout</td></tr>
+      <tr><td><code>cp.close()</code></td><td>() → void &mdash; closes stdin and waits for the child to exit</td></tr>
+    </table>
+    <p class="sub"><code>readLine()</code> keeps the trailing
+    <code>"\n"</code> and returns <code>""</code> <em>only</em> at true
+    end-of-stream &mdash; the same contract as
+    <code>fs.createReadStream(...).readLine()</code>. Stripping the
+    terminator would collapse a genuine blank line and EOF into the same
+    <code>""</code>, breaking a
+    <code>while (cp.readLine() != "")</code> loop on blank input. The read
+    blocks; there is no <code>await</code> integration yet.</p>
+    <p class="sub"><strong>Known limits.</strong> A single stdout line
+    longer than the 64&nbsp;KB reader buffer yields <code>""</code>.
+    <code>close()</code> waits for the child to exit, with no kill or
+    timeout escape hatch, so a child that never terminates hangs it. A
+    failed spawn degrades to a no-op handle rather than throwing. There are
+    no signals, no pty, and no stderr capture &mdash; see the
+    <a href="/roadmap#child-process">roadmap</a>.</p>
   </div>
 
   <h4 id="assert">assert</h4>
@@ -2110,6 +2315,7 @@ net.createServer(9301, handleConn);</code></pre>
   <div class="api-list">
     <a href="#json-stringify">stringify</a>
     <a href="#json-parse">parse</a>
+    <a href="#json-parseOpen">parseOpen</a>
   </div>
 
   <div class="api" id="json-stringify">
@@ -2135,6 +2341,38 @@ try {
   const broken: Person = JSON.parse&lt;Person&gt;("not json");
 } catch (e) {
   console.log(e.message); // JSON.parse: invalid JSON (...)
+}</code></pre>
+  </div>
+
+  <div class="api" id="json-parseOpen">
+    <h5><code>JSON.parseOpen&lt;T&gt;(text)</code></h5>
+    <p class="sub">string → T &mdash; <code>JSON.parse&lt;T&gt;</code> in
+    every respect but one: a member <code>T</code> does not declare is
+    <strong>ignored</strong> instead of refused. Everything else is
+    deliberately unchanged &mdash; a missing required field is still refused
+    and still named, a field of the wrong type is still refused and still
+    named, and malformed JSON still throws.</p>
+    <p class="sub">Reach for <code>parse</code> when you control both ends
+    and a stray field is a typo worth catching: a request body against a
+    route's own type. Reach for <code>parseOpen</code> when the payload is
+    written by something that is not this build of this program &mdash; an
+    older or newer peer, another service, or a model asked to emit JSON.
+    A sender that adds a field would otherwise break every receiver
+    compiled against the older type, totally and immediately.</p>
+<pre><code class="lumen">type Hello = { name: string, version: string };
+
+// The peer added a "build" field this binary was not compiled against.
+const text = '{"name":"lumen","version":"0.7.6","build":"a1b2c3"}';
+
+const open: Hello = JSON.parseOpen&lt;Hello&gt;(text);
+console.log(open.name); // lumen
+
+try {
+  const strict: Hello = JSON.parse&lt;Hello&gt;(text);
+  console.log(strict.name); // not reached
+} catch (e) {
+  console.log(e.message);
+  // JSON.parse: the field "build" is not one this accepts
 }</code></pre>
   </div>
 
