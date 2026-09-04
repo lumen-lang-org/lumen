@@ -1,0 +1,2 @@
+# Programs from specs/*/examples/valid that must print identically under node.
+# One path per line, relative to specs/. Filled in by tasks T009/T015.

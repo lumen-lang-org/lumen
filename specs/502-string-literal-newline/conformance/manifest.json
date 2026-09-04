@@ -1,0 +1,21 @@
+{
+  "feature": "502-string-literal-newline",
+  "cases": [
+    {
+      "id": "newline.valid.runs",
+      "source": "../examples/valid/newline.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "3\n3"
+      }
+    },
+    {
+      "id": "newline.warning.reported",
+      "source": "../examples/valid/newline.ts",
+      "phase": "compile-warn",
+      "expect": {
+        "diagnostic": "W_STRING_NEWLINE"
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+const a: int = 7;
+const b: int = 2;
+console.log(a / b);
+console.log(a % b);
+console.log(-7 / 2);
+const x: number = 7;
+console.log(x / 2);
+let acc: i64 = 4000000000;
+acc = acc + a;
+console.log(acc);
+let ms: i64 = 65999;
+console.log(ms / 1000);
+console.log(1 << 31);

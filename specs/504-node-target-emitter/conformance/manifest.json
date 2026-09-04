@@ -1,0 +1,11 @@
+{
+  "feature": "504-node-target-emitter",
+  "cases": [
+    { "id": "node.hello", "source": "../examples/valid/hello.ts", "phase": "node-run", "expect": { "stdout": "hello from node target" } },
+    { "id": "node.hello.native", "source": "../examples/valid/hello.ts", "phase": "compile-run", "expect": { "stdout": "hello from node target" } },
+    { "id": "node.modules", "source": "../examples/valid/modules_main.ts", "phase": "node-run", "expect": { "stdout": "5" } },
+    { "id": "node.modules.native", "source": "../examples/valid/modules_main.ts", "phase": "compile-run", "expect": { "stdout": "5" } },
+    { "id": "node.core", "source": "../examples/valid/core.ts", "phase": "node-run", "expect": { "stdout": "square 13\ngreen\na,b,c\nnone\ncaught boom\ndone" } },
+    { "id": "node.core.native", "source": "../examples/valid/core.ts", "phase": "compile-run", "expect": { "stdout": "square 13\ngreen\na,b,c\nnone\ncaught boom\ndone" } }
+  ]
+}

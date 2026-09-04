@@ -1,0 +1,6 @@
+{
+  "feature": "507-node-ffi-link",
+  "cases": [
+    { "id": "ffi.node", "source": "../examples/valid/ffi.ts", "phase": "node-run", "expect": { "stdout": "42\nhello lumen" } }
+  ]
+}

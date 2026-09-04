@@ -23,3 +23,20 @@ node path/to/probe/run_tests.mjs
 
 `sweep.mjs` writes the stripped files under the system temp directory (set
 `S` to choose another).
+
+## Autonomous implementation
+
+Specs 502–508 carry `plan.md` and `tasks.md`; `tools/workflows/node-target.js`
+drives them end to end: preflight, then per spec an implement → gate → review →
+fix loop until `tasks.md` is fully ticked and the gate is green, the full
+corpus after each spec, then Joule's spec 004, then `STATUS.md`. Launch it from
+a Claude Code session with the Workflow tool:
+
+```
+Workflow({ scriptPath: "tools/workflows/node-target.js",
+           args: { specs: ["502-string-literal-newline", "503-node-runtime-package"] } })
+```
+
+`args.specs` narrows the run (default: 502–507 in order); `maxRounds` caps
+the fix loop per spec (default 6); `skipJoule: true` stops before Joule. The
+toolchain it needs is installed by `sh tools/node-target-env.sh`.

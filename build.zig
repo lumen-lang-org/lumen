@@ -362,6 +362,31 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_489.addArg("specs/489-method-and-module-function-names/conformance/manifest.json");
     conformance_cmd_489.addArg("zig-out/bin/lumen");
 
+    const conformance_cmd_502 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_502.step.dependOn(b.getInstallStep());
+    conformance_cmd_502.addArg("specs/502-string-literal-newline/conformance/manifest.json");
+    conformance_cmd_502.addArg("zig-out/bin/lumen");
+
+    const conformance_cmd_504 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_504.step.dependOn(b.getInstallStep());
+    conformance_cmd_504.addArg("specs/504-node-target-emitter/conformance/manifest.json");
+    conformance_cmd_504.addArg("zig-out/bin/lumen");
+
+    const conformance_cmd_505 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_505.step.dependOn(b.getInstallStep());
+    conformance_cmd_505.addArg("specs/505-node-byte-strings-and-integers/conformance/manifest.json");
+    conformance_cmd_505.addArg("zig-out/bin/lumen");
+
+    const conformance_cmd_506 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_506.step.dependOn(b.getInstallStep());
+    conformance_cmd_506.addArg("specs/506-node-test-runner/conformance/manifest.json");
+    conformance_cmd_506.addArg("zig-out/bin/lumen");
+
+    const conformance_cmd_507 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_507.step.dependOn(b.getInstallStep());
+    conformance_cmd_507.addArg("specs/507-node-ffi-link/conformance/manifest.json");
+    conformance_cmd_507.addArg("zig-out/bin/lumen");
+
     const conformance_step = b.step("conformance", "Run Lumen manifest conformance cases");
     conformance_step.dependOn(&conformance_cmd.step);
     conformance_step.dependOn(&conformance_cmd_482.step);
@@ -413,4 +438,9 @@ pub fn build(b: *std.Build) void {
     conformance_step.dependOn(&conformance_cmd_477.step);
     conformance_step.dependOn(&conformance_cmd_478.step);
     conformance_step.dependOn(&conformance_cmd_481.step);
+    conformance_step.dependOn(&conformance_cmd_502.step);
+    conformance_step.dependOn(&conformance_cmd_504.step);
+    conformance_step.dependOn(&conformance_cmd_505.step);
+    conformance_step.dependOn(&conformance_cmd_506.step);
+    conformance_step.dependOn(&conformance_cmd_507.step);
 }

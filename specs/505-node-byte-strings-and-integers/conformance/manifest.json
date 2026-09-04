@@ -1,0 +1,53 @@
+{
+  "feature": "505-node-byte-strings-and-integers",
+  "cases": [
+    {
+      "id": "strings.bytes.native",
+      "source": "../examples/valid/bytes.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "6\n195\n3\nhi\n2\n3\nHéLLO"
+      }
+    },
+    {
+      "id": "strings.bytes.node",
+      "source": "../examples/valid/bytes.ts",
+      "phase": "node-run",
+      "expect": {
+        "stdout": "6\n195\n3\nhi\n2\n3\nHéLLO"
+      }
+    },
+    {
+      "id": "strings.ints.native",
+      "source": "../examples/valid/ints.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "3\n1\n-3\n3.5\n4000000007\n65\n-2147483648"
+      }
+    },
+    {
+      "id": "strings.ints.node",
+      "source": "../examples/valid/ints.ts",
+      "phase": "node-run",
+      "expect": {
+        "stdout": "3\n1\n-3\n3.5\n4000000007\n65\n-2147483648"
+      }
+    },
+    {
+      "id": "strings.hot_path.native",
+      "source": "../examples/valid/hot_path.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "12\n3\ntrue\na=1"
+      }
+    },
+    {
+      "id": "strings.hot_path.node",
+      "source": "../examples/valid/hot_path.ts",
+      "phase": "node-run",
+      "expect": {
+        "stdout": "12\n3\ntrue\na=1"
+      }
+    }
+  ]
+}

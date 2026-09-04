@@ -1,0 +1,7 @@
+{
+  "feature": "506-node-test-runner",
+  "cases": [
+    { "id": "tests.native", "source": "../examples/valid/tests.ts", "phase": "test-run", "expect": {} },
+    { "id": "tests.node", "source": "../examples/valid/tests.ts", "phase": "node-test-run", "expect": {} }
+  ]
+}

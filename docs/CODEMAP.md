@@ -289,3 +289,5 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 492-readfilesync-shrink-abort 493-static-and-cross-target-builds 494-http-stream-write 
 495-http-stream-read 496-http-stream-read-tls 497-library-search-path 
 498-runtime-event-loop-backend 499-must-use 500-json-parse-open 501-node-runtime 
+502-string-literal-newline 503-node-runtime-package 504-node-target-emitter 
+505-node-byte-strings-and-integers 506-node-test-runner 507-node-ffi-link 508-node-blocking-io 
