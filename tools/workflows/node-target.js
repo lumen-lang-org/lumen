@@ -15,6 +15,8 @@ const LUMEN = (args && args.lumen) || '/home/user/lumen'
 const JOULE = (args && args.joule) || '/home/user/code'
 const BRANCH = (args && args.branch) || 'claude/lumen-node-gs-runtime-2zo9sk'
 const MAX_ROUNDS = (args && args.maxRounds) || 6
+const FULL_CORPUS = !(args && args.fullCorpus === false)
+const QUICK_CORPUS = 'the manifests of specs 001 and 502-507 only, each via the conformance runner binary (find it under .zig-cache with `find .zig-cache -type f -name lumen-conformance`; `zig build conformance` builds it)'
 const SPECS = (args && args.specs) || [
   '502-string-literal-newline',
   '503-node-runtime-package',
@@ -121,7 +123,7 @@ for (const spec of SPECS) {
   if (!outcome.done && !outcome.blocked) outcome.blocked = `not finished after ${MAX_ROUNDS} rounds`
 
   // full corpus once per spec, so a regression is caught before the next spec builds on it
-  const full = await agent(`${ENV}\n\nIn ${LUMEN} run \`zig build conformance\` (30+ minutes; use a long timeout, run in the background and poll the log) and, if tools/emit_snapshot.sh exists, the emit snapshot diff. Compare the FAIL lines with ${LUMEN}/specs/501-node-runtime/corpus_baseline.txt: pass means no FAIL line that is absent from the baseline (a case in the baseline may fail; a case fixed since is fine). Report the new failures verbatim. Do not change files.`, { label: `corpus:${spec.slice(0, 3)}`, phase: 'Implement', effort: 'low', schema: GATE_SCHEMA })
+  const full = await agent(`${ENV}\n\nIn ${LUMEN} run ${FULL_CORPUS ? '\`zig build conformance\` (hours in a small container; run it in the background with nohup, poll the log, use a long timeout)' : QUICK_CORPUS} and, if tools/emit_snapshot.sh exists, the emit snapshot diff. Compare the FAIL lines with ${LUMEN}/specs/501-node-runtime/corpus_baseline.txt: pass means no FAIL line that is absent from the baseline (a case in the baseline may fail; a case fixed since is fine). Report the new failures verbatim. Do not change files.`, { label: `corpus:${spec.slice(0, 3)}`, phase: 'Implement', effort: 'low', schema: GATE_SCHEMA })
   outcome.corpus = full ? (full.pass ? 'green' : 'RED: ' + full.failures.join(' | ')) : 'unknown'
   if (full && !full.pass) {
     const fix = await agent(`${ENV}\n\n${RULES}\n\n${GATE}\n\nThe full conformance corpus has failures that are not in specs/501-node-runtime/corpus_baseline.txt after spec ${spec}:\n${full.failures.join('\n')}\n\nFind the cause in this spec's commits (git log on ${BRANCH}), fix it properly, re-run the failing manifests and \`zig build test\`, commit and push. Report.`, { label: `corpus-fix:${spec.slice(0, 3)}`, phase: 'Implement', effort: 'high', schema: IMPL_SCHEMA })
@@ -140,8 +142,15 @@ if (!(args && args.skipJoule) && results.some(r => r.done)) {
   joule = await agent(`${ENV}\n\nNow work in ${JOULE} on branch ${BRANCH} (joule-sh/code), spec ${JOULE}/specs/004-node-runtime/spec.md. Its Makefile invokes \`lumen\`; use ${LUMEN}/zig-out/bin/lumen (put it on PATH). Do T001 (fix the five raw-newline literals; \`make test\` must stay green — it needs \`make\` to build the C shims with cc first) and, ${emitterDone ? 'since the Node emitter exists, T002 and T003 as far as specs 506/507 allow; produce node-skip.txt with a reason per skipped test' : 'since the Node emitter is not done, only T001'}. Also run ${LUMEN}/specs/501-node-runtime/probe/run_tests.mjs from ${JOULE} before and after and record both summary lines in specs/004-node-runtime/spec.md under a "Measured" heading. Commit with plain messages; push with \`git push -u origin ${BRANCH}\`. Report.`, { label: 'joule:004', phase: 'Joule', effort: 'high', schema: IMPL_SCHEMA })
 }
 
+// ---- final full corpus when the per-spec checks were quick ------------------
+let finalCorpus = null
+if (!FULL_CORPUS && results.some(r => r.done)) {
+  phase('Report')
+  finalCorpus = await agent(`${ENV}\n\nIn ${LUMEN} run \`zig build conformance\` (hours: nohup in the background, poll the log, long timeout). Compare FAIL lines with specs/501-node-runtime/corpus_baseline.txt; pass means no failure absent from the baseline. Report new failures verbatim. Do not change files.`, { label: 'corpus:final', phase: 'Report', effort: 'low', schema: GATE_SCHEMA })
+}
+
 // ---- report -----------------------------------------------------------------
 phase('Report')
-const summary = await agent(`${ENV}\n\nWrite ${LUMEN}/specs/501-node-runtime/STATUS.md: for each of ${JSON.stringify(SPECS)} the state of its tasks.md (ticked/total), the last commit touching it, the gate state, and the blockers below verbatim; then the Joule result. Data:\n${JSON.stringify({ results, joule }, null, 2)}\n\nVerify each claim against git and the files before writing it (read tasks.md, run \`git log --oneline\`). Commit "spec 501: status after autonomous run" and push. Return the file's text.`, { label: 'status', phase: 'Report', effort: 'medium' })
+const summary = await agent(`${ENV}\n\nWrite ${LUMEN}/specs/501-node-runtime/STATUS.md: for each of ${JSON.stringify(SPECS)} the state of its tasks.md (ticked/total), the last commit touching it, the gate state, and the blockers below verbatim; then the Joule result. Data:\n${JSON.stringify({ results, joule, finalCorpus }, null, 2)}\n\nVerify each claim against git and the files before writing it (read tasks.md, run \`git log --oneline\`). Commit "spec 501: status after autonomous run" and push. Return the file's text.`, { label: 'status', phase: 'Report', effort: 'medium' })
 
-return { results, joule: joule && { tasksDone: joule.tasksDone, tasksLeft: joule.tasksLeft, blocked: joule.blocked }, status: summary }
+return { results, joule: joule && { tasksDone: joule.tasksDone, tasksLeft: joule.tasksLeft, blocked: joule.blocked }, finalCorpus, status: summary }
