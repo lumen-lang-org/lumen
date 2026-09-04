@@ -1,0 +1,20 @@
+FAIL array.invalid.reduce-arg-count: expected diagnostic but compile succeeded
+FAIL array.invalid.unknown-method: diagnostic mismatch, expected E_TYPE_MISMATCH
+FAIL container.invalid.unknown-method: expected diagnostic but compile succeeded
+FAIL decorators.invalid.argument-is-not-an-expression: diagnostic mismatch, expected E_DECORATOR_ARG
+FAIL error.invalid.throw-string: expected diagnostic but compile succeeded
+FAIL inherit.valid.inheritance: compile failed
+FAIL native.invalid.arithmetic-type: expected diagnostic but compile succeeded
+FAIL native.invalid.compound-assignment-type: expected diagnostic but compile succeeded
+FAIL native.invalid.do-while-condition-type: diagnostic mismatch, expected E_TYPE_MISMATCH
+FAIL native.invalid.dynamic-property-write: diagnostic mismatch, expected E_DYNAMIC_PROPERTY_WRITE
+FAIL native.invalid.else-if-condition-type: diagnostic mismatch, expected E_TYPE_MISMATCH
+FAIL native.invalid.for-condition-type: diagnostic mismatch, expected E_TYPE_MISMATCH
+FAIL native.invalid.function-return-type: diagnostic mismatch, expected E_RETURN_TYPE
+FAIL native.invalid.if-condition-type: diagnostic mismatch, expected E_TYPE_MISMATCH
+FAIL native.invalid.math-unsupported: expected diagnostic but compile succeeded
+FAIL native.invalid.string-concat-type: expected diagnostic but compile succeeded
+FAIL native.invalid.ternary-condition-type: diagnostic mismatch, expected E_TYPE_MISMATCH
+FAIL native.invalid.throw-type: expected diagnostic but compile succeeded
+FAIL native.invalid.while-condition-type: diagnostic mismatch, expected E_TYPE_MISMATCH
+FAIL string.invalid.unknown-method: diagnostic mismatch, expected E_TYPE_MISMATCH
