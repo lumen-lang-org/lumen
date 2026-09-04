@@ -16,6 +16,22 @@
       "expect": {
         "diagnostic": "W_STRING_NEWLINE"
       }
+    },
+    {
+      "id": "template.valid.runs",
+      "source": "../examples/valid/template.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "3\n4"
+      }
+    },
+    {
+      "id": "template.no.warning",
+      "source": "../examples/valid/template.ts",
+      "phase": "compile-warn",
+      "expect": {
+        "noDiagnostic": "W_STRING_NEWLINE"
+      }
     }
   ]
 }

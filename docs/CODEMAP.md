@@ -12,9 +12,9 @@ isBuiltinMarker:1013, main:3495
 The Abstract Syntax Tree -- the data structure shared by the parser, the
 FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumValue:65, EnumMember:67, EnumDecl:73, TypeDecl:81, FunctionParam:113, ExternDecl:149, ClassDecl:158, MemberAssign:180, Accessor:193, FunctionDecl:195, VarDecl:229, UsingDecl:255, DestructBinding:271, DestructureDecl:281, Assign:292, ConsoleLog:310, WhileStmt:320, DoWhileStmt:328, ForStmt:336, ForOfStmt:350, ForInStmt:373, IfStmt:385, SwitchCase:393, SwitchStmt:400, ExprStmt:413, ReturnStmt:419, ThrowStmt:426, TryStmt:432, ControlStmt:445, DeferStmt:453, TestDecl:459, SuperCtor:468, StaticCall:475, Stmt:493, BlockStmt:526, Program:532, Expr:632, FieldBuiltin:671, Capture:681, ArrowExpr:685, TemplatePart:700
 
-## src/lumen_check.zig (1914 lines)
+## src/lumen_check.zig (1916 lines)
 The type checker -- stage 3, between parsing and codegen.
-classImplements:74, hasMustUse:110, Checker:148, refInner:1866, isAddressable:1878, isCSafe:1886, findField:1893, checkProgram:1900
+classImplements:74, hasMustUse:110, Checker:148, refInner:1868, isAddressable:1880, isCSafe:1888, findField:1895, checkProgram:1902
 
 ## src/lumen_check_assign.zig (429 lines)
 Assignability and cast checking: "can a value of type X be used where Y is
@@ -32,27 +32,27 @@ checkCbArg:31, wrapStringify:41, wrapFloat:88, exprType:96, fieldType:2394
 Generic function/class/type-alias specialization (monomorphization).
 isGenericTemplateStmt:31, appendStmt:41, isIdentChar:50, substAnnotation:57, annotationMentions:85, annTag:99, mangledName:115, splitTypeArgs:128, resolveExplicitTypeArgs:151, inferTypeArgs:165, unifyAnnotation:263, specializeFunction:441, specializeClass:494, specializeType:574, substCur:598, cloneBody:603, cloneExpr:609, cloneVarDecl:701, cloneAssign:706, cloneStmt:710
 
-## src/lumen_check_meta.zig (537 lines)
+## src/lumen_check_meta.zig (538 lines)
 `Class.*` — the three things the compiler knows about a class that a
 namespace:32, classMetaCall:37
 
-## src/lumen_check_methods.zig (1344 lines)
+## src/lumen_check_methods.zig (1342 lines)
 Type-checking for stdlib *instance* methods: methods called on a value of
-cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:874, responseWriterMethod:947, bufferMethod:1000, numberInstanceMethod:1057, stringMethod:1137, hashMethod:1289, hmacMethod:1318
+cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:874, responseWriterMethod:947, bufferMethod:1000, numberInstanceMethod:1057, stringMethod:1137, hashMethod:1288, hmacMethod:1317
 
 ## src/lumen_check_stdlib.zig (1539 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
 staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:873, jsonSerializable:955, registerLumenHttpResponse:973, registerLumenHttpRequest:995, promiseCallType:1016, mathCallType:1088, stringCallType:1340, arrayCallType:1406
 
-## src/lumen_check_stdlib_os.zig (1427 lines)
+## src/lumen_check_stdlib_os.zig (1425 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
-fsCallType:18, pathCallType:855, processCallType:1010, osCallType:1289, readlineCallType:1346, childProcessCallType:1369
+fsCallType:18, pathCallType:855, processCallType:1010, osCallType:1289, readlineCallType:1345, childProcessCallType:1367
 
 ## src/lumen_check_stmt.zig (1460 lines)
 Statement and function/class-body type-checking.
 declareExtern:43, checkBlock:108, checkFunctionBody:123, checkClass:191, checkMemberAssign:296, assignField:360, blockBreaksOut:374, blockReturns:433, stmtReturns:440, firstReturnExpr:472, checkVarDecl:506, checkStmt:549
 
-## src/lumen_compiler.zig (1222 lines)
+## src/lumen_compiler.zig (1226 lines)
 TypeScript-syntax -> Zig -> native compiler seed.
 CompileOptions:137, CompileError:153, Diag:154, LineOrigin:155, compileToZig:261, compileToZigWithOptions:265
 
@@ -67,7 +67,7 @@ protocol:18, Application:24, collect:34, parseAlone:76, describeSource:85
 ## src/lumen_diag.zig (11 lines)
 CompileError:1, Diag:7, LineOrigin:11
 
-## src/lumen_emit.zig (1861 lines)
+## src/lumen_emit.zig (1879 lines)
 Code generation -- the final stage: typed AST -> Zig source text.
 emitStmt:46, emitStmtWithThrow:47, SourceLoc:55, externZigName:57, emitFieldName:100, emitStrLit:108, suffixGeneratedLocals:176, TempScope:224, emitExpr:240, CompileOptions:1447, g_program:1479, g_options:1496, g_temp_seq:1502, g_async_inner:1512, g_dest_acc:1518, g_cur_into_acc:1519, g_throw_target:1525, g_fn_can_error:1526, emitThrowingCallPrefix:1531, emitThrowingCallSuffix:1541, safeGlobalName:1555, MODULE_SELF:1589, g_cur_class:1594, moduleScopedName:1631, findClass:1660, MODULE_INIT_FN:1708, emitProgram:1751
 
@@ -83,7 +83,7 @@ emitElemEq:26, emitArrayMethod:75, emitStringMethod:455, emitTemplateText:762
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:325, emitSuperCopies:391, collectSuperInStmt:395, collectSuperInExpr:415, ifaceMethodThrows:469, emitIfaceDecl:482, emitClassVtables:500
 
-## src/lumen_emit_static.zig (1188 lines)
+## src/lumen_emit_static.zig (1187 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
 emitStaticCall:12
 
@@ -95,7 +95,7 @@ emitStmt:158, emitAssignExpr:162, bodyHasSwitchBreak:235, emitSwitchCaseMatch:29
 Escape analysis for class instances (spec 344).
 analyze:422
 
-## src/lumen_lexer.zig (558 lines)
+## src/lumen_lexer.zig (634 lines)
 The lexer (tokenizer) -- stage 1 of the compiler.
 Regex:19, Tok:21, Lexer:35
 
@@ -103,9 +103,9 @@ Regex:19, Tok:21, Lexer:35
 Optimization passes over the AST -- the "allocate less" passes.
 collectStrConcat:35, collectDestPassable:111, markBuilderParts:147, markAccumulators:519, exprUsesName:590, bodyUsesName:657
 
-## src/lumen_parser.zig (1179 lines)
+## src/lumen_parser.zig (1227 lines)
 The parser -- stage 2 of the compiler.
-Parser:33
+Parser:34
 
 ## src/lumen_parser_decl.zig (930 lines)
 Declaration parsing: `type`/`interface`/`enum`/`extern`/`function`/`class`,

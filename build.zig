@@ -51,6 +51,8 @@ pub fn build(b: *std.Build) void {
     // tests of its own is compiled and run explicitly.
     const test_roots = [_][]const u8{
         "src/lumen_lexer.zig",
+        "src/lumen_parser.zig",
+        "src/lumen_emit.zig",
         "src/lumen_describe.zig",
         "src/lumen_decorator.zig",
         "src/regex_rt.zig",

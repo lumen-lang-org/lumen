@@ -1859,3 +1859,21 @@ pub fn emitProgram(program: *const Program, decls: *std.ArrayListUnmanaged(u8), 
         try decls.appendSlice(arena, "}\n");
     }
 }
+
+test "emitStrLit escapes a raw line break so the generated Zig never spans lines (spec 502)" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var w: std.ArrayListUnmanaged(u8) = .empty;
+    // Raw `\n`, raw `\r\n` (kept, not normalized), and the escape spelling
+    // `\n` all emit the same escaped byte in the Zig literal.
+    try emitStrLit(&w, arena, "a\nb");
+    try t.expectEqualStrings("\"a\\nb\"", w.items);
+    w.clearRetainingCapacity();
+    try emitStrLit(&w, arena, "c\r\nd");
+    try t.expectEqualStrings("\"c\\r\\nd\"", w.items);
+    w.clearRetainingCapacity();
+    try emitStrLit(&w, arena, "a\\nb");
+    try t.expectEqualStrings("\"a\\nb\"", w.items);
+}

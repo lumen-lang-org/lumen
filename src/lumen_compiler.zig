@@ -266,7 +266,11 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     try rejectUnsupportedDynamic(source, diag);
 
     var p = try Parser.init(arena, source);
-    var program = p.parseProgram() catch |e| {
+    const parsed = p.parseProgram();
+    // Parser warnings (spec 502) reach the caller whether or not the parse
+    // succeeds, like the checker's do: the CLI prints them beside the error.
+    if (options.warnings) |w| w.appendSlice(arena, p.warnings.items) catch {};
+    var program = parsed catch |e| {
         diag.* = .{ .line = p.cur_line, .col = p.cur_col, .msg = p.last_err };
         return e;
     };

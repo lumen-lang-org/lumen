@@ -18,6 +18,7 @@ const parser_expr = @import("lumen_parser_expr.zig");
 const parser_decl = @import("lumen_parser_decl.zig");
 
 const CompileError = diag_mod.CompileError;
+const Diag = diag_mod.Diag;
 const Expr = ast.Expr;
 const Stmt = ast.Stmt;
 const Program = ast.Program;
@@ -87,17 +88,44 @@ pub const Parser = struct {
     cur_col: u32 = 1, // source column of `cur`
     prev_line: u32 = 1, // source line of the token consumed just before `cur` (for ASI)
     last_err: []const u8 = "syntax error", // message for the next diagnostic
+    /// Warnings the parser itself raises (spec 502: `W_STRING_NEWLINE`). The
+    /// compiler appends them to `CompileOptions.warnings` after parsing.
+    warnings: std.ArrayListUnmanaged(Diag) = .empty,
+    /// Byte offset of the last token a warning was raised for. Lookahead
+    /// (`looksLikeArrow`, `peekIs*`) rewinds the lexer and lexes the same
+    /// tokens again through `advance`; a token is only ever warned about once
+    /// because lexing is monotone in source position between rewinds.
+    warned_upto: ?usize = null,
 
     pub fn init(arena: std.mem.Allocator, src: []const u8) CompileError!Parser {
         var lex = Lexer{ .src = src };
         const first = try lex.next();
-        return .{ .arena = arena, .lex = lex, .cur = first, .cur_line = lex.tok_line, .cur_col = lex.tok_col };
+        var p: Parser = .{ .arena = arena, .lex = lex, .cur = first, .cur_line = lex.tok_line, .cur_col = lex.tok_col };
+        p.noteToken();
+        return p;
     }
     pub fn advance(self: *Parser) CompileError!void {
         self.prev_line = self.cur_line;
         self.cur = try self.lex.next();
         self.cur_line = self.lex.tok_line;
         self.cur_col = self.lex.tok_col;
+        self.noteToken();
+    }
+    /// Raise the warnings a freshly lexed `cur` carries. A `"..."`/`'...'`
+    /// literal spanning a raw line break is accepted by the native target but
+    /// is a syntax error in TypeScript (spec 502); the warning sits on the
+    /// opening quote.
+    fn noteToken(self: *Parser) void {
+        if (self.cur != .str or !self.lex.str_raw_newline) return;
+        if (self.warned_upto) |upto| {
+            if (self.lex.tok_start <= upto) return;
+        }
+        self.warned_upto = self.lex.tok_start;
+        self.warnings.append(self.arena, .{
+            .line = self.cur_line,
+            .col = self.cur_col,
+            .msg = "a string literal contains a raw line break; write \\n so the program is also valid TypeScript [W_STRING_NEWLINE]",
+        }) catch {};
     }
     /// A statement terminator: a literal `;`, or ASI — the next token is on a new
     /// line, is a closing `}`, or is EOF. Covers the common no-semicolon style.
@@ -1177,3 +1205,23 @@ pub const Parser = struct {
         return .{ .stmts = try stmts.toOwnedSlice(self.arena) };
     }
 };
+
+test "W_STRING_NEWLINE: once per literal, on the opening quote, never for templates (spec 502)" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    // Line 1: the string sits inside `(...)`, which `looksLikeArrow` scans
+    // ahead through and then rewinds — the literal is lexed twice, warned once.
+    // Line 3: a single-quoted `\r\n` literal. Line 5: a template, silent.
+    const src = "let s = (\"a\nb\");\nlet q = 'c\r\nd';\nlet u = `e\nf`;\nconsole.log(s, q, u);\n";
+    var p = try Parser.init(arena, src);
+    _ = try p.parseProgram();
+    try t.expectEqual(@as(usize, 2), p.warnings.items.len);
+    try t.expectEqual(@as(u32, 1), p.warnings.items[0].line);
+    try t.expectEqual(@as(u32, 10), p.warnings.items[0].col);
+    try t.expect(std.mem.indexOf(u8, p.warnings.items[0].msg, "[W_STRING_NEWLINE]") != null);
+    try t.expect(std.mem.indexOf(u8, p.warnings.items[0].msg, "write \\n") != null);
+    try t.expectEqual(@as(u32, 3), p.warnings.items[1].line);
+    try t.expectEqual(@as(u32, 9), p.warnings.items[1].col);
+}

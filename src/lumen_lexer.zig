@@ -40,6 +40,8 @@ pub const Lexer = struct {
     tok_line: u32 = 1, // line where the most-recently-returned token starts
     tok_col: u32 = 1, // column where that token starts (1-based)
     err_code: ?[]const u8 = null, // diagnostic code for the last lexer error
+    tok_start: usize = 0, // byte offset where the most-recently-returned token starts
+    str_raw_newline: bool = false, // the most-recently-returned `.str` token contains a raw `\n`/`\r` (spec 502)
     prev: ?Tok = null, // last significant token returned (for `/` regex disambiguation)
 
     fn isIdentStart(c: u8) bool {
@@ -121,6 +123,45 @@ pub const Lexer = struct {
         return t;
     }
 
+    /// Scan a `"..."` or `'...'` literal whose opening quote is at `self.i`.
+    /// The body is kept raw (escapes are decoded by the emitter). A raw line
+    /// break inside the body is accepted — the native target always has — but
+    /// TypeScript rejects it, so the token is flagged through `str_raw_newline`
+    /// and the parser reports `W_STRING_NEWLINE` (spec 502). Line tracking
+    /// advances across the body, so every position after the literal stays
+    /// correct.
+    fn scanQuoted(self: *Lexer, quote: u8) Tok {
+        self.i += 1;
+        const start = self.i;
+        while (self.i < self.src.len and self.src[self.i] != quote) {
+            const ch = self.src[self.i];
+            if (ch == '\\' and self.i + 1 < self.src.len) {
+                self.i += 1;
+                if (self.src[self.i] == '\n') {
+                    // Backslash-newline: TypeScript reads it as a line
+                    // continuation (no character), Lumen keeps the newline.
+                    // The spelling is not portable either way, so it is
+                    // flagged too; the line count must advance regardless.
+                    self.str_raw_newline = true;
+                    self.line += 1;
+                    self.line_start = self.i + 1;
+                } else if (self.src[self.i] == '\r') {
+                    self.str_raw_newline = true;
+                }
+            } else if (ch == '\n') {
+                self.str_raw_newline = true;
+                self.line += 1;
+                self.line_start = self.i + 1;
+            } else if (ch == '\r') {
+                self.str_raw_newline = true;
+            }
+            self.i += 1;
+        }
+        const s = self.src[start..self.i];
+        if (self.i < self.src.len) self.i += 1; // closing quote
+        return .{ .str = s };
+    }
+
     fn nextInner(self: *Lexer) diag.CompileError!Tok {
         while (self.i < self.src.len) {
             const c = self.src[self.i];
@@ -158,6 +199,8 @@ pub const Lexer = struct {
         }
         self.tok_line = self.line;
         self.tok_col = @intCast(self.i - self.line_start + 1);
+        self.tok_start = self.i;
+        self.str_raw_newline = false;
         if (self.i >= self.src.len) return .eof;
         const c = self.src[self.i];
 
@@ -288,29 +331,8 @@ pub const Lexer = struct {
             self.i += 1;
             return .{ .cmp = s };
         }
-        if (c == '"') {
-            self.i += 1;
-            const start = self.i;
-            while (self.i < self.src.len and self.src[self.i] != '"') {
-                if (self.src[self.i] == '\\' and self.i + 1 < self.src.len) self.i += 1;
-                self.i += 1;
-            }
-            const s = self.src[start..self.i];
-            if (self.i < self.src.len) self.i += 1;
-            return .{ .str = s };
-        }
-        // Single-quoted string, same shape as double-quoted (spec 274).
-        if (c == '\'') {
-            self.i += 1;
-            const start = self.i;
-            while (self.i < self.src.len and self.src[self.i] != '\'') {
-                if (self.src[self.i] == '\\' and self.i + 1 < self.src.len) self.i += 1;
-                self.i += 1;
-            }
-            const s = self.src[start..self.i];
-            if (self.i < self.src.len) self.i += 1;
-            return .{ .str = s };
-        }
+        // `"..."` and `'...'` (spec 274) share one scanner.
+        if (c == '"' or c == '\'') return self.scanQuoted(c);
         if (c == '`') {
             self.i += 1;
             const start = self.i;
@@ -555,4 +577,58 @@ test "`@` lexes as its own operator token (spec 455)" {
     try t.expect(kw == .ident);
     try t.expectEqualStrings("class", kw.ident);
     try t.expectEqual(@as(u32, 2), lx.tok_line);
+}
+
+test "a raw line break inside a string literal is flagged and counted (spec 502)" {
+    const t = std.testing;
+    // Double quotes, `\n`: the token keeps the raw bytes, is flagged, and the
+    // next token's line reflects the break the literal spanned.
+    {
+        var lx = Lexer{ .src = "\"a\nb\" x" };
+        const s = try lx.next();
+        try t.expect(s == .str);
+        try t.expectEqualStrings("a\nb", s.str);
+        try t.expect(lx.str_raw_newline);
+        try t.expectEqual(@as(u32, 1), lx.tok_line);
+        try t.expectEqual(@as(u32, 1), lx.tok_col);
+        try t.expectEqual(@as(usize, 0), lx.tok_start);
+        const x = try lx.next();
+        try t.expect(x == .ident);
+        try t.expect(!lx.str_raw_newline);
+        try t.expectEqual(@as(u32, 2), lx.tok_line);
+        try t.expectEqual(@as(u32, 4), lx.tok_col);
+    }
+    // Single quotes, `\r\n`: flagged, and the bytes are not normalized.
+    {
+        var lx = Lexer{ .src = "'c\r\nd'" };
+        const s = try lx.next();
+        try t.expect(s == .str);
+        try t.expectEqualStrings("c\r\nd", s.str);
+        try t.expect(lx.str_raw_newline);
+        try t.expectEqual(@as(u32, 2), lx.line);
+    }
+    // A lone `\r` is a line break to TypeScript too.
+    {
+        var lx = Lexer{ .src = "'c\rd'" };
+        _ = try lx.next();
+        try t.expect(lx.str_raw_newline);
+    }
+    // The escape sequence `\n` is the spelling to use: not flagged.
+    {
+        var lx = Lexer{ .src = "\"a\\nb\" y" };
+        const s = try lx.next();
+        try t.expectEqualStrings("a\\nb", s.str);
+        try t.expect(!lx.str_raw_newline);
+        _ = try lx.next();
+        try t.expectEqual(@as(u32, 1), lx.tok_line);
+    }
+    // A template literal may span lines and is never flagged.
+    {
+        var lx = Lexer{ .src = "`a\nb` z" };
+        const s = try lx.next();
+        try t.expect(s == .template);
+        try t.expect(!lx.str_raw_newline);
+        _ = try lx.next();
+        try t.expectEqual(@as(u32, 2), lx.tok_line);
+    }
 }

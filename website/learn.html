@@ -334,6 +334,10 @@ console.log("grace,hopper".includes("grace"));      // true
 const semver = /^\d+\.\d+\.\d+$/;
 console.log(semver.test("1.2.30"));   // true
 console.log(semver.test("1.2"));      // false</code></pre>
+<p class="sub">A <code>"..."</code> or <code>'...'</code> literal ends at the end of
+its line in TypeScript. Lumen still compiles one that spans a raw line break, and
+warns (<code>W_STRING_NEWLINE</code>) so the file stays valid TypeScript: spell the
+break as <code>\n</code>. Template literals may span lines freely.</p>
 
 <h2 id="collections">Arrays, Map and Set</h2>
 <p class="sub">Arrays carry <code>map</code>, <code>filter</code>, <code>reduce</code>,

@@ -15,6 +15,7 @@ const Case = struct {
 const Expect = struct {
     stdout: ?[]const u8 = null,
     diagnostic: ?[]const u8 = null,
+    noDiagnostic: ?[]const u8 = null, // compile-warn: text that must NOT appear on the compile's stderr
     inferredTypes: ?std.json.Value = null,
     acceptedTypes: ?[]const []const u8 = null,
 };
@@ -127,6 +128,38 @@ fn checkDiagnostics(arena: std.mem.Allocator, io: std.Io, case: Case, source_pat
     return true;
 }
 
+// A warning (spec 502): the compile MUST succeed and its stderr MUST contain
+// `expect.diagnostic`. The `diagnostics` phase requires a failed compile, so a
+// warning had no phase before this one. `expect.noDiagnostic` is the converse,
+// for pinning that a construct stays silent; a case may give either or both.
+fn checkCompileWarn(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
+    const compile = try runProcess(arena, io, &.{ lumen_bin, "compile", source_path });
+    const exe_name = try exeNameForSource(arena, source_path);
+    defer removeGenerated(io, source_path, exe_name);
+
+    if (!termSucceeded(compile.term)) {
+        std.debug.print("FAIL {s}: compile failed\n{s}\n", .{ case.id, compile.stderr });
+        return false;
+    }
+    if (case.expect.diagnostic == null and case.expect.noDiagnostic == null) {
+        std.debug.print("FAIL {s}: compile-warn case missing expected diagnostic or noDiagnostic\n", .{case.id});
+        return false;
+    }
+    if (case.expect.diagnostic) |expected| {
+        if (std.mem.indexOf(u8, compile.stderr, expected) == null) {
+            std.debug.print("FAIL {s}: warning mismatch, expected {s}\nactual:\n{s}\n", .{ case.id, expected, compile.stderr });
+            return false;
+        }
+    }
+    if (case.expect.noDiagnostic) |unexpected| {
+        if (std.mem.indexOf(u8, compile.stderr, unexpected) != null) {
+            std.debug.print("FAIL {s}: unexpected warning {s}\nactual:\n{s}\n", .{ case.id, unexpected, compile.stderr });
+            return false;
+        }
+    }
+    return true;
+}
+
 fn checkStatic(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
     const compile = try runProcess(arena, io, &.{ lumen_bin, "compile", source_path });
     const exe_name = try exeNameForSource(arena, source_path);
@@ -183,6 +216,9 @@ fn runCase(arena: std.mem.Allocator, io: std.Io, manifest_path: []const u8, case
     }
     if (std.mem.eql(u8, case.phase, "diagnostics")) {
         return try checkDiagnostics(arena, io, case, source_path, lumen_bin);
+    }
+    if (std.mem.eql(u8, case.phase, "compile-warn")) {
+        return try checkCompileWarn(arena, io, case, source_path, lumen_bin);
     }
     if (std.mem.eql(u8, case.phase, "test-diagnostics")) {
         return try checkTestDiagnostics(arena, io, case, source_path, lumen_bin);
