@@ -62,7 +62,11 @@
     </a>
     <a class="card" href="https://github.com/lumen-lang-org/lumen/releases">
       <h3>Releases</h3>
-      <p>Every release ships binaries for macOS and Linux (x86_64 and arm64) and a Windows zip, with notes on what changed.</p>
+      <p>Every release ships binaries for macOS and Linux (x86_64 and arm64) and a Windows zip, with notes taken from the changelog.</p>
+    </a>
+    <a class="card" href="https://github.com/lumen-lang-org/lumen/blob/main/CHANGELOG.md">
+      <h3>Changelog</h3>
+      <p>What changed in every release, and the version scheme: while Lumen is pre-1.0, a minor bump may break a program and a patch bump may not.</p>
     </a>
     <a class="card" href="https://github.com/lumen-lang-org/std-contrib">
       <h3>Packages: std-contrib</h3>
@@ -78,7 +82,7 @@
     </a>
   </div>
 
-  <h3>Report a bug</h3>
+  <h3 id="report-a-bug">Report a bug</h3>
   <p class="sub">Open an issue with the smallest <code>.ts</code> file that shows the
   problem, the command you ran, the full output, and the compiler version from
   <code>lumen version</code>. If <code>lumen check</code> passes but
@@ -87,7 +91,7 @@
 lumen check repro.ts
 lumen compile repro.ts</code></pre>
 
-  <h3>Contribute a package</h3>
+  <h3 id="contribute">Contribute a package</h3>
   <p class="sub">Packages live in
   <a href="https://github.com/lumen-lang-org/std-contrib">std-contrib</a>, one
   directory each. The rules are short: current language only (it must compile with
@@ -103,7 +107,7 @@ index.json         # add { "name", "version", "summary", "path" }</code></pre>
   generated from its README. The full guide is
   <a href="https://github.com/lumen-lang-org/std-contrib/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
 
-  <h3>Contribute to the compiler</h3>
+  <h3 id="contribute-compiler">Contribute to the compiler</h3>
   <p class="sub">The compiler is written in Zig. Each feature lands as a spec folder
   under <code>specs/</code> with a plan and tasks, then an implementation slice, then
   conformance cases. Read <code>CLAUDE.md</code> and <code>docs/CODEMAP.md</code> in the
