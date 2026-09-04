@@ -1283,7 +1283,6 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
     return spec.result;
 }
 
-
 /// Validate a method call on a `Hash` receiver (spec 060): `crypto.
 /// createHash(algorithm)`'s return type. Mirrors `bufferMethod`'s shape.
 pub fn hashMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
@@ -1341,4 +1340,3 @@ pub fn hmacMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: 
     _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
     return null;
 }
-

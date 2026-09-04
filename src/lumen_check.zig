@@ -1549,13 +1549,15 @@ pub const Checker = struct {
             // Use the runtime-concat form (carry elem_type) when spreading or when
             // empty, so the slice gets an explicit element type Zig can coerce.
             const need_typed = has_spread or rest_args.len == 0;
-            arr_node.* = .{ .array = .{
-                .items = items,
-                .elem_type = if (need_typed) elem_type else null,
-                // A spread-free gathered rest array still heap-allocates so it
-                // can safely escape (e.g. a callee that returns it).
-                .heap_elem = if (need_typed) null else elem_type,
-            } };
+            arr_node.* = .{
+                .array = .{
+                    .items = items,
+                    .elem_type = if (need_typed) elem_type else null,
+                    // A spread-free gathered rest array still heap-allocates so it
+                    // can safely escape (e.g. a callee that returns it).
+                    .heap_elem = if (need_typed) null else elem_type,
+                },
+            };
             out.append(self.arena, arr_node) catch return null;
         }
 

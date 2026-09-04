@@ -152,7 +152,6 @@ fn dispatcherName(self: *Checker, cname: []const u8, arg_types: []const types.Ty
     return buf.items;
 }
 
-
 /// The binding plan a `@bindings` decorator left beside the class, or null.
 ///
 /// The plan is ordinary Lumen data — `[{ handler, args, guards }]` — produced by
@@ -389,7 +388,9 @@ fn generateDispatcher(
                         var look: ?[]const u8 = cname;
                         while (look) |ln| {
                             const ci = self.classes.get(ln) orelse break;
-                            for (ci.methods) |cm| if (std.mem.eql(u8, cm.name, fname)) { known = true; };
+                            for (ci.methods) |cm| if (std.mem.eql(u8, cm.name, fname)) {
+                                known = true;
+                            };
                             look = ci.parent;
                         }
                     }

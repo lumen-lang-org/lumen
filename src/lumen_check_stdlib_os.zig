@@ -1340,7 +1340,6 @@ pub fn osCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
     return null;
 }
 
-
 /// Validate a `readline.*` static call (spec 058). One function, reusing
 /// `process.stdin()`/`process.stdout()` directly -- see spec.md.
 pub fn readlineCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
@@ -1364,7 +1363,6 @@ pub fn readlineCallType(self: *Checker, program: *ast.Program, call: *ast.Static
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
     return null;
 }
-
 
 pub fn childProcessCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, line: u32, col: u32) ?types.Type {
     if (std.mem.eql(u8, call.name, "spawnSync")) {

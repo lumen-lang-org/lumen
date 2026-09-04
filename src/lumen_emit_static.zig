@@ -317,8 +317,7 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         for (cl.args) |arg| {
             try w.appendSlice(arena, "{ const __cp: i64 = @intCast(");
             try em.emitExpr(arg, w, arena);
-            try w.appendSlice(arena,
-                "); var __u: [4]u8 = undefined; var __n: usize = 0; " ++
+            try w.appendSlice(arena, "); var __u: [4]u8 = undefined; var __n: usize = 0; " ++
                 "if (__cp >= 0 and __cp <= 0x10FFFF and (__cp < 0xD800 or __cp > 0xDFFF)) " ++
                 "{ __n = @intCast(std.unicode.utf8Encode(@intCast(__cp), &__u) catch 0); } " ++
                 "if (__n == 0) { __b.appendSlice(__sa(), \"\\u{FFFD}\") catch unreachable; } " ++
