@@ -37,7 +37,8 @@ Workflow({ scriptPath: "tools/workflows/node-target.js",
            args: { specs: ["502-string-literal-newline", "503-node-runtime-package"] } })
 ```
 
-`args.specs` narrows the run (default: 502–507 in order); `maxRounds` caps
+`args.specs` narrows the run (default: 502–507 in order); `model` picks the
+agents' model (default `sonnet`); `maxRounds` caps
 the fix loop per spec (default 6); `skipJoule: true` stops before Joule; `fullCorpus: false` gates each spec on the 50x manifests
 plus 001 instead of the whole corpus (hours in a small container) and runs
 the whole corpus once at the end. The toolchain it needs is installed by
