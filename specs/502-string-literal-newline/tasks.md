@@ -25,9 +25,12 @@
 - [x] T006 Register `conformance/manifest.json` in `build.zig` beside the
   other manifests (`build.zig:116` pattern).
 - [x] T007 Run `zig build test` and `zig build conformance`; both green.
-  `zig build test`: 56/56. Full corpus: 55 manifests, 313 pass, 20 fail — the
-  20 are exactly `specs/501-node-runtime/corpus_baseline.txt` (failures that
-  predate this branch), so no new failure; the 502 manifest is 4/4.
+  `zig build test`: 56/56. End-of-spec sweep (after T011): 55 manifests,
+  315 pass, 20 fail, 8 skipped. The 20 are exactly
+  `specs/501-node-runtime/corpus_baseline.txt` (failures that predate this
+  branch), so no new failure and none fixed; the 8 skips are the `node-run` /
+  `node-test-run` phases of specs 504-507, whose runner support is those
+  specs' work; the 502 manifest is 6/6.
 - [x] T010 Register `src/lumen_parser.zig` and `src/lumen_emit.zig` in
   `build.zig`'s `test_roots`: only listed files have their tests run, and the
   new parser and emitter tests would otherwise be silently skipped.
