@@ -66,9 +66,14 @@
   emitted where the template stood: the checker appends them after the
   code that uses them, and a class is not hoisted in JavaScript.)
 - [ ] T014 `JSON.parse<T>` validators; `embed`/`embedDir`. (`embed` is
-  done by the front end before parsing, so it needs nothing here; the
-  validators remain.)
-- [ ] T015 Walk `specs/053..500` corpus; extend `corpus.txt`.
+  done by the front end before parsing, so it needs nothing here. The
+  validators remain, and with them class revival for `JSON.parse<Class>`
+  (456): the corpus programs waiting on this are named in `corpus.txt`.)
+- [x] T015 Walk `specs/053..500` corpus; extend `corpus.txt`. (109 more
+  programs: 84 print identically; 20 are 507/508 refusals; 467/roundtrip
+  waits for 505's byte strings; 479/two-waiters-interleave is the
+  documented `await`-ordering divergence; 456's two and 483's one need
+  T014's validators and class revival.)
 
 ## Phase 4: Stdlib static calls and CLI
 
