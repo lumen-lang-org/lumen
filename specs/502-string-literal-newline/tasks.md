@@ -24,7 +24,10 @@
   converse, so `template.ts` can pin that it stays silent (SC-002).
 - [x] T006 Register `conformance/manifest.json` in `build.zig` beside the
   other manifests (`build.zig:116` pattern).
-- [ ] T007 Run `zig build test` and `zig build conformance`; both green.
+- [x] T007 Run `zig build test` and `zig build conformance`; both green.
+  `zig build test`: 56/56. Full corpus: 55 manifests, 313 pass, 20 fail — the
+  20 are exactly `specs/501-node-runtime/corpus_baseline.txt` (failures that
+  predate this branch), so no new failure; the 502 manifest is 4/4.
 - [x] T010 Register `src/lumen_parser.zig` and `src/lumen_emit.zig` in
   `build.zig`'s `test_roots`: only listed files have their tests run, and the
   new parser and emitter tests would otherwise be silently skipped.
