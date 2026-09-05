@@ -1,6 +1,6 @@
 {
   "feature": "503-node-runtime-package",
-  "notes": "The same three programs are listed in packages/node-runtime/tests/corpus.txt: tests/corpus.test.mjs runs them under node --import globals.mjs and diffs stdout against the native binary. spec 503 also fixed two native compiler bugs these programs exercise: path.normalize emitted a call that did not compile, and an empty [] argument to spawnSync/spawn/writevSync/readvSync failed to infer.",
+  "notes": "The same three programs are listed in packages/node-runtime/tests/corpus.txt: tests/corpus.test.mjs runs them under node --import globals.mjs and diffs stdout against the native binary. spec 503 also fixed two native compiler bugs these programs exercise: path.normalize emitted a call that did not compile, and an empty [] argument to spawnSync/spawn/writevSync/readvSync failed to infer. T020: a listener arrow that assigns a captured `let` reported E_TYPE_MISMATCH on the whole on(...) call because ensureAssignable's func_type branch overwrote the inner diagnostic; it now keeps it (spec 273's rule), so the reader sees E_CAPTURED_MUTATION at the assignment.",
   "cases": [
     {
       "id": "fs-shapes.native.runs",
@@ -24,6 +24,14 @@
       "phase": "compile-run",
       "expect": {
         "stdout": "true true true\ntrue true\ntrue true true\nvia stdout\nout err 3\ntrue -1\ntrue\nadd 1\nadd 1\nadd 2\n1\n5 true true false\ntrue true true\ndone\nvia stderr"
+      }
+    },
+    {
+      "id": "listener-captured-mutation.invalid.diagnostic",
+      "source": "../examples/invalid/listener-captured-mutation.ts",
+      "phase": "diagnostics",
+      "expect": {
+        "diagnostic": "E_CAPTURED_MUTATION"
       }
     }
   ]

@@ -345,8 +345,12 @@ pub fn ensureAssignable(self: *Checker, program: *ast.Program, expected: types.T
             // `apply(x => x * 2, ...)` infers `x: i32` from `f: (x: i32) => i32`.
             // A typed arrow / named function value flows through the plain check.
             if (value.* == .arrow) {
+                // A body that failed to check already recorded its own
+                // diagnostic (an E_CAPTURED_MUTATION inside a listener, say);
+                // keep it rather than reporting the whole arrow as a mismatch
+                // (spec 273's precedence rule).
                 const actual = self.checkCbArg(program, value, fsig.params, line, col) orelse
-                    return self.fail(line, col, "E_TYPE_MISMATCH");
+                    return self.inferenceFail(line, col, "E_TYPE_MISMATCH");
                 if (!types.same(expected, actual)) return self.fail(line, col, "E_TYPE_MISMATCH");
                 return;
             }

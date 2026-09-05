@@ -62,10 +62,16 @@
   type" while a user function's `string[]` parameter accepted it. The four
   now check the argument with `ensureAssignable`, as a parameter is.
   Pinned by `examples/valid/process-shapes.ts`.
-- [ ] T020 Native checker: `emitter.on(name, (v: int) => { total = total + v; })`
-  — an arrow listener that assigns a captured `let` — is rejected with
-  E_TYPE_MISMATCH, while a listener that only reads (`console.log(v)`) and a
-  named function are accepted. The runtime stores a listener as
-  `{ ctx, call }`, so captures are supported there; the checker's listener
-  type comparison is what rejects it. Outside this spec's package; needs its
-  own slice. `process-shapes.ts` uses a named function meanwhile.
+- [x] T020 Native checker: `emitter.on(name, (v: int) => { total = total + v; })`
+  — an arrow listener that assigns a captured `let` — was reported as
+  E_TYPE_MISMATCH on the whole `on(...)` call. The cause was not the
+  listener type comparison: the arrow body is refused by spec 153's rule
+  (captures are by value, so a write to a captured binding is
+  E_CAPTURED_MUTATION), and `ensureAssignable`'s function-typed branch then
+  overwrote that diagnostic with its own via `fail` instead of keeping it via
+  `inferenceFail` (spec 273's precedence rule, which every other callback
+  site already followed). Now the reader sees E_CAPTURED_MUTATION at the
+  assignment. Pinned by `examples/invalid/listener-captured-mutation.ts`.
+  Lifting the by-value rule itself (a listener that accumulates into an
+  outer `let`) is a language decision for its own slice, not a checker bug;
+  `process-shapes.ts` uses a named function meanwhile.
