@@ -22,7 +22,7 @@ export { Buffer } from "./lib/buffer.mjs";
 export { EventEmitter } from "./lib/events.mjs";
 export { Worker } from "./lib/worker.mjs";
 export { test, expect } from "./lib/test.mjs";
-export { defer, divInt, bytes, text, toBuffer, fromBuffer, errorMessage, mode } from "./lib/lang.mjs";
+export { defer, divInt, bytes, text, toBuffer, fromBuffer, errorMessage } from "./lib/lang.mjs";
 export { ReadableStream, WritableStream } from "./lib/streams.mjs";
 export { builtins };
 export { installBuiltins } from "./lib/builtins.mjs";

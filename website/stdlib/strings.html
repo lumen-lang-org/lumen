@@ -91,6 +91,13 @@
   <p class="stability-note stability-stable">Stable &mdash; pure
   slice operations, no I/O, conformance-covered.</p>
   <p class="sub">Called directly on any <code>string</code> value.</p>
+  <p>A string is a sequence of UTF-8 bytes: <code>"é".length</code> is 2,
+  and <code>s[i]</code>, <code>charCodeAt</code>, <code>slice</code>,
+  <code>indexOf</code> and the rest count bytes. On the Node target
+  (<code>--target node</code>) strings are bytes too &mdash; a program
+  computes the same lengths, indexes and code units there as natively, and
+  text is converted once, at the boundary, where it reaches a file, the
+  console or a process.</p>
   <table>
     <tr><th>API</th><th>Type</th></tr>
     <tr><td><code>s.length</code> · <code>s + t</code> · <code>s.concat(t, …)</code></td><td>int · concatenation · string (variadic)</td></tr>
@@ -110,7 +117,8 @@
     <tr><td><code>String(x)</code></td><td>number | bool | string → string (global conversion)</td></tr>
     <tr><td><code>Boolean(x)</code></td><td>number | bool | string → bool (truthiness: nonzero / nonempty / itself)</td></tr>
     <tr><td><code>Number(x)</code></td><td>number | bool | string → f64 (NaN if a string doesn't parse)</td></tr>
-    <tr><td><code>String.fromCharCode(code, …)</code> · <code>String.fromCodePoint(code, …)</code></td><td>(int, …) → string (one byte per code, each <code>&amp; 0xFF</code>)</td></tr>
+    <tr><td><code>String.fromCharCode(code, …)</code></td><td>(int, …) → string (one byte per code, each <code>&amp; 0xFF</code>)</td></tr>
+    <tr><td><code>String.fromCodePoint(code, …)</code></td><td>(int, …) → string (each code point encoded as UTF-8, one to four bytes; a value that is not a code point becomes U+FFFD)</td></tr>
   </table>
 
   <div class="next">

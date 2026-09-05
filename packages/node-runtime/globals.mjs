@@ -31,5 +31,18 @@ install("defer", L.defer);
 install("argsCount", L.argsCount);
 install("arg", L.arg);
 install("__lang", L.lang);
+install("console", lumenConsole(g.console));
 L.installProcess(g.process);
 L.installBuiltins(g);
+
+/** Node's console with the printing methods decoding byte strings first
+ *  (spec 505): what a Lumen program prints is text, and a string it holds
+ *  is bytes, so `console.log("\xC3\xA9")` must reach stdout as "é". The
+ *  rest of the console (`time`, `table`, `assert`, ...) is inherited. */
+function lumenConsole(real) {
+  const c = Object.create(real);
+  for (const method of ["log", "error", "warn", "info", "debug", "trace"]) {
+    Object.defineProperty(c, method, { value: (...args) => real[method](...args.map(L.lang.printArg)), configurable: true, writable: true, enumerable: true });
+  }
+  return c;
+}

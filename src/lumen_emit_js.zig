@@ -39,6 +39,19 @@ pub const Emitter = struct {
     /// inside an expression (which carries no position of its own).
     cur_line: u32 = 0,
     cur_col: u32 = 0,
+    /// Where a non-fatal diagnostic goes (the CLI prints them after the
+    /// compile); null when nobody is collecting.
+    warnings: ?*std.ArrayListUnmanaged(diag_mod.Diag) = null,
+    /// `W_I64_PRECISION` is raised once per program (spec 505): every `i64`
+    /// is a JavaScript number here, so the first literal past 2^53 says so
+    /// and the rest would only repeat it.
+    i64_warned: bool = false,
+
+    /// Records a warning at the current statement's position.
+    pub fn warn(self: *Emitter, msg: []const u8) void {
+        const sink = self.warnings orelse return;
+        sink.append(self.arena, .{ .line = self.cur_line, .col = self.cur_col, .msg = msg }) catch {};
+    }
 
     pub fn w(self: *Emitter, s: []const u8) CompileError!void {
         self.out.appendSlice(self.arena, s) catch return error.OutOfMemory;
@@ -97,8 +110,11 @@ fn decodeEscape(s: []const u8, i: usize) struct { ch: u8, len: usize } {
 }
 
 /// Writes one decoded byte into a JavaScript literal delimited by `quote`.
-/// Control bytes are escaped so the literal never spans a line (spec 502);
-/// bytes above 0x7f pass through, as the module is UTF-8 like the source.
+/// A Lumen string is its UTF-8 bytes, and on this target a string value is a
+/// JavaScript string with one code unit per byte (spec 505, decision 1), so a
+/// byte above 0x7f is spelled `\xNN`: written raw it would be read as a
+/// character of the module's UTF-8 text, one code unit for two or more bytes.
+/// Control bytes are escaped so the literal never spans a line (spec 502).
 fn writeLitByte(e: *Emitter, ch: u8, quote: u8) CompileError!void {
     switch (ch) {
         '\\' => try e.w("\\\\"),
@@ -109,8 +125,8 @@ fn writeLitByte(e: *Emitter, ch: u8, quote: u8) CompileError!void {
             if (ch == quote) {
                 try e.byte('\\');
                 try e.byte(ch);
-            } else if (ch < 0x20 or ch == 0x7f) {
-                try e.print("\\x{x:0>2}", .{ch});
+            } else if (ch < 0x20 or ch >= 0x7f) {
+                try e.print("\\x{X:0>2}", .{ch});
             } else {
                 try e.byte(ch);
             }
@@ -144,6 +160,20 @@ pub fn emitTemplateText(e: *Emitter, s: []const u8) CompileError!void {
             continue;
         }
         try writeLitByte(e, d.ch, '`');
+    }
+}
+
+/// The source of a regex literal, matched against byte strings: a byte above
+/// 0x7f in the pattern is spelled `\xNN` so it matches the one code unit
+/// that byte is, as the native regex runtime matches bytes. Everything else
+/// is the pattern as written, escapes included.
+pub fn emitRegexSource(e: *Emitter, s: []const u8) CompileError!void {
+    for (s) |ch| {
+        if (ch >= 0x7f) {
+            try e.print("\\x{X:0>2}", .{ch});
+        } else {
+            try e.byte(ch);
+        }
     }
 }
 
@@ -490,8 +520,8 @@ fn stmtExported(s: *const ast.Stmt, exports: *const std.StringHashMapUnmanaged(v
 }
 
 /// The program as ECMAScript modules, one per source file.
-pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: *diag_mod.Diag, entry: []const u8, line_map: []const diag_mod.LineOrigin, module_paths: []const diag_mod.ModulePath, module_edges: []const diag_mod.ModuleEdge) CompileError!Output {
-    var e: Emitter = .{ .arena = arena, .diag = diag, .program = program };
+pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: *diag_mod.Diag, warnings: ?*std.ArrayListUnmanaged(diag_mod.Diag), entry: []const u8, line_map: []const diag_mod.LineOrigin, module_paths: []const diag_mod.ModulePath, module_edges: []const diag_mod.ModuleEdge) CompileError!Output {
+    var e: Emitter = .{ .arena = arena, .diag = diag, .program = program, .warnings = warnings };
 
     // Modules in the order the front end inlined them (dependencies first),
     // each with its statements in source order.
@@ -655,6 +685,17 @@ test "string literals decode source escapes and re-escape for JavaScript" {
     e.out.clearRetainingCapacity();
     try emitTemplateText(&e, "cost: \\${x} `q`");
     try t.expectEqualStrings("cost: \\${x} \\`q\\`", e.out.items);
+    // A string is its UTF-8 bytes, one code unit each (spec 505): "é" is
+    // two, and a raw DEL or a byte above 0x7f is never written as text.
+    e.out.clearRetainingCapacity();
+    try emitStrLit(&e, "h\xC3\xA9\x7f");
+    try t.expectEqualStrings("\"h\\xC3\\xA9\\x7F\"", e.out.items);
+    e.out.clearRetainingCapacity();
+    try emitTemplateText(&e, "\xE2\x80\xA6");
+    try t.expectEqualStrings("\\xE2\\x80\\xA6", e.out.items);
+    e.out.clearRetainingCapacity();
+    try emitRegexSource(&e, "^\xC3\xA9+\\d$");
+    try t.expectEqualStrings("^\\xC3\\xA9+\\d$", e.out.items);
 }
 
 test "floats print as round-trip JavaScript literals" {
@@ -672,6 +713,21 @@ test "floats print as round-trip JavaScript literals" {
     e.out.clearRetainingCapacity();
     try emitFloat(&e, std.math.inf(f64));
     try t.expectEqualStrings("Infinity", e.out.items);
+}
+
+test "the hot path emits no runtime helper (spec 505 SC-003)" {
+    // `+`, `==`, `length`, `[i]`, `slice`, `indexOf` on byte strings are
+    // JavaScript's own operations; a helper call on any of them would be a
+    // regression in the representation, not a lowering choice.
+    const t = std.testing;
+    const compiler = @import("lumen_compiler.zig");
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    var diag: diag_mod.Diag = .{};
+    const out = try compiler.compileToJsWithOptions(arena_state.allocator(), @embedFile("hot_path.ts"), &diag, .{ .target = .node, .entry_file = "hot_path.ts" });
+    try t.expect(out.modules.len == 1);
+    try t.expect(std.mem.indexOf(u8, out.modules[0].text, "__lang.") == null);
+    try t.expect(std.mem.indexOf(u8, out.modules[0].text, "joined.slice(0, 3)") != null);
 }
 
 test {

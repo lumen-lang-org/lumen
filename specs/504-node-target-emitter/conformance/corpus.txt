@@ -6,7 +6,6 @@
 #
 # Walked: every specs/*/examples/valid program up to 500 (T009, T015).
 # Excluded, with the reason:
-#   001-typescript-to-zig-native/examples/valid/division.ts -- 505: integer division truncates natively, `17 / 5` is 3.4 in JavaScript
 #   009-ffi/examples/valid/ffi-math.ts -- 507: `extern function` (E_TARGET_UNSUPPORTED)
 #   018-class-inheritance-members/examples/valid/inheritance.ts -- native build fails before this spec (tasks.md T023b); not eligible until it runs natively
 #   024-ref-params/examples/valid/record-by-ref.ts -- 507: `Ref<T>` argument (E_TARGET_UNSUPPORTED)
@@ -31,13 +30,11 @@
 #   459-http-request-headers/examples/valid/streaming-handler-headers.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
 #   461-parameter-shadowing/examples/valid/extern-shadowing-param-main.ts -- 507: `extern function` (E_TARGET_UNSUPPORTED)
 #   461-parameter-shadowing/examples/valid/ref-shadowing-param-main.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
-#   467-crypto-aead/examples/valid/roundtrip.ts -- 505: a UTF-8 string is bytes natively (`.length` 9), text on Node until 505
 #   468-thread-safe-arena/examples/valid/worker-error-isolation.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   468-thread-safe-arena/examples/valid/worker-random-independent.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   468-thread-safe-arena/examples/valid/worker-unwind-depth.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   479-suspending-await/examples/valid/two-waiters-interleave.ts -- documented divergence (spec table): `await` ordering follows JavaScript's on Node
 #   483-json-parse-names-the-field/examples/valid/named-field.ts -- T014: `JSON.parse<T>` validators name the field (437, 483)
-
 001-typescript-to-zig-native/examples/valid/arrays.ts
 001-typescript-to-zig-native/examples/valid/block-shadow.ts
 001-typescript-to-zig-native/examples/valid/bool-literal.ts
@@ -45,6 +42,7 @@
 001-typescript-to-zig-native/examples/valid/break-continue.ts
 001-typescript-to-zig-native/examples/valid/compound-more.ts
 001-typescript-to-zig-native/examples/valid/console-stdlib.ts
+001-typescript-to-zig-native/examples/valid/division.ts
 001-typescript-to-zig-native/examples/valid/do-while.ts
 001-typescript-to-zig-native/examples/valid/else-if.ts
 001-typescript-to-zig-native/examples/valid/exceptions.ts
@@ -192,6 +190,7 @@
 467-crypto-aead/examples/valid/fresh-nonce.ts
 467-crypto-aead/examples/valid/malformed.ts
 467-crypto-aead/examples/valid/random-key.ts
+467-crypto-aead/examples/valid/roundtrip.ts
 467-crypto-aead/examples/valid/tampered.ts
 468-thread-safe-arena/examples/valid/single-thread-unchanged.ts
 474-sha1-for-websocket/examples/valid/vectors.ts

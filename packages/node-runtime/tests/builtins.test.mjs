@@ -22,7 +22,11 @@ test("String.contains/startsWith/isEmpty/compare; fromCodePoint yields bytes", (
   assert.equal(B.String.isEmpty("a"), false);
   assert.deepEqual([B.String.compare("a", "b"), B.String.compare("b", "b"), B.String.compare("c", "b")], [-1, 0, 1]);
   assert.equal(B.String.fromCodePoint(0xe9), "\xc3\xa9");
+  assert.equal(B.String.fromCodePoint(72, 105), "Hi");
+  assert.equal(B.String.fromCodePoint(0xd800), "\xef\xbf\xbd");
   assert.equal(B.String.fromCharCode(65), "A");
+  assert.equal(B.String.fromCharCode(300), "\x2c");
+  assert.equal(B.String.fromCharCode(195, 169), "\xc3\xa9");
   assert.equal(B.Array.isEmpty([]), true);
   assert.equal(B.Array.isEmpty([1]), false);
   assert.equal(B.Array.isArray([]), true);
@@ -47,13 +51,15 @@ test("Number.parseInt/parseFloat return null, never NaN; a value past 32 bits is
   assert.equal(B.Number.EPSILON(), globalThis.Number.EPSILON);
   assert.equal(B.Number.isInteger(3), true);
   assert.equal(B.JSON.parseOpen('{"a":1,"b":2}').a, 1);
+  assert.equal(B.JSON.parse('["\\u00e9"]')[0], "\xc3\xa9");
   assert.equal(B.JSON.stringify({ a: 1 }), '{"a":1}');
+  assert.equal(B.JSON.stringify(["\xc3\xa9"]), '["\xc3\xa9"]');
 });
 
 test("the overlays do not touch the real builtins; installBuiltins does", () => {
   assert.equal(typeof globalThis.Math.clamp, "undefined");
   assert.equal(typeof globalThis.Math.PI, "number");
-  const r = runProgram('console.log(Math.clamp(9, 0, 5), Math.PI() > 3, Math.PI * 0 === 0, String.contains("ab", "b"), Number.parseInt("z"), typeof Math.sqrt(4), Number("7") + 1, Number.isInteger(2), Number.EPSILON() > 0, (5).toFixed(1), Number.MAX_SAFE_INTEGER > 1, JSON.parseOpen("[1]")[0], Array.isEmpty([]), typeof Number);');
+  const r = runProgram('console.log(Math.clamp(9, 0, 5), Math.PI() > 3, Math.PI * 0 === 0, String.contains("ab", "b"), Number.parseInt("z"), typeof Math.sqrt(4), Number("7") + 1, Number.isInteger(2), Number.EPSILON() > 0, (5).toFixed(1), Number.MAX_SAFE_INTEGER > 1, JSON.parseOpen("[1]")[0], Array.isEmpty([]), typeof Number, String.fromCodePoint(233).length, JSON.parse("[\\"\\\\u00e9\\"]")[0].length);');
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout, "5 true true true null number 8 true true 5.0 true 1 true function\n");
+  assert.equal(r.stdout, "5 true true true null number 8 true true 5.0 true 1 true function 2 2\n");
 });

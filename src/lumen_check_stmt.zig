@@ -363,9 +363,17 @@ pub fn assignField(self: *Checker, program: *ast.Program, field_type: types.Type
     } else {
         const value_type = self.exprType(program, ma.value, ma.line, ma.col) orelse
             return self.inferenceFail(ma.line, ma.col, "cannot infer assignment type");
-        if (!types.isNumeric(field_type) or !types.same(field_type, value_type)) {
+        // The same promotions a local's compound assignment gets: a `number`
+        // field takes an integer operand (spec 256), an `i64` field an `i32`
+        // one (spec 258).
+        if (field_type == .f64 and types.isInteger(value_type)) {
+            ma.value = self.wrapFloat(ma.value) catch return error.OutOfMemory;
+        } else if (field_type == .i64 and value_type == .i32) {
+            // Zig widens implicitly; nothing to rewrite.
+        } else if (!types.isNumeric(field_type) or !types.same(field_type, value_type)) {
             return self.fail(ma.line, ma.col, "E_TYPE_MISMATCH");
         }
+        ma.checked_type = field_type;
     }
 }
 
@@ -858,7 +866,7 @@ pub fn checkStmt(self: *Checker, program: *ast.Program, stmt: *ast.Stmt) Compile
                         // coercing a number/bool right-hand side to string.
                         if (!types.isStringLike(actual_type)) {
                             if (types.isNumeric(actual_type) or actual_type == .bool) {
-                                assignment.value = self.wrapStringify(assignment.value) catch return error.OutOfMemory;
+                                assignment.value = self.wrapStringify(assignment.value, actual_type) catch return error.OutOfMemory;
                             } else {
                                 return self.fail(assignment.line, assignment.col, "E_TYPE_MISMATCH");
                             }

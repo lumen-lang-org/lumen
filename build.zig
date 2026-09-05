@@ -24,6 +24,10 @@ pub fn build(b: *std.Build) void {
     // `src/`, so it comes in the same way.
     const names_json: std.Build.Module.CreateOptions = .{ .root_source_file = b.path("packages/node-runtime/tests/names.json") };
     exe.root_module.addAnonymousImport("names.json", names_json);
+    // Spec 505 SC-003: the emitter's test compiles this program and expects
+    // no `__lang.` helper in the output.
+    const hot_path_ts: std.Build.Module.CreateOptions = .{ .root_source_file = b.path("specs/505-node-byte-strings-and-integers/examples/valid/hot_path.ts") };
+    exe.root_module.addAnonymousImport("hot_path.ts", hot_path_ts);
     b.installArtifact(exe);
 
     const conformance_runner = b.addExecutable(.{
@@ -75,7 +79,10 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
             }),
         });
-        if (std.mem.eql(u8, root, "src/lumen_emit_js.zig")) unit.root_module.addAnonymousImport("names.json", names_json);
+        if (std.mem.eql(u8, root, "src/lumen_emit_js.zig")) {
+            unit.root_module.addAnonymousImport("names.json", names_json);
+            unit.root_module.addAnonymousImport("hot_path.ts", hot_path_ts);
+        }
         test_step.dependOn(&b.addRunArtifact(unit).step);
     }
 

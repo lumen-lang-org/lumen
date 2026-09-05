@@ -38,11 +38,11 @@ pub fn checkCbArg(self: *Checker, program: *ast.Program, e: *ast.Expr, hint: []c
 /// Wrap an expression in the runtime `String(...)` conversion so a numeric or
 /// boolean operand of a string `+` becomes a string. Reuses the global
 /// String() codegen (a comptime type switch), which needs no arg type recorded.
-pub fn wrapStringify(self: *Checker, e: *ast.Expr) !*ast.Expr {
+pub fn wrapStringify(self: *Checker, e: *ast.Expr, operand_type: types.Type) !*ast.Expr {
     const args = try self.arena.alloc(*ast.Expr, 1);
     args[0] = e;
     const node = try self.arena.create(ast.Expr);
-    node.* = .{ .call = .{ .name = "String", .args = args, .is_global_parse = true } };
+    node.* = .{ .call = .{ .name = "String", .args = args, .is_global_parse = true, .stringify_type = operand_type } };
     return node;
 }
 
@@ -252,8 +252,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 const l_ok = types.isStringLike(left_type) or types.isNumeric(left_type) or left_type == .bool;
                 const r_ok = types.isStringLike(right_type) or types.isNumeric(right_type) or right_type == .bool;
                 if (l_ok and r_ok) {
-                    if (!types.isStringLike(left_type)) bin.l = self.wrapStringify(bin.l) catch return null;
-                    if (!types.isStringLike(right_type)) bin.r = self.wrapStringify(bin.r) catch return null;
+                    if (!types.isStringLike(left_type)) bin.l = self.wrapStringify(bin.l, left_type) catch return null;
+                    if (!types.isStringLike(right_type)) bin.r = self.wrapStringify(bin.r, right_type) catch return null;
                     bin.checked_type = .string;
                     return .string;
                 }
@@ -734,8 +734,8 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                                 const t_str = types.isStringLike(tt);
                                 const e_str = types.isStringLike(et);
                                 if (t_str != e_str) {
-                                    if (!t_str and (types.isNumeric(tt) or tt == .bool)) tern.then_expr = self.wrapStringify(tern.then_expr) catch return null;
-                                    if (!e_str and (types.isNumeric(et) or et == .bool)) tern.else_expr = self.wrapStringify(tern.else_expr) catch return null;
+                                    if (!t_str and (types.isNumeric(tt) or tt == .bool)) tern.then_expr = self.wrapStringify(tern.then_expr, tt) catch return null;
+                                    if (!e_str and (types.isNumeric(et) or et == .bool)) tern.else_expr = self.wrapStringify(tern.else_expr, et) catch return null;
                                 }
                             }
                         }
@@ -1426,7 +1426,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
                         return null;
                     }
-                    if (!types.isStringLike(at)) mc.args[i] = self.wrapStringify(arg) catch return null;
+                    if (!types.isStringLike(at)) mc.args[i] = self.wrapStringify(arg, at) catch return null;
                 }
                 mc.is_console = true;
                 mc.array_elem_type = .string;
@@ -1888,6 +1888,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                     return null;
                 }
                 call.is_global_parse = true;
+                call.stringify_type = at;
                 return .string;
             }
             // Global Number(x) conversion: number/bool/string -> f64 (NaN if a

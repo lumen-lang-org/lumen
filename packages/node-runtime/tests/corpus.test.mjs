@@ -1,8 +1,8 @@
 // Spec 503 SC-002: every program in corpus.txt prints under
 // `node --import globals.mjs` exactly what the native binary prints. The
 // native side is `zig-out/bin/lumen run` (build it with `zig build`); the
-// programs are hand-written .ts modules, so they run with the interim
-// `LUMEN_STRINGS=utf16` boundary (FR-002).
+// programs are hand-written .ts modules whose literals are ASCII, which is
+// text and bytes alike (spec 505 decision 1).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
@@ -32,7 +32,7 @@ function native(rel) {
 function node(rel) {
   return spawnSync(process.execPath, ["--no-warnings", "--import", GLOBALS, `specs/${rel}`], {
     cwd: ROOT, encoding: "latin1", stdio: ["ignore", "pipe", "pipe"], timeout: 30000, maxBuffer: 64 * 1024 * 1024,
-    env: childEnv({ LUMEN_STRINGS: "utf16" }),
+    env: childEnv(),
   });
 }
 

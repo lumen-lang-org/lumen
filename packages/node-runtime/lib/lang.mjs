@@ -1,45 +1,195 @@
-// The language-level helpers: the string boundary, integer division, and
-// `defer`. Everything else in the package goes through `toBuffer`/`fromBuffer`
-// for bytes and `text`/`bytes` for names Node wants as text (paths, env keys,
-// command lines), so the representation of a Lumen string is decided here and
-// nowhere else.
+// The language-level helpers: the string boundary, the string methods whose
+// JavaScript namesakes compute something else on a byte string, integer
+// division, and `defer`. Everything else in the package goes through
+// `toBuffer`/`fromBuffer` for bytes and `text`/`bytes` for names Node wants
+// as text (paths, env keys, command lines), so the representation of a Lumen
+// string is decided here and nowhere else.
 //
 // A Lumen string is a sequence of bytes (spec 505, decision 1): a JavaScript
 // string with one code unit per byte, Node's "latin1". Converting on the way
-// in is `Buffer.from(s, "latin1")` and on the way out `.toString("latin1")`.
-//
-// `LUMEN_STRINGS=utf16` is the interim switch spec 503 FR-002 names for
-// running hand-written modules whose strings are ordinary JavaScript text
-// (nothing has emitted byte literals for them). Spec 505 removes it.
+// in is `Buffer.from(s, "latin1")` and on the way out `.toString("latin1")`,
+// never `utf8`. Generated code (spec 504) spells its literals as those bytes
+// (`"\xC3\xA9"` for "é"), so `length`, `[i]`, `slice`, `indexOf`, `+`, `==`
+// and `<` are JavaScript's own operations; the methods below are the ones
+// that are not, and the emitter routes them here as `__lang.<name>`.
 
 import { Buffer } from "node:buffer";
-import { env } from "node:process";
-
-const MODE = env.LUMEN_STRINGS === "utf16" ? "utf16" : "bytes";
-
-/** "bytes" (Lumen byte strings, the default) or "utf16" (plain JavaScript text). */
-export const mode = MODE;
 
 /** A Lumen string -> the Buffer holding its bytes. */
 export function toBuffer(s) {
-  return MODE === "bytes" ? Buffer.from(s, "latin1") : Buffer.from(s, "utf8");
+  return Buffer.from(s, "latin1");
 }
 
 /** A Buffer (or Uint8Array) -> the Lumen string holding those bytes. */
 export function fromBuffer(buf) {
   const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
-  return MODE === "bytes" ? b.toString("latin1") : b.toString("utf8");
+  return b.toString("latin1");
 }
 
 /** JavaScript text (what Node hands back: a path, an env value, argv) -> a Lumen string. */
 export function bytes(text) {
-  return MODE === "bytes" ? Buffer.from(text, "utf8").toString("latin1") : text;
+  return Buffer.from(text, "utf8").toString("latin1");
 }
 
 /** A Lumen string -> JavaScript text (what Node wants for a path, an env key, a command). */
 export function text(s) {
-  return MODE === "bytes" ? Buffer.from(s, "latin1").toString("utf8") : s;
+  return Buffer.from(s, "latin1").toString("utf8");
 }
+
+// ---------------------------------------------------------------------------
+// String methods with byte semantics (spec 505 FR-001). Each takes the
+// receiver first and answers what the native runtime answers
+// (`lumen_emit_array_string.zig` `emitStringMethod`).
+
+/** `s.charCodeAt(i)` / `s.codePointAt(i)`: the byte at `i`, or -1 past either
+ *  end (specs 101, 119) where JavaScript answers NaN. */
+export function charCodeAt(s, i) {
+  const c = s.charCodeAt(i);
+  return Number.isNaN(c) ? -1 : c;
+}
+
+/** ASCII-only case mapping (spec 063): a byte above 0x7f is part of a UTF-8
+ *  sequence, not a character JavaScript's `toUpperCase` may rewrite. */
+export function toUpperCase(s) {
+  return s.replace(/[a-z]+/g, (run) => run.toUpperCase());
+}
+
+export function toLowerCase(s) {
+  return s.replace(/[A-Z]+/g, (run) => run.toLowerCase());
+}
+
+// Space, tab, CR, LF: what the native `trim` strips. JavaScript's also strips
+// 0xA0 and 0x85, which are trailing bytes of "à" and "…".
+const LEADING_WS = /^[ \t\r\n]+/;
+const TRAILING_WS = /[ \t\r\n]+$/;
+
+export function trim(s) {
+  return s.replace(LEADING_WS, "").replace(TRAILING_WS, "");
+}
+
+export function trimStart(s) {
+  return s.replace(LEADING_WS, "");
+}
+
+export function trimEnd(s) {
+  return s.replace(TRAILING_WS, "");
+}
+
+/** Byte order, -1/0/1 (spec 109): `<` on two byte strings compares code
+ *  units, which are the bytes. */
+export function localeCompare(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** A negative count is an empty string, not a RangeError. */
+export function repeat(s, n) {
+  return n > 0 ? s.repeat(n) : "";
+}
+
+/** `s.replace(from, to)` with a string pattern: the first occurrence, the
+ *  replacement taken literally (`$&` is two characters), an empty pattern
+ *  matching nothing (spec 063). */
+export function replace(s, from, to) {
+  if (from.length === 0) return s;
+  const i = s.indexOf(from);
+  return i < 0 ? s : s.slice(0, i) + to + s.slice(i + from.length);
+}
+
+export function replaceAll(s, from, to) {
+  if (from.length === 0) return s;
+  return s.split(from).join(to);
+}
+
+// ---------------------------------------------------------------------------
+// JSON (spec 505, decision 1). A JSON document is itself bytes, so
+// `stringify` over byte strings is JavaScript's own: every code unit of a
+// byte string is copied into the output verbatim, and the escapes it adds
+// are ASCII. `parse` is not: a `\u00e9` escape in the document decodes to
+// one code unit, which must become the two bytes of "é", while a raw byte
+// above 0x7f must stay one code unit. So the document is decoded to text,
+// parsed, and every string in the result -- keys included -- re-encoded.
+
+const jsParse = JSON.parse;
+
+function encodeStrings(v) {
+  if (typeof v === "string") return bytes(v);
+  if (v === null || typeof v !== "object") return v;
+  if (Array.isArray(v)) return v.map(encodeStrings);
+  const out = {};
+  for (const [k, x] of Object.entries(v)) out[bytes(k)] = encodeStrings(x);
+  return out;
+}
+
+/** `JSON.parse(s)` over a byte string, answering byte strings. */
+export function jsonParse(s) {
+  return encodeStrings(jsParse(text(s)));
+}
+
+// ---------------------------------------------------------------------------
+// Numbers as text (spec 505 decision 2). The native runtime prints a
+// `number` with Zig's `{d}`: the shortest digits that read back as the same
+// double, every one of them written out -- `1e21` is
+// "1000000000000000000000" and `1e-7` is "0.0000001" -- and `nan`, `inf`,
+// `-inf` for the non-finite values. JavaScript's `String(x)` agrees except
+// that it switches to `1e+21`/`1e-7` notation past 21 digits or 6 leading
+// zeros, which is undone here. An integer prints the same either way.
+
+/** A number as the native runtime prints it. */
+export function fmt(x) {
+  if (Number.isNaN(x)) return "nan";
+  if (x === Infinity) return "inf";
+  if (x === -Infinity) return "-inf";
+  if (Object.is(x, -0)) return "-0";
+  const s = String(x);
+  const e = s.indexOf("e");
+  if (e < 0) return s;
+  const exp = Number(s.slice(e + 1));
+  let mantissa = s.slice(0, e);
+  const neg = mantissa.startsWith("-");
+  if (neg) mantissa = mantissa.slice(1);
+  const dot = mantissa.indexOf(".");
+  const digits = dot < 0 ? mantissa : mantissa.slice(0, dot) + mantissa.slice(dot + 1);
+  // Where the decimal point lands in `digits` once the exponent is applied.
+  const point = (dot < 0 ? mantissa.length : dot) + exp;
+  let out;
+  if (point <= 0) out = "0." + "0".repeat(-point) + digits;
+  else if (point >= digits.length) out = digits + "0".repeat(point - digits.length);
+  else out = digits.slice(0, point) + "." + digits.slice(point);
+  return neg ? "-" + out : out;
+}
+
+// ---------------------------------------------------------------------------
+// Printing. `console.log` hands its arguments to Node's formatter, which
+// writes text: a byte string is decoded first, wherever it sits (an array
+// element, a record field, a Map key), so the bytes reach the terminal as
+// the UTF-8 they are, and a number is formatted as the native runtime
+// formats one.
+
+/** One `console.log` argument: a number as the native runtime formats it,
+ *  anything else with its byte strings decoded. */
+export function printArg(v) {
+  return typeof v === "number" ? fmt(v) : printable(v);
+}
+
+/** A value with every byte string in it decoded to text, for printing. A
+ *  number inside a container stays a number, so the formatter still shows
+ *  it unquoted. */
+export function printable(v) {
+  if (typeof v === "string") return text(v);
+  if (v === null || typeof v !== "object") return v;
+  if (Array.isArray(v)) return v.map(printable);
+  if (v instanceof Map) return new Map(Array.from(v, ([k, x]) => [printable(k), printable(x)]));
+  if (v instanceof Set) return new Set(Array.from(v, printable));
+  if (ArrayBuffer.isView(v) || v instanceof Error || v instanceof Promise || v instanceof Date) return v;
+  // A record or a class instance: the same shape (and prototype, so a class
+  // still prints under its name) with its fields decoded.
+  const out = Object.create(Object.getPrototypeOf(v));
+  for (const [k, x] of Object.entries(v)) out[k] = printable(x);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Numbers and control flow.
 
 /** Integer division (spec 137): truncates toward zero; a zero divisor throws
  *  the way Zig's safe mode traps (spec 505 documents the RangeError). */
@@ -62,5 +212,5 @@ export function errorMessage(e) {
   return "";
 }
 
-// The names spec 505's emitted code calls.
-export { bytes as __bytes, text as __text, divInt as __divInt };
+// The names spec 505's emitted code calls, beside the string methods above.
+export { bytes as __bytes, text as __text, divInt as __divInt, fmt as __fmt };

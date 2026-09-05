@@ -1134,6 +1134,12 @@ pub fn numberInstanceMethod(self: *Checker, program: *ast.Program, mc: anytype, 
 
 /// Validate an instance method call on a `string` receiver and return its
 /// statically-known result type. Mirrors `arrayMethod`.
+/// Every method `stringMethod` accepts on a `string` receiver. The node
+/// target's `lumen_emit_js_stdlib.zig` gives each one a lowering and its test
+/// checks this list against that table, so a method added here without a
+/// JavaScript arm fails `zig build test` rather than a program.
+pub const string_method_names = [_][]const u8{ "charAt", "at", "charCodeAt", "codePointAt", "indexOf", "lastIndexOf", "localeCompare", "includes", "startsWith", "endsWith", "slice", "substring", "repeat", "padStart", "padEnd", "replace", "replaceAll", "toUpperCase", "toLowerCase", "trim", "trimStart", "trimEnd", "split", "concat", "search", "match" };
+
 pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u32, col: u32) ?types.Type {
     mc.string_method = true;
     const name = mc.name;
@@ -1238,7 +1244,7 @@ pub fn stringMethod(self: *Checker, program: *ast.Program, mc: anytype, line: u3
         if (eq(u8, name, "trimStart")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "trimEnd")) break :blk .{ .min = 0, .max = 0, .kinds = &.{}, .result = .string };
         if (eq(u8, name, "split")) break :blk .{ .min = 0, .max = 2, .kinds = &.{ .string, .int }, .result = types.arrayOf(.string).? };
-        _ = self.failUnknownMethod(line, col, "string", name, &.{ "charAt", "at", "charCodeAt", "codePointAt", "indexOf", "lastIndexOf", "localeCompare", "includes", "startsWith", "endsWith", "slice", "substring", "repeat", "padStart", "padEnd", "replace", "replaceAll", "toUpperCase", "toLowerCase", "trim", "trimStart", "trimEnd", "split", "concat", "search", "toString" }) catch {};
+        _ = self.failUnknownMethod(line, col, "string", name, &string_method_names) catch {};
         return null;
     };
 

@@ -292,7 +292,7 @@ fn frontEnd(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: 
 /// gain from them.
 pub fn compileToJsWithOptions(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: CompileOptions) CompileError!lumen_emit_js.Output {
     const program = try frontEnd(arena, source, diag, options);
-    return lumen_emit_js.emitProgram(&program, arena, diag, options.entry_file, options.line_map, options.module_paths, options.module_edges);
+    return lumen_emit_js.emitProgram(&program, arena, diag, options.warnings, options.entry_file, options.line_map, options.module_paths, options.module_edges);
 }
 
 pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, filename: []const u8, diag: *Diag, options: CompileOptions) CompileError![]const u8 {

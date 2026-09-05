@@ -496,11 +496,10 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             }
             const lvs = lv.items;
             try body.print(arena, "    {s} = ", .{lvs});
-            // Field-target compound assignment reuses the same lowering; the
-            // field type isn't threaded here, so `<<=`/`>>=`/`**=` on a
-            // non-i32 field would mis-type -- an accepted edge for now (the
-            // common `+= -= *= &= |= ^= &&= ||= ??=` forms are unaffected).
-            try emitCompoundRhs(ma.op, lvs, ma.value, null, body, arena);
+            // Field-target compound assignment reuses the same lowering, with
+            // the field type the checker recorded so `/=` on a `number` field
+            // keeps the fraction and `<<=`/`>>=`/`**=` pick the field's width.
+            try emitCompoundRhs(ma.op, lvs, ma.value, ma.checked_type, body, arena);
             try body.appendSlice(arena, ";\n");
         },
         .test_decl => |t| {

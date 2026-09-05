@@ -1,9 +1,10 @@
 // The JavaScript builtins a Lumen program calls with Lumen's own names or
 // shapes: `Math.clamp`/`exp2`, the constants that are calls in Lumen
 // (`Math.PI()`, `Number.EPSILON()`), `String.contains`/`compare`/`isEmpty`/
-// `startsWith`, `Array.isEmpty`, `JSON.parseOpen`, and `Number.parseInt`/
-// `parseFloat` returning `null` instead of `NaN` (spec 049). Everything else
-// under these namespaces is JavaScript's own.
+// `startsWith`, `Array.isEmpty`, `JSON.parse`/`parseOpen` over byte strings,
+// `String.fromCharCode`/`fromCodePoint` producing bytes, and
+// `Number.parseInt`/`parseFloat` returning `null` instead of `NaN` (spec
+// 049). Everything else under these namespaces is JavaScript's own.
 //
 // The exports are overlays over the real builtins (Lumen names as own
 // properties, JavaScript's inherited) so `index.mjs` installs nothing.
@@ -12,9 +13,13 @@
 // properties, so those two globals are replaced by the overlays (every
 // JavaScript name still resolves through the prototype chain, and
 // `Number(x)` still converts).
-import { bytes, mode } from "./lang.mjs";
+import { bytes, jsonParse } from "./lang.mjs";
 
 const JS = { Math: globalThis.Math, String: globalThis.String, Array: globalThis.Array, Number: globalThis.Number, JSON: globalThis.JSON, Date: globalThis.Date, Promise: globalThis.Promise };
+// The functions `installBuiltins` replaces on the real objects, taken before
+// it runs: the overlays wrap them, and must not find themselves.
+const jsFromCodePoint = JS.String.fromCodePoint;
+const jsFromCharCode = JS.String.fromCharCode;
 
 /** A zero-argument call that still reads as its number: `Math.PI()` and
  *  `Math.PI * 2` both work. */
@@ -80,9 +85,16 @@ export function parseFloat(s) {
   return null;
 }
 
-/** `String.fromCodePoint(cp)`: the code point as Lumen bytes (spec 472). */
+/** `String.fromCodePoint(...cps)`: each code point encoded as UTF-8 (spec
+ *  472); a surrogate, a negative or a value past 0x10FFFF is U+FFFD. */
 export function fromCodePoint(...cps) {
-  return bytes(JS.String.fromCodePoint(...cps));
+  return bytes(cps.map((cp) => (cp >= 0 && cp <= 0x10ffff && (cp < 0xd800 || cp > 0xdfff) ? jsFromCodePoint(cp) : "\ufffd")).join(""));
+}
+
+/** `String.fromCharCode(...codes)`: one byte per code, each masked to
+ *  `code & 0xFF` (spec 119); JavaScript would keep 16 bits. */
+export function fromCharCode(...codes) {
+  return jsFromCharCode(...codes.map((c) => c & 0xff));
 }
 
 export const mathExtras = {
@@ -96,7 +108,8 @@ export const stringExtras = {
   startsWith: (s, prefix) => s.startsWith(prefix),
   isEmpty: (s) => s.length === 0,
   compare: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
-  fromCodePoint: mode === "bytes" ? fromCodePoint : JS.String.fromCodePoint,
+  fromCodePoint,
+  fromCharCode,
 };
 
 export const arrayExtras = {
@@ -109,8 +122,12 @@ export const numberExtras = {
   ...Object.fromEntries(NUMBER_CONSTANTS.map((k) => [k, constant(JS.Number[k])])),
 };
 
+// `parse` is Lumen's: the document is bytes and so is every string in the
+// result (spec 505; `lang.mjs` `jsonParse`). `stringify` stays JavaScript's,
+// which over byte strings writes the right bytes.
 export const jsonExtras = {
-  parseOpen: (text) => JS.JSON.parse(text),
+  parse: jsonParse,
+  parseOpen: jsonParse,
 };
 
 function overlay(base, extras) {

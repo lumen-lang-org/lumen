@@ -35,11 +35,11 @@ test("console.log, console.error and Node's own process.stdout.write keep workin
   assert.equal(r.stderr, "err\n");
 });
 
-test("LUMEN_STRINGS=utf16 runs a hand-written module with JavaScript text strings (FR-002 interim switch)", () => {
-  // printf emits the two UTF-8 bytes of "é": a byte string sees 2, text sees 1.
-  const prog = String.raw`const s = child_process.spawnSync("printf", ["\\303\\251"]).stdout; console.log(s.length, s.charCodeAt(0));`;
-  const bytesMode = runProgram(prog);
-  assert.equal(bytesMode.stdout, "2 195\n");
-  const utf16 = runProgram(prog, { env: { LUMEN_STRINGS: "utf16" } });
-  assert.equal(utf16.stdout, "1 233\n");
+test("text crossing the boundary is bytes, and the console decodes what it prints (505 decision 1)", () => {
+  // printf emits the two UTF-8 bytes of "é": the program sees 2 bytes, and
+  // printing the string, alone or inside an array, writes those bytes back.
+  const prog = String.raw`const s = child_process.spawnSync("printf", ["\\303\\251"]).stdout; console.log(s.length, s.charCodeAt(0)); console.log(s, [s]); console.log(JSON.parse("[\"\\u00e9\"]")[0].length);`;
+  const r = runProgram(prog);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, "2 195\n\xc3\xa9 [ '\xc3\xa9' ]\n2\n");
 });

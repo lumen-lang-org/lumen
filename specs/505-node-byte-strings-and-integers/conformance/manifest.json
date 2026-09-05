@@ -48,6 +48,54 @@
       "expect": {
         "stdout": "12\n3\ntrue\na=1"
       }
+    },
+    {
+      "id": "strings.roundtrip.native",
+      "source": "../examples/valid/roundtrip.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "25\ntrue\n25\nHéLLO WöRLD — çA VA?\n195 169 18\nfalse"
+      }
+    },
+    {
+      "id": "strings.roundtrip.node",
+      "source": "../examples/valid/roundtrip.ts",
+      "phase": "node-run",
+      "expect": {
+        "stdout": "25\ntrue\n25\nHéLLO WöRLD — çA VA?\n195 169 18\nfalse"
+      }
+    },
+    {
+      "id": "strings.json_utf8.native",
+      "source": "../examples/valid/json_utf8.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "{\"name\":\"café\",\"tags\":[\"naïve\",\"日本\"],\"n\":1.5}\n51\n5 6 1.5\ntrue 4 🚀\n{\"name\":\"café\",\"tags\":[\"🚀\"],\"n\":2}"
+      }
+    },
+    {
+      "id": "strings.json_utf8.node",
+      "source": "../examples/valid/json_utf8.ts",
+      "phase": "node-run",
+      "expect": {
+        "stdout": "{\"name\":\"café\",\"tags\":[\"naïve\",\"日本\"],\"n\":1.5}\n51\n5 6 1.5\ntrue 4 🚀\n{\"name\":\"café\",\"tags\":[\"🚀\"],\"n\":2}"
+      }
+    },
+    {
+      "id": "strings.compound.native",
+      "source": "../examples/valid/compound.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "3\n0\n1285714285\n12 12.5\n6\n-1 1\ntrue 9007199254740991\n1000000000000000000000 1000000000000000000000 v=1000000000000000000000 1000000000000000000000\nnan inf"
+      }
+    },
+    {
+      "id": "strings.compound.node",
+      "source": "../examples/valid/compound.ts",
+      "phase": "node-run",
+      "expect": {
+        "stdout": "3\n0\n1285714285\n12 12.5\n6\n-1 1\ntrue 9007199254740991\n1000000000000000000000 1000000000000000000000 v=1000000000000000000000 1000000000000000000000\nnan inf"
+      }
     }
   ]
 }

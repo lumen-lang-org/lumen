@@ -35,9 +35,13 @@ all in 0..255, one per byte of the Lumen string (a "binary string", Node's
 - `String.fromCharCode(b)` is identity (byte semantics, 119).
   `String.fromCodePoint(cp)` becomes `__lang.fromCodePoint(cp)`, which
   UTF-8-encodes (472). `codePointAt` decodes UTF-8 at a byte index.
-- `toUpperCase`/`toLowerCase`/`localeCompare`/`normalize`: the runtime
-  decodes, applies, re-encodes (Lumen's native versions are ASCII-only for
-  case, 063; match that exactly, do not "improve" it).
+- `toUpperCase`/`toLowerCase`/`localeCompare`: the runtime applies the
+  native rule on the bytes (case is ASCII-only, 063; compare is byte order,
+  109; match that exactly, do not "improve" it). `trim` strips the four
+  ASCII whitespace bytes the native one strips, `repeat` of a negative count
+  is empty, and string-pattern `replace` takes its replacement literally;
+  JavaScript's own methods differ on each and are not used. `normalize` is
+  not in the language.
 - **Boundaries** convert once: `console.log` and every runtime function
   that hands text to Node (`fs.writeFileSync`, `spawnSync` args,
   `http` bodies, `process.stdout().write`) does
@@ -66,12 +70,13 @@ call on every string expression.
 | `a % b`, both integer | `a % b` (JavaScript's `%` already truncates toward zero) |
 | `a /= b` on an integer target | as above (137) |
 | `+ - *` on `i32` | plain; overflow wraps neither here nor natively in a way a program may rely on (native panics in ReleaseSafe) — emit plain and document |
+| `a /= b` on an integer field | `obj.f = __lang.divInt(obj.f, b)`; the checker records the field's type on the assignment (`MemberAssign.checked_type`) |
 | `i64` values | `number`; the emitter warns `W_I64_PRECISION` once per program when an `i64` literal or `bigint` literal exceeds 2^53 (417) |
 | `bigint`, `Nn` literals | `number` (417 maps them to `i64`) |
 | bitwise `& \| ^ << >> >>> ~` | identity (both are 32-bit) |
 | `Math.imul`, `clz32`, `fround` | identity |
 | `parseInt`/`parseFloat`/`Number()`/`toFixed` | identity on the decoded text: `__lang.text(s)` first, since they take Lumen strings |
-| numeric to string (`${n}`, `+ ""`, `toString`) | JavaScript's formatting matches Lumen's for integers; for floats Lumen prints via Zig's `{d}` — pin the corpus and fix the runtime's `__lang.fmt` where they differ (136, 181) |
+| numeric to string (`${n}`, `+ ""`, `toString`) | JavaScript's formatting matches Lumen's for integers; for floats Lumen prints via Zig's `{d}` — pin the corpus and fix the runtime's `__lang.fmt` where they differ (136, 181). `fmt` writes every digit where JavaScript would print `1e+21` or `1e-7`, and `nan`/`inf`/`-inf`; the emitter applies it to a `number` at `String(x)`, `${x}` and `x.toString()`, the console to a top-level `number` argument. `Math.PI` and the other namespace constants are read through their call so the value is a number. Documented divergence: `toFixed` where the native rounding differs from JavaScript's (`(1.005).toFixed(2)` is `1.01` natively, `1.00` on Node) |
 
 ## Requirements
 
@@ -93,7 +98,8 @@ call on every string expression.
 
 - **SC-001**: the whole eligible corpus (504 `corpus.txt`) still passes
   `node-run`; the 505 manifest passes on both targets.
-- **SC-002**: Joule's `terminal/text.test.ts` passes under Node.
+- **SC-002**: Joule's `terminal/text.test.ts` passes under Node. (Not yet
+  measured: it needs `lumen test --target node`, which is spec 506's.)
 - **SC-003**: no string helper call is emitted for `+`, `==`, `length`,
   `[i]`, `slice`, `indexOf` (inspect emitted JS for the corpus; a test
   greps for `__lang.` in the output of `examples/valid/hot_path.ts` and

@@ -29,7 +29,7 @@ fn prec(x: *const Expr) i8 {
         .ternary => 0,
         .coalesce => 1,
         .bool_bin => |b| if (std.mem.eql(u8, b.op, "||")) 2 else 3,
-        .bin => |b| switch (b.op) {
+        .bin => |b| if (isIntDivision(b)) PREC_MEMBER else switch (b.op) {
             '|' => 4,
             '^' => 5,
             '&' => 6,
@@ -50,6 +50,13 @@ fn prec(x: *const Expr) i8 {
 
 const PREC_UNARY: i8 = 13;
 const PREC_MEMBER: i8 = 14;
+
+/// Whether a `/` divides integers, so it truncates toward zero (spec 137):
+/// the native emitter picks `@divTrunc` unless the checker typed the result
+/// `number`, and this target mirrors that decision with `__lang.divInt`.
+fn isIntDivision(b: anytype) bool {
+    return b.op == '/' and (b.checked_type == null or b.checked_type.? != .f64);
+}
 
 /// Emits `x` where an expression binding at least as tightly as `min` is
 /// expected, parenthesizing it otherwise.
@@ -199,15 +206,36 @@ fn emitFieldAccess(e: *Emitter, name: []const u8, optional_chain: bool) CompileE
     }
 }
 
+/// A `number` (f64) printed the way the native runtime prints one (spec 505
+/// decision 2): `__lang.fmt` writes every digit where JavaScript would switch
+/// to `1e+21`, and `nan`/`inf` for the non-finite values.
+fn emitFloatToString(e: *Emitter, x: *const Expr) CompileError!void {
+    try e.w("__lang.fmt(");
+    try emitExpr(e, x);
+    try e.byte(')');
+}
+
+/// Whether an integer literal is exact as a JavaScript number: past 2^53 the
+/// native `i64` holds it and a double does not.
+pub fn exactAsDouble(n: i64) bool {
+    return n >= -(1 << 53) and n <= (1 << 53);
+}
+
 pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
     switch (x.*) {
-        .num => |n| try e.print("{d}", .{n}),
+        .num => |n| {
+            if (!exactAsDouble(n) and !e.i64_warned) {
+                e.i64_warned = true;
+                e.warn("an integer literal past 2^53 is rounded on the node target, where `i64` is a JavaScript number [W_I64_PRECISION]");
+            }
+            try e.print("{d}", .{n});
+        },
         .float => |f| try js.emitFloat(e, f),
         .bool => |b| try e.w(if (b) "true" else "false"),
         .str => |s| try js.emitStrLit(e, s),
         .regex => |r| {
             try e.byte('/');
-            try e.w(r.source);
+            try js.emitRegexSource(e, r.source);
             try e.byte('/');
             try e.w(r.flags);
         },
@@ -275,6 +303,16 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             try emitAt(e, inner, PREC_UNARY);
         },
         .bin => |b| {
+            // Integer division truncates (spec 137); JavaScript's `/` would
+            // keep the fraction. `%` already truncates toward zero in both.
+            if (isIntDivision(b)) {
+                try e.w("__lang.divInt(");
+                try emitExpr(e, b.l);
+                try e.w(", ");
+                try emitExpr(e, b.r);
+                try e.byte(')');
+                return;
+            }
             const p = prec(x);
             // `**` associates to the right, and `-2 ** 2` is a syntax error:
             // its left operand is parenthesized down to a unary.
@@ -331,6 +369,33 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             try emitArgsFor(e, n.args, ctorParams(e, n.class_name));
         },
         .method_call => |m| {
+            // A string method whose JavaScript namesake computes something
+            // else on a byte string goes through the runtime (spec 505): the
+            // helper takes the receiver first. Through `?.` the receiver may
+            // be null, and a plain call cannot short-circuit, so the guard is
+            // written out with the receiver evaluated once.
+            if (js_stdlib.stringMethodHelper(m)) |helper| {
+                if (m.optional_chain) try e.w("((__s) => __s == null ? null : ");
+                try e.w("__lang.");
+                try e.w(helper);
+                try e.byte('(');
+                if (m.optional_chain) try e.w("__s") else try emitExpr(e, m.obj);
+                for (m.args) |a| {
+                    try e.w(", ");
+                    try emitExpr(e, a);
+                }
+                try e.byte(')');
+                if (m.optional_chain) {
+                    try e.w(")(");
+                    try emitExpr(e, m.obj);
+                    try e.byte(')');
+                }
+                return;
+            }
+            // `x.toString()` of a `number` prints it as the native runtime does.
+            if (m.number_method and m.args.len == 0 and std.mem.eql(u8, m.name, "toString") and m.array_elem_type != null and m.array_elem_type.? == .f64) {
+                return emitFloatToString(e, m.obj);
+            }
             const null_on_missing = js_stdlib.nullOnMissing(m);
             const to_array = js_stdlib.iteratorToArray(m);
             if (null_on_missing) try e.byte('(');
@@ -347,7 +412,11 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
                 if (p.text) |t| try js.emitTemplateText(e, t);
                 if (p.expr) |inner| {
                     try e.w("${");
-                    try emitExpr(e, inner);
+                    if (p.expr_type != null and p.expr_type.? == .f64) {
+                        try emitFloatToString(e, inner);
+                    } else {
+                        try emitExpr(e, inner);
+                    }
                     try e.byte('}');
                 }
             }
@@ -378,6 +447,11 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
                 .container_size => "size",
             } else f.name;
             try emitFieldAccess(e, name, f.optional_chain);
+            // A namespace constant (`Math.PI`, `Number.NaN`) is a call in the
+            // runtime package, which serves every name in the language's call
+            // shape (`Math.PI()` is also accepted); the property form is
+            // called so the value is the number, not the function.
+            if (f.builtin_const != null) try e.w("()");
         },
         .index => |i| {
             try emitReceiver(e, i.obj);
@@ -393,6 +467,10 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             // where every number is already a double.
             if (c.is_global_parse and c.args.len == 1 and std.mem.eql(u8, c.name, "Number") and (c.args[0].* == .num or c.args[0].* == .float)) {
                 return emitExpr(e, c.args[0]);
+            }
+            // `String(x)` of a `number` prints it as the native runtime does.
+            if (c.is_global_parse and c.args.len == 1 and std.mem.eql(u8, c.name, "String") and c.stringify_type != null and c.stringify_type.? == .f64) {
+                return emitFloatToString(e, c.args[0]);
             }
             // A call to a generic function names the specialization the checker
             // made for these type arguments; the template itself is never emitted.
@@ -466,4 +544,97 @@ test "operands keep their grouping and unary minus never fuses" {
     var pow: Expr = .{ .bin = .{ .op = 'P', .l = &neg_a, .r = &b } };
     try emitExpr(&e, &pow);
     try t.expectEqualStrings("(-a) ** b", e.out.items);
+}
+
+test "division is emitted by the checked type and string methods by their byte semantics" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var diag: @import("lumen_diag.zig").Diag = .{};
+    var program: ast.Program = .{ .stmts = &.{} };
+    var e: Emitter = .{ .arena = arena, .diag = &diag, .program = &program };
+    var a: Expr = .{ .var_ref = .{ .name = "a" } };
+    var b: Expr = .{ .var_ref = .{ .name = "b" } };
+    var c: Expr = .{ .var_ref = .{ .name = "c" } };
+    // `int / int` truncates through the runtime; `number / number` is `/`.
+    var int_div: Expr = .{ .bin = .{ .op = '/', .l = &a, .r = &b, .checked_type = .i32 } };
+    var scaled: Expr = .{ .bin = .{ .op = '*', .l = &int_div, .r = &c } };
+    try emitExpr(&e, &scaled);
+    try t.expectEqualStrings("__lang.divInt(a, b) * c", e.out.items);
+    e.out.clearRetainingCapacity();
+    var float_div: Expr = .{ .bin = .{ .op = '/', .l = &a, .r = &b, .checked_type = .f64 } };
+    try emitExpr(&e, &float_div);
+    try t.expectEqualStrings("a / b", e.out.items);
+    e.out.clearRetainingCapacity();
+    var rem: Expr = .{ .bin = .{ .op = '%', .l = &a, .r = &b, .checked_type = .i32 } };
+    try emitExpr(&e, &rem);
+    try t.expectEqualStrings("a % b", e.out.items);
+    // A byte-semantics method takes the receiver first; an identity one
+    // prints as written; through `?.` the receiver is guarded.
+    e.out.clearRetainingCapacity();
+    var s: Expr = .{ .var_ref = .{ .name = "s" } };
+    var i: Expr = .{ .num = 1 };
+    var args = [_]*Expr{&i};
+    var code: Expr = .{ .method_call = .{ .obj = &s, .name = "charCodeAt", .args = &args, .string_method = true, .array_result_type = .i32 } };
+    try emitExpr(&e, &code);
+    try t.expectEqualStrings("__lang.charCodeAt(s, 1)", e.out.items);
+    e.out.clearRetainingCapacity();
+    var slice: Expr = .{ .method_call = .{ .obj = &s, .name = "slice", .args = &args, .string_method = true, .array_result_type = .string } };
+    try emitExpr(&e, &slice);
+    try t.expectEqualStrings("s.slice(1)", e.out.items);
+    e.out.clearRetainingCapacity();
+    var opt_trim: Expr = .{ .method_call = .{ .obj = &s, .name = "trim", .args = &.{}, .string_method = true, .optional_chain = true } };
+    try emitExpr(&e, &opt_trim);
+    try t.expectEqualStrings("((__s) => __s == null ? null : __lang.trim(__s))(s)", e.out.items);
+    // A regex pattern is matched against bytes: its non-ASCII bytes are escaped.
+    e.out.clearRetainingCapacity();
+    var re: Expr = .{ .regex = .{ .source = "\xC3\xA9+", .flags = "g" } };
+    try emitExpr(&e, &re);
+    try t.expectEqualStrings("/\\xC3\\xA9+/g", e.out.items);
+}
+
+test "a number becomes text through __lang.fmt, and a literal past 2^53 warns once" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var diag: @import("lumen_diag.zig").Diag = .{};
+    var warnings: std.ArrayListUnmanaged(@import("lumen_diag.zig").Diag) = .empty;
+    var program: ast.Program = .{ .stmts = &.{} };
+    var e: Emitter = .{ .arena = arena, .diag = &diag, .program = &program, .warnings = &warnings };
+    var x: Expr = .{ .var_ref = .{ .name = "x" } };
+    var x_args = [_]*Expr{&x};
+    var str_f64: Expr = .{ .call = .{ .name = "String", .args = &x_args, .is_global_parse = true, .stringify_type = .f64 } };
+    try emitExpr(&e, &str_f64);
+    try t.expectEqualStrings("__lang.fmt(x)", e.out.items);
+    e.out.clearRetainingCapacity();
+    var str_i32: Expr = .{ .call = .{ .name = "String", .args = &x_args, .is_global_parse = true, .stringify_type = .i32 } };
+    try emitExpr(&e, &str_i32);
+    try t.expectEqualStrings("String(x)", e.out.items);
+    e.out.clearRetainingCapacity();
+    var parts = [_]ast.TemplatePart{ .{ .text = "v=" }, .{ .expr = &x, .expr_type = .f64 } };
+    var tpl: Expr = .{ .template = &parts };
+    try emitExpr(&e, &tpl);
+    try t.expectEqualStrings("`v=${__lang.fmt(x)}`", e.out.items);
+    e.out.clearRetainingCapacity();
+    var to_str: Expr = .{ .method_call = .{ .obj = &x, .name = "toString", .args = &.{}, .number_method = true, .array_elem_type = .f64 } };
+    try emitExpr(&e, &to_str);
+    try t.expectEqualStrings("__lang.fmt(x)", e.out.items);
+    // A namespace constant is read through its call, so it is a number.
+    e.out.clearRetainingCapacity();
+    var math: Expr = .{ .var_ref = .{ .name = "Math" } };
+    var pi: Expr = .{ .field = .{ .obj = &math, .name = "PI", .builtin_const = "3.141592653589793" } };
+    try emitExpr(&e, &pi);
+    try t.expectEqualStrings("Math.PI()", e.out.items);
+    // Two literals past 2^53: one warning.
+    e.out.clearRetainingCapacity();
+    var big: Expr = .{ .num = 9007199254740993 };
+    var small: Expr = .{ .num = 9007199254740992 };
+    try emitExpr(&e, &small);
+    try t.expectEqual(@as(usize, 0), warnings.items.len);
+    try emitExpr(&e, &big);
+    try emitExpr(&e, &big);
+    try t.expectEqual(@as(usize, 1), warnings.items.len);
+    try t.expect(std.mem.indexOf(u8, warnings.items[0].msg, "[W_I64_PRECISION]") != null);
 }

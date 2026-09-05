@@ -181,7 +181,19 @@ fn emitVarDeclInline(e: *Emitter, d: *const ast.VarDecl, with_keyword: bool) Com
     try emitExpr(e, d.init);
 }
 
+/// Whether a compound `/=` divides integers (spec 137), so it is written as
+/// `x = __lang.divInt(x, v)`: JavaScript's `/=` keeps the fraction.
+fn isIntDivAssign(op: []const u8, checked_type: ?types.Type) bool {
+    return std.mem.eql(u8, op, "/=") and (checked_type == null or checked_type.? != .f64);
+}
+
 fn emitAssignInline(e: *Emitter, a: *const ast.Assign) CompileError!void {
+    if (isIntDivAssign(a.op, a.checked_type)) {
+        try e.print("{s} = __lang.divInt({s}, ", .{ a.name, a.name });
+        try emitExpr(e, a.value);
+        try e.byte(')');
+        return;
+    }
     try e.print("{s} {s} ", .{ a.name, a.op });
     try emitExpr(e, a.value);
 }
@@ -359,6 +371,10 @@ pub fn emitStmt(e: *Emitter, s: *const ast.Stmt) CompileError!void {
         },
         .member_assign => |*m| {
             try e.pad();
+            // The target, written twice for an integer `/=`, as the native
+            // emitter writes it (the parser admits only a chain of fields and
+            // indexes here, `finishChainStmt`).
+            const start = e.out.items.len;
             if (m.obj) |obj| {
                 try emitExpr(e, obj);
             } else {
@@ -371,6 +387,13 @@ pub fn emitStmt(e: *Emitter, s: *const ast.Stmt) CompileError!void {
                 try e.byte('[');
                 try js.emitStrLit(e, m.field);
                 try e.byte(']');
+            }
+            if (isIntDivAssign(m.op, m.checked_type)) {
+                const target = try e.arena.dupe(u8, e.out.items[start..]);
+                try e.print(" = __lang.divInt({s}, ", .{target});
+                try emitExpr(e, m.value);
+                try e.w(");\n");
+                return;
             }
             try e.print(" {s} ", .{m.op});
             try emitExpr(e, m.value);

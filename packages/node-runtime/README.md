@@ -41,10 +41,16 @@ can be used from ordinary JavaScript too.
 A Lumen string is a sequence of bytes. The package represents it as a
 JavaScript string with one code unit per byte (Node's `latin1`) and
 converts at the boundary with `Buffer.from(s, "latin1")` on the way in and
-`.toString("latin1")` on the way out — never `utf8` (spec 505). Until the
-Node emitter lands, `LUMEN_STRINGS=utf16` switches the boundary to text so
-hand-written `.ts` modules with ordinary JavaScript strings run; spec 505
-removes the switch.
+`.toString("latin1")` on the way out — never `utf8` (spec 505). Generated
+code spells its literals as those bytes (`"\xC3\xA9"` for `"é"`), so
+`length`, `[i]`, `slice`, `indexOf`, `+` and `==` are JavaScript's own; the
+methods whose JavaScript namesakes differ on bytes (`charCodeAt` past the
+end, ASCII-only `toUpperCase`, `trim`, `localeCompare`, `repeat`,
+string-pattern `replace`) are `__lang.<name>(s, ...)` in `lib/lang.mjs`.
+`JSON.parse` takes bytes and answers bytes; the console decodes byte
+strings before printing them, wherever they sit in a value. A hand-written
+`.ts` module runs under the globals as long as its literals are ASCII,
+which is text and bytes alike.
 
 ## Not yet: blocking I/O
 

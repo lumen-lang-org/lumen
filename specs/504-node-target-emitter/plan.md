@@ -92,7 +92,7 @@ emitter's benefit, then confirmed on the 001-052 corpus walk.
 | `ternary.result_type`, `coalesce.result_type` (303, 421: both branches cast to `?T`) | erased |
 | `var_ref.unwrap`, `field.unwrap`, `non_null.unwraps` (narrowing `.?`) | erased |
 | `var_ref.builtin_const` (`NaN`, `Infinity`: Zig literal text) | the name itself |
-| `field.builtin_const` (`Math.PI`, `Number.EPSILON`: Zig literal text) | the member access; the runtime's overlay makes the constant read as a number |
+| `field.builtin_const` (`Math.PI`, `Number.EPSILON`: Zig literal text) | the member access called, `Math.PI()`: the runtime serves every name in the language's call shape, and a call yields the number itself where the bare property is the runtime's callable (spec 505 found `console.log(Number.NaN)` printing the function) |
 | `for_of.is_array_entries` / `is_array_keys`: the iterable rewritten to the bare array | `.entries()` / `.keys()` put back on the iterable |
 | `for_of.is_pair`, `is_tuple_pairs`, `value_binding` | `for (const [k, v] of ...)` |
 | `call.emit_name` naming a generic specialization (`mangledName`) | the specialization, since the template is never emitted; every other `emit_name` (461 parameter renames, `__lumen_N_` locals) is ignored, shadowing being legal |

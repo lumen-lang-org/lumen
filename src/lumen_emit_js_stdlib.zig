@@ -12,6 +12,69 @@
 const std = @import("std");
 const ast = @import("lumen_ast.zig");
 const types = @import("lumen_types.zig");
+const check_methods = @import("lumen_check_methods.zig");
+
+// ---------------------------------------------------------------------------
+// String methods (spec 505). A string value is a JavaScript string of bytes,
+// one code unit per byte, so a method that only indexes, searches, slices or
+// concatenates is JavaScript's own: the byte operation *is* the operation.
+// The ones below differ, and route through `__lang` (the runtime package's
+// `lib/lang.mjs`), which computes what the native runtime computes:
+//
+// - `charCodeAt`/`codePointAt`: the byte, or `-1` past the end (spec 101),
+//   where JavaScript answers `NaN`.
+// - `toUpperCase`/`toLowerCase`: ASCII only (spec 063); JavaScript would
+//   case-map the byte 0xE9 as `é`, and `ß` to two code units.
+// - `trim`/`trimStart`/`trimEnd`: space, tab, CR, LF only; JavaScript also
+//   strips 0xA0 and 0x85, which are bytes of `à` and `…`.
+// - `localeCompare`: byte order, -1/0/1 (spec 109); no locale.
+// - `repeat`: a negative count is an empty string, not a `RangeError`.
+// - `replace`/`replaceAll` with a string pattern: the replacement is text
+//   (`$&` is two characters) and an empty pattern matches nothing (spec 063);
+//   the regex forms stay JavaScript's.
+
+const StringLowering = struct { name: []const u8, helper: ?[]const u8 };
+
+/// Every method the checker accepts on a string (`string_method_names`) and
+/// its lowering: `null` prints the call as written, otherwise the `__lang`
+/// function that takes the receiver first.
+const string_methods = [_]StringLowering{
+    .{ .name = "charAt", .helper = null },
+    .{ .name = "at", .helper = null },
+    .{ .name = "charCodeAt", .helper = "charCodeAt" },
+    .{ .name = "codePointAt", .helper = "charCodeAt" },
+    .{ .name = "indexOf", .helper = null },
+    .{ .name = "lastIndexOf", .helper = null },
+    .{ .name = "localeCompare", .helper = "localeCompare" },
+    .{ .name = "includes", .helper = null },
+    .{ .name = "startsWith", .helper = null },
+    .{ .name = "endsWith", .helper = null },
+    .{ .name = "slice", .helper = null },
+    .{ .name = "substring", .helper = null },
+    .{ .name = "repeat", .helper = "repeat" },
+    .{ .name = "padStart", .helper = null },
+    .{ .name = "padEnd", .helper = null },
+    .{ .name = "replace", .helper = "replace" },
+    .{ .name = "replaceAll", .helper = "replaceAll" },
+    .{ .name = "toUpperCase", .helper = "toUpperCase" },
+    .{ .name = "toLowerCase", .helper = "toLowerCase" },
+    .{ .name = "trim", .helper = "trim" },
+    .{ .name = "trimStart", .helper = "trimStart" },
+    .{ .name = "trimEnd", .helper = "trimEnd" },
+    .{ .name = "split", .helper = null },
+    .{ .name = "concat", .helper = null },
+    .{ .name = "search", .helper = null },
+    .{ .name = "match", .helper = null },
+};
+
+/// The `__lang` helper a string method call routes through, or `null` when
+/// the JavaScript method computes the byte result itself. A regex-pattern
+/// `replace`/`replaceAll` is JavaScript's (`regex_arg`).
+pub fn stringMethodHelper(m: anytype) ?[]const u8 {
+    if (!m.string_method or m.regex_arg) return null;
+    for (string_methods) |sm| if (std.mem.eql(u8, sm.name, m.name)) return sm.helper;
+    return null;
+}
 
 /// Whether this method answers `undefined` for a missing value in JavaScript
 /// where Lumen's type is `T | null`, so the call must be followed by `?? null`.
@@ -86,4 +149,29 @@ test "the refusals name calls the checker accepts, and all of `net` (503 names.j
     // The rest of `http` and `child_process` is real in the runtime package.
     try t.expect(unsupportedStaticCall("http", "METHODS") == null);
     try t.expect(unsupportedStaticCall("child_process", "spawnSync") == null);
+}
+
+test "every string method the checker accepts has a node lowering" {
+    const t = std.testing;
+    for (check_methods.string_method_names) |name| {
+        var found = false;
+        for (string_methods) |sm| if (std.mem.eql(u8, sm.name, name)) {
+            found = true;
+        };
+        try t.expect(found);
+    }
+    try t.expectEqual(check_methods.string_method_names.len, string_methods.len);
+    var obj: ast.Expr = .{ .var_ref = .{ .name = "s" } };
+    const upper = ast.Expr{ .method_call = .{ .obj = &obj, .name = "toUpperCase", .args = &.{}, .string_method = true } };
+    try t.expectEqualStrings("toUpperCase", stringMethodHelper(upper.method_call).?);
+    const code = ast.Expr{ .method_call = .{ .obj = &obj, .name = "codePointAt", .args = &.{}, .string_method = true } };
+    try t.expectEqualStrings("charCodeAt", stringMethodHelper(code.method_call).?);
+    const slice = ast.Expr{ .method_call = .{ .obj = &obj, .name = "slice", .args = &.{}, .string_method = true } };
+    try t.expect(stringMethodHelper(slice.method_call) == null);
+    // The regex form of `replace` is JavaScript's; an array method of the
+    // same name is not a string method at all.
+    const re = ast.Expr{ .method_call = .{ .obj = &obj, .name = "replace", .args = &.{}, .string_method = true, .regex_arg = true } };
+    try t.expect(stringMethodHelper(re.method_call) == null);
+    const arr = ast.Expr{ .method_call = .{ .obj = &obj, .name = "at", .args = &.{}, .array_elem_type = .i32 } };
+    try t.expect(stringMethodHelper(arr.method_call) == null);
 }
