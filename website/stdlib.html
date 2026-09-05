@@ -397,8 +397,10 @@ console.log(emitter.listenerCount("greet")); // 1</code></pre>
   <table>
     <tr><th>API</th><th>Notes</th></tr>
     <tr><td><code>declare function name(args): T;</code></td><td>calls a C function directly (<code>extern function</code> also works)</td></tr>
-    <tr><td><code>// @link m</code> · <code>// @link ./shim.o</code></td><td>link a library or object</td></tr>
-    <tr><td>string &amp; scalar marshaling</td><td>string params/returns and numeric scalars cross the boundary</td></tr>
+    <tr><td><code>// @link m</code> · <code>// @link ./shim.o</code></td><td>link a library or object (native target)</td></tr>
+    <tr><td><code>// @link-node ./shim.mjs</code></td><td>on <code>--target node</code>, import the same <code>declare function</code>s from a JavaScript module instead (ignored by the native and wasm targets, as <code>// @link</code> is ignored on Node)</td></tr>
+    <tr><td>string &amp; scalar marshaling</td><td>string params/returns and numeric scalars cross the boundary; on Node a <code>string</code> is already a plain JavaScript string (byte-per-character), so the shim needs no conversion to receive it and only decodes with <code>Buffer.from(s, "latin1").toString()</code> if it wants real text</td></tr>
+    <tr><td><code>Ref&lt;T&gt;</code> argument</td><td>native and wasm only &mdash; not supported on Node (no JavaScript representation for a C out-param)</td></tr>
   </table>
 
   <h4 id="errors">Errors</h4>

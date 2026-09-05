@@ -325,7 +325,9 @@ pub fn emitStmt(e: *Emitter, s: *const ast.Stmt) CompileError!void {
             try emitBlock(e, t.body);
             try e.w(");\n");
         },
-        .extern_decl => |*d| return e.unsupported(d.line, d.col, "`extern function`", "507"),
+        // Spec 507: bound by one `import { ... }` from the file's
+        // `// @link-node` module, emitted once per module in `emitProgram`.
+        .extern_decl => {},
         .class_decl => |*c| try js_class.emitClass(e, c),
         .function_decl => |*f| try emitFunction(e, f),
         .var_decl => |*d| {

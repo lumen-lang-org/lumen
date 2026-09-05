@@ -1473,6 +1473,10 @@ pub const CompileOptions = struct {
     entry_file: []const u8 = "",
     module_paths: []const @import("lumen_diag.zig").ModulePath = &.{},
     module_edges: []const @import("lumen_diag.zig").ModuleEdge = &.{},
+    // `// @link-node <module.mjs>` pragmas (spec 507), one entry per pragma
+    // line found, keyed by the source file that wrote it. Empty for the
+    // other targets and for a node build with no such pragma.
+    link_node: []const @import("lumen_diag.zig").LinkNodeModule = &.{},
     // Threaded down from the CLI's `--wasm` flag (spec 049): wasm32-wasi has
     // no real OS threads, and the CLI's own libxev-wiring gate hard-fails any
     // wasm build whose generated source textually contains `@import("xev")`

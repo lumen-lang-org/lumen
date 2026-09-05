@@ -546,7 +546,12 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
         },
         .call => |c| {
             for (c.ref_args) |is_ref| if (is_ref) return e.unsupported(e.cur_line, e.cur_col, "a `Ref<T>` argument", "507");
-            if (c.ffi_string_return or c.ffi_string_args.len > 0) return e.unsupported(e.cur_line, e.cur_col, "a call to an `extern function`", "507");
+            // A call to an `extern function` (spec 507): `ffi_string_args`/
+            // `ffi_string_return` mark which native emitter marshals a
+            // Lumen `string` across the C ABI (`emitExpr`'s `.call` in
+            // `lumen_emit.zig`); on Node a Lumen string is already a plain
+            // JavaScript string (spec 505), so the call needs no such glue
+            // and falls through to the ordinary call below.
             // The checker's numeric promotion wraps an `int` operand in
             // `Number(...)` (spec 255); on a literal that is noise in JavaScript,
             // where every number is already a double.

@@ -6,11 +6,11 @@
 #
 # Walked: every specs/*/examples/valid program up to 500 (T009, T015).
 # Excluded, with the reason:
-#   009-ffi/examples/valid/ffi-math.ts -- 507: `extern function` (E_TARGET_UNSUPPORTED)
+#   009-ffi/examples/valid/ffi-math.ts -- 507: `declare function` with no // @link-node (E_FFI_NODE_LINK)
 #   018-class-inheritance-members/examples/valid/inheritance.ts -- native build fails before this spec (tasks.md T023b); not eligible until it runs natively
 #   024-ref-params/examples/valid/record-by-ref.ts -- 507: `Ref<T>` argument (E_TARGET_UNSUPPORTED)
 #   024-ref-params/examples/valid/scalar-out-param.ts -- 507: `Ref<T>` argument (E_TARGET_UNSUPPORTED)
-#   025-declare-ffi/examples/valid/declare-math.ts -- 507: `extern function` (E_TARGET_UNSUPPORTED)
+#   025-declare-ffi/examples/valid/declare-math.ts -- 507: `declare function` with no // @link-node (E_FFI_NODE_LINK)
 #   450-persistent-subprocess/examples/valid/roundtrip-run.ts -- 508: `child_process.spawn` (E_TARGET_UNSUPPORTED)
 #   450-persistent-subprocess/examples/valid/roundtrip.ts -- 508: `child_process.spawn` (E_TARGET_UNSUPPORTED)
 #   452-streaming-http/examples/valid/both-forms.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
@@ -27,7 +27,7 @@
 #   459-http-request-headers/examples/valid/read-request-headers.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
 #   459-http-request-headers/examples/valid/request-headers-map-methods.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
 #   459-http-request-headers/examples/valid/streaming-handler-headers.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
-#   461-parameter-shadowing/examples/valid/extern-shadowing-param-main.ts -- 507: `extern function` (E_TARGET_UNSUPPORTED)
+#   461-parameter-shadowing/examples/valid/extern-shadowing-param-main.ts -- 507: `declare function` with no // @link-node (E_FFI_NODE_LINK)
 #   461-parameter-shadowing/examples/valid/ref-shadowing-param-main.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
 #   468-thread-safe-arena/examples/valid/worker-error-isolation.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   468-thread-safe-arena/examples/valid/worker-random-independent.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)

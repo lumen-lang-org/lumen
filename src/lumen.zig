@@ -2214,11 +2214,12 @@ fn nodeModulePaths(arena: std.mem.Allocator, io: std.Io, entry: []const u8, expa
 
 /// Writes the node target's output (spec 504): `<out>/<stem>.mjs` (the entry:
 /// the runtime's globals, then the program), `<out>/modules/<path>.mjs` (one
-/// per source module), `<out>/package.json` (`"type": "module"`), and
-/// `<out>/node_modules/@lumen-lang/node`, a link to the runtime package so the
-/// entry's bare `@lumen-lang/node/globals` import resolves the way Node
-/// resolves any package.
-fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js: compiler.JsOutput, node: NodeSpec, err: *std.Io.Writer) !u8 {
+/// per source module), `<out>/modules/link/<name>.mjs` (one per `//
+/// @link-node` shim, spec 507), `<out>/package.json` (`"type": "module"`),
+/// and `<out>/node_modules/@lumen-lang/node`, a link to the runtime package
+/// so the entry's bare `@lumen-lang/node/globals` import resolves the way
+/// Node resolves any package.
+fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js: compiler.JsOutput, node: NodeSpec, link_node: []const compiler.LinkNodeModule, err: *std.Io.Writer) !u8 {
     const base = std.fs.path.stem(path);
     const runtime = findNodeRuntime(arena, io, node.runtime_dir) orelse {
         if (node.runtime_dir) |dir| {
@@ -2239,6 +2240,16 @@ fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js: c
     var files: std.ArrayListUnmanaged(struct { rel: []const u8, data: []const u8 }) = .empty;
     try files.append(arena, .{ .rel = "package.json", .data = "{ \"type\": \"module\" }\n" });
     for (js.modules) |m| try files.append(arena, .{ .rel = try std.fmt.allocPrint(arena, "modules/{s}", .{m.out}), .data = m.text });
+    // `// @link-node` shims (spec 507): copied verbatim, so a program's own
+    // JavaScript implementation of its `declare function`s ships beside the
+    // generated modules that import it.
+    for (link_node) |ln| {
+        const data = std.Io.Dir.cwd().readFileAlloc(io, ln.disk_path, arena, .limited(16 * 1024 * 1024)) catch {
+            try err.print("{s}: error: cannot read // @link-node module {s}\n", .{ path, ln.disk_path });
+            return 2;
+        };
+        try files.append(arena, .{ .rel = try std.fmt.allocPrint(arena, "modules/{s}", .{ln.out}), .data = data });
+    }
     // The program is loaded with a dynamic import, after the globals have
     // finished installing: the runtime package has a top-level `await` in
     // its graph, and two static imports of an entry file may evaluate a
@@ -2703,6 +2714,43 @@ fn resolveLinkPath(arena: std.mem.Allocator, token: []const u8, line_no: u32) ![
     const dir = std.fs.path.dirname(origin) orelse return token;
     if (dir.len == 0) return token;
     return try std.fs.path.join(arena, &.{ dir, token });
+}
+
+/// The source file that wrote line `line_no`, by `g_line_map` (import
+/// inlining's origins); `entry` when there is no map, as `resolveLinkPath`
+/// falls back too.
+fn originFileForLine(line_no: u32, entry: []const u8) []const u8 {
+    if (line_no == 0 or line_no - 1 >= g_line_map.len) return entry;
+    return g_line_map[line_no - 1].file;
+}
+
+/// `// @link-node <module.mjs>` pragmas (spec 507): the Node analogue of
+/// `// @link`, one entry per pragma line, resolved the same way
+/// (`resolveLinkPath`) and bucketed by the file that wrote it -- the JS
+/// emitter imports a file's `declare function`s from its entry's `disk_path`
+/// (via `out`, the copy's path under the output's `modules/`), and
+/// `writeNodeOutput` copies `disk_path` there. `out` flattens to the shim's
+/// basename under `link/`; two different shims sharing a basename in
+/// different directories collide, same as two `@link` libraries would if the
+/// linker saw them by basename alone.
+fn collectLinkNodeModules(arena: std.mem.Allocator, source: []const u8, entry: []const u8) ![]compiler.LinkNodeModule {
+    const marker = "// @link-node ";
+    var out: std.ArrayListUnmanaged(compiler.LinkNodeModule) = .empty;
+    var lines = std.mem.splitScalar(u8, source, '\n');
+    var line_no: u32 = 0;
+    while (lines.next()) |line| {
+        line_no += 1;
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (!std.mem.startsWith(u8, trimmed, marker)) continue;
+        const token = std.mem.trim(u8, trimmed[marker.len..], " \t");
+        if (token.len == 0) continue;
+        try out.append(arena, .{
+            .file = originFileForLine(line_no, entry),
+            .disk_path = try resolveLinkPath(arena, token, line_no),
+            .out = try std.fmt.allocPrint(arena, "link/{s}", .{std.fs.path.basename(token)}),
+        });
+    }
+    return out.items;
 }
 
 /// The path an `embed(...)` call names, as the compiler should open it.
@@ -3332,6 +3380,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         else => return e,
     };
     var warnings: std.ArrayListUnmanaged(compiler.Diag) = .empty;
+    const link_node = if (out == .node) try collectLinkNodeModules(arena, source, path) else &.{};
     const options: compiler.CompileOptions = .{
         .runtime_locations = mode.runtimeLocations(),
         .target = switch (out) {
@@ -3346,6 +3395,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .entry_file = path,
         .module_paths = if (out == .node) try nodeModulePaths(arena, io, path, expanded) else &.{},
         .module_edges = expanded.edges,
+        .link_node = link_node,
     };
 
     // The node target (spec 504): the same front end, then the JavaScript
@@ -3363,7 +3413,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             try err.print("{s}: no errors\n", .{path});
             return 0;
         }
-        const code = try writeNodeOutput(arena, io, path, js_src, node, err);
+        const code = try writeNodeOutput(arena, io, path, js_src, node, link_node, err);
         if (code == 0 and action == .run_test) return try runNodeTests(arena, io, path, node, err);
         if (code == 0 and action != .build_quiet) {
             const elapsed = compile_start.durationTo(std.Io.Clock.Timestamp.now(io, .awake));

@@ -1,3 +1,3 @@
-// FFI is spec 507's on the node target: refused at compile time, by position.
+// Spec 507: refused at compile time (E_FFI_NODE_LINK) with no `// @link-node` in this file.
 extern function abs(x: int): int;
 console.log(abs(-1));

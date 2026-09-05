@@ -46,6 +46,27 @@ pub const Emitter = struct {
     /// is a JavaScript number here, so the first literal past 2^53 says so
     /// and the rest would only repeat it.
     i64_warned: bool = false,
+    /// `// @link-node <module.mjs>` pragmas (spec 507), one per source file
+    /// that wrote one.
+    link_node: []const diag_mod.LinkNodeModule = &.{},
+
+    /// The `// @link-node` pragma the file `file` wrote, if any.
+    pub fn linkNodeFor(self: *const Emitter, file: []const u8) ?diag_mod.LinkNodeModule {
+        for (self.link_node) |ln| if (std.mem.eql(u8, ln.file, file)) return ln;
+        return null;
+    }
+
+    /// FR-002: a `declare function` with no `@link-node` in its file. Unlike
+    /// `unsupported` this names no future spec -- the fix is in the user's
+    /// program, not the compiler.
+    pub fn ffiLinkMissing(self: *Emitter, line_no: u32, col: u32, name: []const u8) CompileError {
+        self.diag.* = .{
+            .line = line_no,
+            .col = col,
+            .msg = std.fmt.allocPrint(self.arena, "declare function {s} has no JavaScript implementation: add // @link-node <module.mjs> exporting {s} [E_FFI_NODE_LINK]", .{ name, name }) catch return error.OutOfMemory,
+        };
+        return error.ParseError;
+    }
 
     /// Records a warning at the current statement's position.
     pub fn warn(self: *Emitter, msg: []const u8) void {
@@ -520,8 +541,8 @@ fn stmtExported(s: *const ast.Stmt, exports: *const std.StringHashMapUnmanaged(v
 }
 
 /// The program as ECMAScript modules, one per source file.
-pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: *diag_mod.Diag, warnings: ?*std.ArrayListUnmanaged(diag_mod.Diag), entry: []const u8, line_map: []const diag_mod.LineOrigin, module_paths: []const diag_mod.ModulePath, module_edges: []const diag_mod.ModuleEdge) CompileError!Output {
-    var e: Emitter = .{ .arena = arena, .diag = diag, .program = program, .warnings = warnings };
+pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: *diag_mod.Diag, warnings: ?*std.ArrayListUnmanaged(diag_mod.Diag), entry: []const u8, line_map: []const diag_mod.LineOrigin, module_paths: []const diag_mod.ModulePath, module_edges: []const diag_mod.ModuleEdge, link_node: []const diag_mod.LinkNodeModule) CompileError!Output {
+    var e: Emitter = .{ .arena = arena, .diag = diag, .program = program, .warnings = warnings, .link_node = link_node };
 
     // Modules in the order the front end inlined them (dependencies first),
     // each with its statements in source order.
@@ -588,6 +609,29 @@ pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: 
             if (dep == m or imported.get(dep.file) != null) continue;
             if (!importsAnything(m, dep)) continue;
             try emitImport(&e, m, dep);
+        }
+        // `declare function`s this module wrote (spec 507): bound by one
+        // `import { ... } from "<shim>"` from the file's `// @link-node`
+        // module, in declaration order. `E_FFI_NODE_LINK` when the file
+        // declared one but wrote no `@link-node` pragma (FR-002).
+        var extern_names: std.ArrayListUnmanaged([]const u8) = .empty;
+        var first_extern: ?*const ast.ExternDecl = null;
+        for (m.stmts.items) |s| if (s.* == .extern_decl) {
+            if (first_extern == null) first_extern = &s.extern_decl;
+            extern_names.append(arena, s.extern_decl.name) catch return error.OutOfMemory;
+        };
+        if (extern_names.items.len > 0) {
+            const ln = e.linkNodeFor(m.file) orelse {
+                const d = first_extern.?;
+                return e.ffiLinkMissing(d.line, d.col, d.name);
+            };
+            const spec = try relativeSpecifier(arena, m.out, ln.out);
+            try e.w("import { ");
+            for (extern_names.items, 0..) |name, i| {
+                if (i > 0) try e.w(", ");
+                try e.w(name);
+            }
+            try e.print(" }} from \"{s}\";\n", .{spec});
         }
         for (m.stmts.items) |s| {
             if (stmtExported(s, &m.exports)) try e.w("export ");

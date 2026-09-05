@@ -1,6 +1,7 @@
 # Spec 507: FFI on the Node target — `// @link-node`
 
-**Status**: Draft | **Parent**: 501, slice 6 | **Depends on**: 504
+**Status**: Implemented (SC-001; SC-002 deferred, needs Joule — see
+tasks.md T006) | **Parent**: 501, slice 6 | **Depends on**: 504
 
 ## Goal
 

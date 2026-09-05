@@ -18,3 +18,11 @@ pub const ModuleEdge = struct { from: []const u8, to: []const u8 };
 /// Where one source module's JavaScript lands: `file` as `LineOrigin` spells
 /// it, `out` the path under the output's `modules/` directory.
 pub const ModulePath = struct { file: []const u8, out: []const u8 };
+
+/// A `// @link-node <module.mjs>` pragma on the Node target (spec 507):
+/// `file` is the source file that wrote the pragma (as `LineOrigin` spells
+/// it), `disk_path` is the shim's resolved location for the compiler to read
+/// and copy, and `out` is where the copy lands under the output's `modules/`
+/// directory (`link/<basename>`), which the JS emitter also uses to compute
+/// the import specifier.
+pub const LinkNodeModule = struct { file: []const u8, disk_path: []const u8, out: []const u8 };
