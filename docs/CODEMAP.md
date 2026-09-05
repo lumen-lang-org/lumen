@@ -87,9 +87,9 @@ collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:338, emitSuperCopie
 The JavaScript backend (spec 504): the checked AST -> ECMAScript module text
 CompileError:28, Emitter:32, emitStrLit:160, emitTemplateText:174, emitRegexSource:191, isIdentStart:201, isIdentChar:205, isPlainIdent:210, emitPropertyKey:217, emitFloat:227, isGenericFunction:236, EmittedModule:253, Output:255, emitProgram:544
 
-## src/lumen_emit_js_class.zig (159 lines)
+## src/lumen_emit_js_class.zig (198 lines)
 Class and enum codegen for the node target.
-emitEnum:37, emitClass:84
+emitEnum:37, emitClass:96
 
 ## src/lumen_emit_js_expr.zig (823 lines)
 Expression codegen for the node target: the `Expr`-union counterpart of

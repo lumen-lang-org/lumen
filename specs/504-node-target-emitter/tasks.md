@@ -113,7 +113,8 @@
   empty, `node-run` green for `corpus.txt`.
 - [x] T021 Website: a "Run on Node" section in `website/learn.html`;
   `stamp.py` (no asset changed, so nothing to restamp).
-- [ ] T022 `sh tools/codemap.sh`; commit.
+- [x] T022 `sh tools/codemap.sh`; commit. (Regenerated after T014 moved
+  `emitClass`; nothing else in the map changed.)
 
 ## Discovered while walking the corpus
 
