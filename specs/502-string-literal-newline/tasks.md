@@ -32,6 +32,16 @@
   `build.zig`'s `test_roots`: only listed files have their tests run, and the
   new parser and emitter tests would otherwise be silently skipped.
 
+- [x] T011 A `"..."`/`'...'` literal inside a template hole (`${...}`) must
+  warn too (FR-001; round-1 review). The cause: `parseTemplateParts` parses
+  each hole with a fresh sub-`Parser` and kept only its AST, so the
+  sub-parser's `warnings` never reached the outer list. Now the hole's
+  warnings are adopted with their positions moved from hole coordinates to
+  the source (nested templates compose), the backtick position is threaded
+  in for that, and `examples/valid/hole.ts` pins both the output and the
+  translated position (`3:20`). Parser unit test covers a hole on the
+  backtick's line, on a later line, and a template nested in a hole.
+
 ## Phase 3: Docs
 
 - [x] T008 Add the warning to the diagnostics list on the website

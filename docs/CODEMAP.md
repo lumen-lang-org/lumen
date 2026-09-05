@@ -103,7 +103,7 @@ Regex:19, Tok:21, Lexer:35
 Optimization passes over the AST -- the "allocate less" passes.
 collectStrConcat:35, collectDestPassable:111, markBuilderParts:147, markAccumulators:519, exprUsesName:590, bodyUsesName:657
 
-## src/lumen_parser.zig (1227 lines)
+## src/lumen_parser.zig (1251 lines)
 The parser -- stage 2 of the compiler.
 Parser:34
 
@@ -111,9 +111,9 @@ Parser:34
 Declaration parsing: `type`/`interface`/`enum`/`extern`/`function`/`class`,
 parseDecorators:61, parseTypeDecl:119, parseOptionalMember:287, parseExternDecl:308, parseInterfaceDecl:356, parseEnumDecl:440, parseFunctionDecl:480, parseParamList:540, parseTypeParams:590, parseTypeArgs:654, looksLikeTypeArgs:670, parseClassDecl:708
 
-## src/lumen_parser_expr.zig (991 lines)
+## src/lumen_parser_expr.zig (1027 lines)
 Type-annotation and expression parsing.
-parseTypeMember:27, consumeTypeArgClose:109, parseFunctionType:140, parseTupleType:166, parseTypeAnnotation:190, parseExpr:288, parseSpreadOrExpr:294, parseTemplateParts:305, parseTernary:341, parseCoalesce:350, isCmp:359, isComparison:362, parseOr:372, parseAnd:382, parseBitOr:392, parseBitXor:401, parseBitAnd:410, parseCmp:421, parseRelational:431, parseShift:452, parseAdd:462, parseMul:472, parseExp:482, parseUnary:491, parsePostfix:542, parsePostfixFrom:545, looksLikeArrow:659, parseArrow:687, parseDeferHelperBodyStmt:730, parsePrimary:755, isCompoundAssignOp:952, parseAssignmentTail:961, parsePrefixUpdate:984
+parseTypeMember:27, consumeTypeArgClose:109, parseFunctionType:140, parseTupleType:166, parseTypeAnnotation:190, parseExpr:288, parseSpreadOrExpr:294, parseTemplateParts:307, parseTernary:375, parseCoalesce:384, isCmp:393, isComparison:396, parseOr:406, parseAnd:416, parseBitOr:426, parseBitXor:435, parseBitAnd:444, parseCmp:455, parseRelational:465, parseShift:486, parseAdd:496, parseMul:506, parseExp:516, parseUnary:525, parsePostfix:576, parsePostfixFrom:579, looksLikeArrow:693, parseArrow:721, parseDeferHelperBodyStmt:764, parsePrimary:789, isCompoundAssignOp:988, parseAssignmentTail:997, parsePrefixUpdate:1020
 
 ## src/lumen_runtime_fs.zig (1229 lines)
 Runtime prelude codegen for the filesystem surface: async fs (libxev),

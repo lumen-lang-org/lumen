@@ -23,7 +23,8 @@ Nothing in the language relies on the leniency. `"\n"` spells the same value.
 
 Out of scope: making it an error (a later spec, once the warning has had a
 release to surface), template literals (a raw newline inside a template is
-valid in both languages and stays silent).
+valid in both languages and stays silent). A `"..."`/`'...'` literal inside a
+template's `${...}` hole is an ordinary string literal and is in scope.
 
 ## Requirements
 

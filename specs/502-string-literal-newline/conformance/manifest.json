@@ -32,6 +32,22 @@
       "expect": {
         "noDiagnostic": "W_STRING_NEWLINE"
       }
+    },
+    {
+      "id": "hole.valid.runs",
+      "source": "../examples/valid/hole.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "len 3 and 3"
+      }
+    },
+    {
+      "id": "hole.warning.reported",
+      "source": "../examples/valid/hole.ts",
+      "phase": "compile-warn",
+      "expect": {
+        "diagnostic": ":3:20: warning: a string literal contains a raw line break"
+      }
     }
   ]
 }

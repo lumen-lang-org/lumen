@@ -301,8 +301,10 @@ pub fn parseSpreadOrExpr(self: *Parser) CompileError!*Expr {
 }
 
 /// Splits a template literal's raw inner text into literal-text and `${expr}`
-/// parts, sub-parsing each hole as an expression.
-pub fn parseTemplateParts(self: *Parser, raw: []const u8) CompileError![]ast.TemplatePart {
+/// parts, sub-parsing each hole as an expression. `tmpl_line`/`tmpl_col` locate
+/// the opening backtick (`raw[0]` is the byte after it), so diagnostics the
+/// hole sub-parsers raise can be placed in the outer source.
+pub fn parseTemplateParts(self: *Parser, raw: []const u8, tmpl_line: u32, tmpl_col: u32) CompileError![]ast.TemplatePart {
     var parts: std.ArrayListUnmanaged(ast.TemplatePart) = .empty;
     var i: usize = 0;
     var text_start: usize = 0;
@@ -329,14 +331,46 @@ pub fn parseTemplateParts(self: *Parser, raw: []const u8) CompileError![]ast.Tem
             if (i < raw.len) i += 1; // skip closing '}'
             text_start = i;
             var sub = try Parser.init(self.arena, hole);
-            const e = try sub.parseExpr();
-            try parts.append(self.arena, .{ .expr = e });
+            const parsed = sub.parseExpr();
+            // A `"..."` literal inside the hole warns like one anywhere else
+            // (spec 502, FR-001): the sub-parser's warnings are adopted, with
+            // their hole-relative positions moved onto the outer source, and
+            // whether or not the hole parsed, as the compiler does for the
+            // whole program.
+            try adoptHoleWarnings(self, &sub, raw, hole_start, tmpl_line, tmpl_col);
+            try parts.append(self.arena, .{ .expr = try parsed });
         } else {
             i += 1;
         }
     }
     if (raw.len > text_start) try parts.append(self.arena, .{ .text = raw[text_start..] });
     return parts.toOwnedSlice(self.arena);
+}
+
+/// Appends the warnings a template-hole sub-parser raised to the outer
+/// parser's list, translating each position from the hole's own coordinates
+/// (line 1, column 1 is the hole's first byte) to the outer source's. The hole
+/// is `raw[hole_start..]`, and `raw[0]` is the byte after the opening backtick
+/// at (`tmpl_line`, `tmpl_col`). Nested templates compose: an inner hole's
+/// warning is first moved onto its enclosing hole, then onto the source.
+fn adoptHoleWarnings(self: *Parser, sub: *const Parser, raw: []const u8, hole_start: usize, tmpl_line: u32, tmpl_col: u32) CompileError!void {
+    if (sub.warnings.items.len == 0) return;
+    // Source line and column of the hole's first byte.
+    const prefix = raw[0..hole_start];
+    var line = tmpl_line;
+    var col: u32 = tmpl_col + 1 + @as(u32, @intCast(hole_start));
+    if (std.mem.lastIndexOfScalar(u8, prefix, '\n')) |nl| {
+        line += @intCast(std.mem.count(u8, prefix, "\n"));
+        col = @intCast(hole_start - nl);
+    }
+    for (sub.warnings.items) |w| {
+        try self.warnings.append(self.arena, .{
+            .line = line + (w.line - 1),
+            .col = if (w.line == 1) col + (w.col - 1) else w.col,
+            .msg = w.msg,
+            .extra = w.extra,
+        });
+    }
 }
 pub fn parseTernary(self: *Parser) CompileError!*Expr {
     const cond = try self.parseCoalesce();
@@ -814,8 +848,10 @@ pub fn parsePrimary(self: *Parser) CompileError!*Expr {
     }
     if (self.cur == .template) {
         const raw = self.cur.template;
+        const line = self.cur_line;
+        const col = self.cur_col;
         try self.advance();
-        return self.node(.{ .template = try self.parseTemplateParts(raw) });
+        return self.node(.{ .template = try self.parseTemplateParts(raw, line, col) });
     }
     if (self.cur == .str) {
         const s = self.cur.str;

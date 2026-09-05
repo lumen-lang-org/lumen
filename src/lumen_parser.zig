@@ -1225,3 +1225,27 @@ test "W_STRING_NEWLINE: once per literal, on the opening quote, never for templa
     try t.expectEqual(@as(u32, 3), p.warnings.items[1].line);
     try t.expectEqual(@as(u32, 9), p.warnings.items[1].col);
 }
+
+test "W_STRING_NEWLINE: a literal inside a template hole warns at its source position (spec 502)" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    // Line 1: the hole is on the backtick's own line, so the column is offset
+    // by the template prefix. Lines 2-3: the hole starts on the template's
+    // second line, so the column is the hole's own. Line 4: a template nested
+    // in a hole — the inner hole's warning is moved twice.
+    const src = "console.log(`p ${\"a\nb\"} s`);\nlet t = `x\n  ${'c\nd'}`;\nlet n = `${`${\"e\nf\"}`}`;\n";
+    var p = try Parser.init(arena, src);
+    _ = try p.parseProgram();
+    try t.expectEqual(@as(usize, 3), p.warnings.items.len);
+    try t.expectEqual(@as(u32, 1), p.warnings.items[0].line);
+    try t.expectEqual(@as(u32, 18), p.warnings.items[0].col);
+    try t.expect(std.mem.indexOf(u8, p.warnings.items[0].msg, "[W_STRING_NEWLINE]") != null);
+    // The first literal spans lines 1-2, so `let t` is source line 3 and its
+    // hole opens on line 4; `let n` is line 6.
+    try t.expectEqual(@as(u32, 4), p.warnings.items[1].line);
+    try t.expectEqual(@as(u32, 5), p.warnings.items[1].col);
+    try t.expectEqual(@as(u32, 6), p.warnings.items[2].line);
+    try t.expectEqual(@as(u32, 15), p.warnings.items[2].col);
+}
