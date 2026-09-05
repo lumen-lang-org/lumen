@@ -25,3 +25,4 @@ zig-pkg/
 # Compiled examples left beside their sources by `lumen run`
 specs/*/examples/valid/*
 !specs/*/examples/valid/*.*
+.corpus-*.log*

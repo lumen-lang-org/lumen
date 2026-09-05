@@ -32,7 +32,7 @@ const ENV = `Environment: run \`cd ${LUMEN} && sh tools/node-target-env.sh\` onc
 
 const RULES = `Read ${LUMEN}/CLAUDE.md first and obey "Fix the Cause, Not the Symptom": never work around a compiler limitation in a package or example; never migrate fixtures to make a suite pass; never skip or weaken a test. Read docs/CODEMAP.md before grepping. The spec folder's spec.md is the contract, plan.md the map, tasks.md the checklist: tick tasks in tasks.md as you complete them (edit the file), and add a task if you discover work the list is missing.`
 
-const GATE = `The gate is, from ${LUMEN}: \`zig build\` (compiler builds), \`zig build test\` (unit tests), the spec's own manifest via the conformance runner (\`R=$(find .zig-cache -type f -name lumen-conformance | head -1); $R specs/<spec>/conformance/manifest.json zig-out/bin/lumen\` — build it with \`zig build conformance\` once if absent), and \`zig fmt --check src tools build.zig\`. \`zig build conformance\` (the whole corpus, ~30 min) runs at the end of each spec, not each round.`
+const GATE = `The gate is, from ${LUMEN}: \`zig build\` (compiler builds), \`zig build test\` (unit tests), the spec's own manifest via the conformance runner (\`R=$(find .zig-cache -type f -name lumen-conformance | head -1); $R specs/<spec>/conformance/manifest.json zig-out/bin/lumen\` — build it with \`zig build conformance\` once if absent), and \`zig fmt --check src tools build.zig\`. Never run \`zig build conformance\` (the whole corpus) yourself: it takes hours here and the orchestrator runs it after each spec; if a task in tasks.md asks for it, tick the task once the orchestrator's sweep is green (the STATUS step records that) and say so in your notes. Any other long sweep a task needs (for example running every example program) must be started detached with nohup writing to a log and a .done marker under the scratchpad, and resumed from that log in later rounds, so no single command waits more than ten minutes.`
 
 const IMPL_SCHEMA = {
   type: 'object',
@@ -86,6 +86,29 @@ if (!pre || !pre.ok) {
   return { stopped: 'preflight', problems: pre ? pre.problems : ['preflight agent died'] }
 }
 
+// ---- the whole-corpus sweep, started detached and waited on in bounded steps ----
+const CORPUS_SCHEMA = {
+  type: 'object',
+  properties: {
+    state: { type: 'string', enum: ['running', 'done'] },
+    pass: { type: 'boolean' },
+    failures: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['state', 'pass', 'failures'],
+}
+async function corpusCheck(tag, ph) {
+  const LOG = `${LUMEN}/.corpus-${tag}.log`
+  const cmd = FULL_CORPUS ? '`zig build conformance`' : QUICK_CORPUS
+  await agent(`${ENV}\n\nStart the conformance sweep for tag ${tag} detached, unless it already ran or is running: if ${LOG}.done exists do nothing; else if a process is already writing ${LOG} (pgrep -f "zig build conformance" or the runner) do nothing; else run from ${LUMEN}: \`nohup sh -c '${cmd.replace(/`/g, '')} > ${LOG} 2>&1; echo exit=$? > ${LOG}.done' > /dev/null 2>&1 &\` and return immediately. Also, if tools/emit_snapshot.sh exists, run its diff now (it is fast) and record the result in ${LOG}.snapshot. Do not change tracked files.`, { model: MODEL, label: `corpus-start:${tag}`, phase: ph, effort: 'low' })
+  for (let i = 1; i <= 24; i++) {
+    const r = await agent(`${ENV}\n\nWait for the conformance sweep whose log is ${LOG} and whose completion marker is ${LOG}.done. Wait with foreground commands only, each at most ten minutes, for example \`timeout 600 sh -c 'while [ ! -e ${LOG}.done ]; do sleep 20; done'\` (that sleep is inside a timeout-bounded shell, which is allowed), up to five times; never start the sweep yourself. If the marker appears: read the log, list every line starting with FAIL, compare with ${LUMEN}/specs/501-node-runtime/corpus_baseline.txt, and report state=done with pass=true iff no FAIL line is absent from the baseline (include ${LOG}.snapshot's verdict if that file exists: a non-empty snapshot diff is a failure), failures = the new FAIL lines verbatim plus the snapshot diff summary. If after your waits the marker is still absent, report state=running with pass=false and failures=[] and the last 'conformance:' line of the log so progress is visible. Do not change files.`, { model: MODEL, label: `corpus-wait:${tag}#${i}`, phase: ph, effort: 'low', schema: CORPUS_SCHEMA })
+    if (!r) continue
+    if (r.state === 'done') return { pass: r.pass, failures: r.failures }
+    log(`corpus ${tag}: still running (${i}); ${r.failures.join(' ') || ''}`)
+  }
+  return { pass: false, failures: ['corpus sweep did not finish within the wait budget'] }
+}
+
 // ---- implement, spec by spec ----------------------------------------------
 phase('Implement')
 const results = []
@@ -124,8 +147,10 @@ for (const spec of SPECS) {
   }
   if (!outcome.done && !outcome.blocked) outcome.blocked = `not finished after ${MAX_ROUNDS} rounds`
 
-  // full corpus once per spec, so a regression is caught before the next spec builds on it
-  const full = await agent(`${ENV}\n\nIn ${LUMEN} run ${FULL_CORPUS ? '\`zig build conformance\` (hours in a small container; run it in the background with nohup, poll the log, use a long timeout)' : QUICK_CORPUS} and, if tools/emit_snapshot.sh exists, the emit snapshot diff. Compare the FAIL lines with ${LUMEN}/specs/501-node-runtime/corpus_baseline.txt: pass means no FAIL line that is absent from the baseline (a case in the baseline may fail; a case fixed since is fine). Report the new failures verbatim. Do not change files.`, { model: MODEL, label: `corpus:${spec.slice(0, 3)}`, phase: 'Implement', effort: 'low', schema: GATE_SCHEMA })
+  // full corpus once per spec, so a regression is caught before the next spec builds on it.
+  // The sweep takes hours, so one agent starts it detached and a loop of agents waits in
+  // ten-minute foreground waits until the .done marker appears.
+  const full = await corpusCheck(spec.slice(0, 3), 'Implement')
   outcome.corpus = full ? (full.pass ? 'green' : 'RED: ' + full.failures.join(' | ')) : 'unknown'
   if (full && !full.pass) {
     const fix = await agent(`${ENV}\n\n${RULES}\n\n${GATE}\n\nThe full conformance corpus has failures that are not in specs/501-node-runtime/corpus_baseline.txt after spec ${spec}:\n${full.failures.join('\n')}\n\nFind the cause in this spec's commits (git log on ${BRANCH}), fix it properly, re-run the failing manifests and \`zig build test\`, commit and push. Report.`, { model: MODEL, label: `corpus-fix:${spec.slice(0, 3)}`, phase: 'Implement', effort: 'high', schema: IMPL_SCHEMA })
@@ -148,7 +173,7 @@ if (!(args && args.skipJoule) && results.some(r => r.done)) {
 let finalCorpus = null
 if (!FULL_CORPUS && results.some(r => r.done)) {
   phase('Report')
-  finalCorpus = await agent(`${ENV}\n\nIn ${LUMEN} run \`zig build conformance\` (hours: nohup in the background, poll the log, long timeout). Compare FAIL lines with specs/501-node-runtime/corpus_baseline.txt; pass means no failure absent from the baseline. Report new failures verbatim. Do not change files.`, { model: MODEL, label: 'corpus:final', phase: 'Report', effort: 'low', schema: GATE_SCHEMA })
+  finalCorpus = await corpusCheck('final', 'Report')
 }
 
 // ---- report -----------------------------------------------------------------
