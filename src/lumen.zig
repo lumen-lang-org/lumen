@@ -510,6 +510,8 @@ fn urlForPackagePath(arena: std.mem.Allocator, path: []const u8) ?[]const u8 {
 }
 
 var g_no_local: bool = false;
+/// `LUMEN_EMIT_ZIG=<dir>`: write the generated Zig there and skip the build.
+var g_emit_zig_dir: ?[]const u8 = null;
 
 var g_explain_imports: bool = false;
 
@@ -1196,7 +1198,7 @@ fn buildAndRun(
         // in. Debug, not ReleaseSafe: this binary lives for the length of one
         // expansion and its speed of construction is the user's whole wait.
         var captured: std.Io.Writer.Allocating = .init(arena);
-        const built = compileFile(arena, io, entry_path, .debug, .build_quiet, &.{}, false, false, .{}, &captured.writer) catch |e|
+        const built = compileFile(arena, io, entry_path, .debug, .build_quiet, &.{}, .native, .{}, false, .{}, &captured.writer) catch |e|
             return decoratorFailed(arena, path, app, "'@{s}' could not be compiled: {s}", .{ app.name, @errorName(e) });
         const exe_path = try std.fmt.allocPrint(arena, "./{s}", .{std.fs.path.stem(entry_name)});
         if (built != 0)
@@ -1718,11 +1720,13 @@ fn watchRebuild(
     mode: CompileMode,
     run: bool,
     prev: *?std.process.Child,
+    out: OutTarget,
+    node: NodeSpec,
     err: *std.Io.Writer,
 ) !void {
     // Reuse the standard compile path so diagnostics are identical to `lumen
     // compile`. compileFile prints either the diagnostic or the success line.
-    const code = compileFile(arena, io, path, mode, .build_exe, &.{}, false, false, .{}, err) catch |e| {
+    const code = compileFile(arena, io, path, mode, .build_exe, &.{}, out, node, false, .{}, err) catch |e| {
         try err.print("watch: rebuild error: {s}\n", .{@errorName(e)});
         try err.flush();
         return;
@@ -1751,10 +1755,14 @@ fn watchRebuild(
     else
         try arena.dupe(u8, base);
     // Spawn via an explicit relative path so it resolves in cwd, not PATH.
-    const exe_rel = try std.fmt.allocPrint(arena, "./{s}", .{exe_name});
+    const exe_rel = if (out == .node)
+        try node.entryPath(arena, path)
+    else
+        try std.fmt.allocPrint(arena, "./{s}", .{exe_name});
+    const argv: []const []const u8 = if (out == .node) &.{ "node", exe_rel } else &.{exe_rel};
 
     const child = std.process.spawn(io, .{
-        .argv = &.{exe_rel},
+        .argv = argv,
         .stdin = .inherit,
         .stdout = .inherit,
         .stderr = .inherit,
@@ -1779,7 +1787,7 @@ fn watchRebuild(
 /// imports changes, re-running the produced binary unless `run` is false.
 /// Watching is mtime polling at ~150 ms; the watch set is recomputed each rebuild
 /// so newly added/removed local imports are picked up.
-fn watchProject(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, run: bool, err: *std.Io.Writer) !u8 {
+fn watchProject(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, run: bool, out: OutTarget, node: NodeSpec, err: *std.Io.Writer) !u8 {
     if (!std.mem.endsWith(u8, path, ".ts")) {
         try err.print("error: expected a .ts source file, got {s}\n", .{path});
         return 2;
@@ -1810,7 +1818,7 @@ fn watchProject(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Co
     var prev_hashes: std.StringArrayHashMapUnmanaged(u64) = .empty;
 
     // Initial build.
-    try watchRebuild(arena, io, path, mode, run, &prev, err);
+    try watchRebuild(arena, io, path, mode, run, &prev, out, node, err);
     snapshotWatchSet(arena, io, path, &prev_hashes);
     try err.print("watching {d} files (Ctrl-C to stop)\n", .{prev_hashes.count()});
     try err.flush();
@@ -1838,7 +1846,7 @@ fn watchProject(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Co
         if (!changed) continue;
 
         // Rebuild, then refresh the content snapshot against the new set.
-        try watchRebuild(arena, io, path, mode, run, &prev, err);
+        try watchRebuild(arena, io, path, mode, run, &prev, out, node, err);
         prev_hashes.clearRetainingCapacity();
         snapshotWatchSet(arena, io, path, &prev_hashes);
     }
@@ -2022,6 +2030,150 @@ const TargetSpec = struct {
         return self.triple == null and !self.static;
     }
 };
+
+/// Which backend a compile drives: the native build, the wasm module of
+/// `--wasm` (spec 030), or the ECMAScript modules of `--target node` (spec
+/// 504). The three are exclusive; asking for two is refused at the command
+/// line rather than resolved by rank.
+const OutTarget = enum { native, wasm, node };
+
+/// What `--target node` was asked for besides the target itself (spec 504).
+const NodeSpec = struct {
+    /// `--out <dir>`: where the modules go; `<stem>.node/` when unset.
+    out_dir: ?[]const u8 = null,
+    /// `--runtime <dir>`: the `packages/node-runtime` directory the entry
+    /// file's `@lumen-lang/node/globals` import resolves to; found beside
+    /// the compiler when unset.
+    runtime_dir: ?[]const u8 = null,
+
+    /// The directory the output lands in for this entry file.
+    fn outDir(self: NodeSpec, arena: std.mem.Allocator, path: []const u8) ![]const u8 {
+        return self.out_dir orelse try std.fmt.allocPrint(arena, "{s}.node", .{std.fs.path.stem(path)});
+    }
+
+    /// The entry module `node` runs: `<out>/<stem>.mjs`.
+    fn entryPath(self: NodeSpec, arena: std.mem.Allocator, path: []const u8) ![]const u8 {
+        return std.fs.path.join(arena, &.{ try self.outDir(arena, path), try std.fmt.allocPrint(arena, "{s}.mjs", .{std.fs.path.stem(path)}) });
+    }
+};
+
+/// Consumes one of the node target's flags at `args[i.*]` -- `--target node`,
+/// `--out <dir>`, `--runtime <dir>`, and their `=` forms -- advancing `i` past
+/// a separate value. Returns false when the argument is none of them, so the
+/// caller's own flags are tried next; prints and returns an error for a flag
+/// missing its value. `--target` with any other value is left to the caller
+/// (`compile` reads a triple there; the other commands refuse it).
+fn takeNodeFlag(args: []const []const u8, i: *usize, out: *OutTarget, node: *NodeSpec, err: *std.Io.Writer) !bool {
+    const arg = args[i.*];
+    const names_node = (std.mem.eql(u8, arg, "--target") and i.* + 1 < args.len and std.mem.eql(u8, args[i.* + 1], "node")) or std.mem.eql(u8, arg, "--target=node");
+    if (names_node) {
+        if (out.* == .wasm) {
+            try err.writeAll("error: --wasm and --target node are two targets; pick one\n");
+            return error.MissingValue;
+        }
+        if (std.mem.eql(u8, arg, "--target")) i.* += 1;
+        out.* = .node;
+        return true;
+    }
+    const flags = [_]struct { name: []const u8, slot: *?[]const u8, what: []const u8 }{
+        .{ .name = "--out", .slot = &node.out_dir, .what = "an output directory" },
+        .{ .name = "--runtime", .slot = &node.runtime_dir, .what = "the runtime package directory" },
+    };
+    for (flags) |f| {
+        if (std.mem.eql(u8, arg, f.name)) {
+            i.* += 1;
+            if (i.* >= args.len) {
+                try err.print("error: {s} needs {s}\n", .{ f.name, f.what });
+                return error.MissingValue;
+            }
+            f.slot.* = args[i.*];
+            return true;
+        }
+        if (std.mem.startsWith(u8, arg, f.name) and arg.len > f.name.len and arg[f.name.len] == '=') {
+            f.slot.* = arg[f.name.len + 1 ..];
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The runtime package directory (spec 503) the node target links to:
+/// `--runtime <dir>` when given, else `packages/node-runtime` found by walking
+/// up from the compiler's own directory and then from the working directory.
+/// Returned as a real path, so the link works from wherever the output is.
+fn findNodeRuntime(arena: std.mem.Allocator, io: std.Io, explicit: ?[]const u8) ?[]const u8 {
+    const cwd = std.Io.Dir.cwd();
+    if (explicit) |dir| {
+        const probe = std.fs.path.join(arena, &.{ dir, "globals.mjs" }) catch return null;
+        cwd.access(io, probe, .{}) catch return null;
+        return cwd.realPathFileAlloc(io, dir, arena) catch null;
+    }
+    var starts: [2]?[]const u8 = .{ null, null };
+    if (std.process.executablePathAlloc(io, arena)) |exe| starts[0] = std.fs.path.dirname(exe) else |_| {}
+    starts[1] = cwd.realPathFileAlloc(io, ".", arena) catch null;
+    for (starts) |start| {
+        var dir = start orelse continue;
+        while (true) {
+            const candidate = std.fs.path.join(arena, &.{ dir, "packages", "node-runtime" }) catch return null;
+            const probe = std.fs.path.join(arena, &.{ candidate, "globals.mjs" }) catch return null;
+            if (cwd.access(io, probe, .{})) |_| {
+                return cwd.realPathFileAlloc(io, candidate, arena) catch null;
+            } else |_| {}
+            dir = std.fs.path.dirname(dir) orelse break;
+        }
+    }
+    return null;
+}
+
+/// Writes the node target's output (spec 504): `<out>/<stem>.mjs` (the entry:
+/// the runtime's globals, then the program), `<out>/modules/<stem>.mjs` (the
+/// program), `<out>/package.json` (`"type": "module"`), and
+/// `<out>/node_modules/@lumen-lang/node`, a link to the runtime package so the
+/// entry's bare `@lumen-lang/node/globals` import resolves the way Node
+/// resolves any package.
+fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js_src: []const u8, node: NodeSpec, err: *std.Io.Writer) !u8 {
+    const base = std.fs.path.stem(path);
+    const runtime = findNodeRuntime(arena, io, node.runtime_dir) orelse {
+        if (node.runtime_dir) |dir| {
+            try err.print("error: --runtime {s} is not the Node runtime package (no globals.mjs there)\n", .{dir});
+        } else {
+            try err.writeAll("error: the Node runtime package was not found beside the compiler; pass --runtime <dir> naming the packages/node-runtime directory\n");
+        }
+        return 2;
+    };
+    const out_dir = try node.outDir(arena, path);
+    const cwd = std.Io.Dir.cwd();
+    const modules_dir = try std.fs.path.join(arena, &.{ out_dir, "modules" });
+    const scope_dir = try std.fs.path.join(arena, &.{ out_dir, "node_modules", "@lumen-lang" });
+    for ([_][]const u8{ modules_dir, scope_dir }) |dir| cwd.createDirPath(io, dir) catch {
+        try err.print("error: cannot create {s}\n", .{dir});
+        return 2;
+    };
+    const files = [_]struct { rel: []const u8, data: []const u8 }{
+        .{ .rel = "package.json", .data = "{ \"type\": \"module\" }\n" },
+        .{ .rel = try std.fmt.allocPrint(arena, "modules/{s}.mjs", .{base}), .data = js_src },
+        // The program is loaded with a dynamic import, after the globals have
+        // finished installing: the runtime package has a top-level `await` in
+        // its graph, and two static imports of an entry file may evaluate a
+        // synchronous sibling before an asynchronous one has completed.
+        .{ .rel = try std.fmt.allocPrint(arena, "{s}.mjs", .{base}), .data = try std.fmt.allocPrint(arena, "import \"@lumen-lang/node/globals\";\nawait import(\"./modules/{s}.mjs\");\n", .{base}) },
+    };
+    for (files) |f| {
+        const full = try std.fs.path.join(arena, &.{ out_dir, f.rel });
+        cwd.writeFile(io, .{ .sub_path = full, .data = f.data }) catch {
+            try err.print("error: cannot write {s}\n", .{full});
+            return 2;
+        };
+    }
+    const link = try std.fs.path.join(arena, &.{ scope_dir, "node" });
+    // A link from an earlier compile points wherever the runtime was then.
+    cwd.deleteFile(io, link) catch {};
+    cwd.symLink(io, runtime, link, .{ .is_directory = true }) catch {
+        try err.print("error: cannot link {s} to the runtime package at {s}\n", .{ link, runtime });
+        return 2;
+    };
+    return 0;
+}
 
 /// Either the triple to hand the backend (`null` = leave the target alone) or
 /// the reason the request cannot be honored. A target that cannot be built is
@@ -2971,10 +3123,18 @@ fn describeFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, err: *st
     return 0;
 }
 
-fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, action: Action, cli_libs: []const []const u8, wasm: bool, reactor: bool, target: TargetSpec, err: *std.Io.Writer) !u8 {
+fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: CompileMode, action: Action, cli_libs: []const []const u8, out: OutTarget, node: NodeSpec, reactor: bool, target: TargetSpec, err: *std.Io.Writer) !u8 {
     const compile_start = std.Io.Clock.Timestamp.now(io, .awake);
     if (!std.mem.endsWith(u8, path, ".ts")) {
         try err.print("error: expected a .ts source file, got {s}\n", .{path});
+        return 2;
+    }
+    const wasm = out == .wasm;
+
+    // `--target node` builds no native binary, so nothing about linking one
+    // applies (spec 504).
+    if (out == .node and (!target.isHost() or target.lib_dirs.len > 0 or cli_libs.len > 0)) {
+        try err.writeAll("error: --target node emits JavaScript; --static, --link and --library-path do not apply to it\n");
         return 2;
     }
 
@@ -3043,14 +3203,47 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         else => return e,
     };
     var warnings: std.ArrayListUnmanaged(compiler.Diag) = .empty;
-    var zig_src = compiler.compileToZigWithOptions(arena, source, path, &diag, .{
+    const options: compiler.CompileOptions = .{
         .runtime_locations = mode.runtimeLocations(),
-        .wasm = wasm,
+        .target = switch (out) {
+            .native => .native,
+            .wasm => .wasm,
+            .node => .node,
+        },
         .gc = !wasm and !g_no_gc,
         .warnings = &warnings,
         .line_map = expanded.line_map,
         .test_mode = action == .run_test,
-    }) catch {
+    };
+
+    // The node target (spec 504): the same front end, then the JavaScript
+    // backend and the module directory instead of the Zig backend and a
+    // binary. Running `test` blocks under Node is spec 506's.
+    if (out == .node) {
+        if (action == .run_test) {
+            try err.writeAll("error: `lumen test --target node` is not available yet (spec 506); `lumen test` runs the tests natively\n");
+            return 2;
+        }
+        const js_src = compiler.compileToJsWithOptions(arena, source, &diag, options) catch {
+            try printDiag(err, written, path, diag);
+            try printWarnings(err, written, path, warnings.items, diag);
+            return 1;
+        };
+        try printWarnings(err, written, path, warnings.items, null);
+        if (action == .check_only) {
+            try err.print("{s}: no errors\n", .{path});
+            return 0;
+        }
+        const code = try writeNodeOutput(arena, io, path, js_src, node, err);
+        if (code == 0 and action != .build_quiet) {
+            const elapsed = compile_start.durationTo(std.Io.Clock.Timestamp.now(io, .awake));
+            const ms: u64 = @intCast(@max(0, @divTrunc(elapsed.raw.nanoseconds, std.time.ns_per_ms)));
+            try err.print("compiled {s} -> {s}/ ({d}ms)\n", .{ path, try node.outDir(arena, path), ms });
+        }
+        return code;
+    }
+
+    var zig_src = compiler.compileToZigWithOptions(arena, source, path, &diag, options) catch {
         try printDiag(err, written, path, diag);
         try printWarnings(err, written, path, warnings.items, diag);
         return 1;
@@ -3092,6 +3285,27 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     const wasm_ffi = wasm and std.mem.indexOf(u8, zig_src, "extern fn ") != null;
 
     const base = std.fs.path.stem(path);
+
+    // `LUMEN_EMIT_ZIG=<dir>` (tools/emit_snapshot.sh, spec 504 FR-003): keep
+    // the generated Zig as `<dir>/<stem>.zig` and stop before the backend, so
+    // a whole-corpus emit can be diffed against an earlier one without
+    // building anything. Only the compile the user asked for: a decorator's
+    // own build (`build_quiet`, from `buildAndRun`) has to produce a binary
+    // the expansion then runs.
+    if (g_emit_zig_dir != null and action == .build_exe) {
+        const dir = g_emit_zig_dir.?;
+        std.Io.Dir.cwd().createDirPath(io, dir) catch {
+            try err.print("error: cannot create {s}\n", .{dir});
+            return 2;
+        };
+        const snap = try std.fs.path.join(arena, &.{ dir, try std.fmt.allocPrint(arena, "{s}.zig", .{base}) });
+        std.Io.Dir.cwd().writeFile(io, .{ .sub_path = snap, .data = zig_src }) catch {
+            try err.print("error: cannot write {s}\n", .{snap});
+            return 2;
+        };
+        return 0;
+    }
+
     // The generated backend source is an internal artifact: write it to a hidden
     // temp file and remove it after building, so the user never sees it.
     const gen_path = try std.fmt.allocPrint(arena, ".lumen-{s}.zig", .{base});
@@ -3504,6 +3718,7 @@ pub fn main(init: std.process.Init) !void {
     // Color diagnostics when stderr is a terminal, honoring NO_COLOR.
     g_no_gc = init.environ_map.get("LUMEN_NO_GC") != null;
     g_no_local = init.environ_map.get("LUMEN_NO_LOCAL") != null;
+    g_emit_zig_dir = init.environ_map.get("LUMEN_EMIT_ZIG");
     g_explain_imports = init.environ_map.get("LUMEN_EXPLAIN_IMPORTS") != null;
     g_color = blk: {
         if (init.environ_map.get("NO_COLOR") != null) break :blk false;
@@ -3516,7 +3731,7 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(2);
     }
 
-    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--target <triple>] [--static] [--link <lib>] [--library-path <dir>] <file.ts>\n       lumen run [--release-fast] <file.ts> [args...]\n       lumen check <file.ts>\n       lumen watch [--no-run] [--release-fast] <file.ts>\n       lumen test <file.ts>\n";
+    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--target <triple>|node] [--static] [--link <lib>] [--library-path <dir>] [--out <dir>] [--runtime <dir>] <file.ts>\n       lumen run [--release-fast] [--target node] <file.ts> [args...]\n       lumen check [--target node] <file.ts>\n       lumen watch [--no-run] [--release-fast] [--target node] <file.ts>\n       lumen test <file.ts>\n";
     const code = if (std.mem.eql(u8, args[1], "init")) blk: {
         if (args.len > 3) {
             try err.writeAll(usage);
@@ -3525,19 +3740,44 @@ pub fn main(init: std.process.Init) !void {
         const dir: ?[]const u8 = if (args.len == 3) args[2] else null;
         break :blk try initProject(io, dir, err);
     } else if (std.mem.eql(u8, args[1], "test")) blk: {
-        if (args.len < 3) {
+        var out: OutTarget = .native;
+        var node: NodeSpec = .{};
+        var source_arg: ?[]const u8 = null;
+        var i: usize = 2;
+        while (i < args.len) : (i += 1) {
+            if (takeNodeFlag(args, &i, &out, &node, err) catch break :blk 2) continue;
+            if (source_arg == null) {
+                source_arg = args[i];
+            } else {
+                try err.writeAll("usage: lumen test <file.ts>\n");
+                break :blk 2;
+            }
+        }
+        break :blk try compileFile(arena, io, source_arg orelse {
             try err.writeAll("usage: lumen test <file.ts>\n");
             break :blk 2;
-        }
-        break :blk try compileFile(arena, io, args[2], .release_safe, .run_test, &.{}, false, false, .{}, err);
+        }, .release_safe, .run_test, &.{}, out, node, false, .{}, err);
     } else if (std.mem.eql(u8, args[1], "check")) blk: {
         // `lumen check <file.ts>`: parse + type-check only (fast feedback for
-        // editors and CI); no code is generated or built.
-        if (args.len < 3) {
-            try err.writeAll("usage: lumen check <file.ts>\n");
-            break :blk 2;
+        // editors and CI); no code is generated or built. `--target node` is
+        // accepted for symmetry: the check is the same for every target.
+        var out: OutTarget = .native;
+        var node: NodeSpec = .{};
+        var source_arg: ?[]const u8 = null;
+        var i: usize = 2;
+        while (i < args.len) : (i += 1) {
+            if (takeNodeFlag(args, &i, &out, &node, err) catch break :blk 2) continue;
+            if (source_arg == null) {
+                source_arg = args[i];
+            } else {
+                try err.writeAll("usage: lumen check [--target node] <file.ts>\n");
+                break :blk 2;
+            }
         }
-        break :blk try compileFile(arena, io, args[2], .release_safe, .check_only, &.{}, false, false, .{}, err);
+        break :blk try compileFile(arena, io, source_arg orelse {
+            try err.writeAll("usage: lumen check [--target node] <file.ts>\n");
+            break :blk 2;
+        }, .release_safe, .check_only, &.{}, out, node, false, .{}, err);
     } else if (std.mem.eql(u8, args[1], "describe")) blk: {
         if (args.len < 3) {
             try err.writeAll("usage: lumen describe <file.ts>\n");
@@ -3551,10 +3791,13 @@ pub fn main(init: std.process.Init) !void {
         }
         var mode: CompileMode = .release_safe;
         var run = true;
+        var out: OutTarget = .native;
+        var node: NodeSpec = .{};
         var source_arg: ?[]const u8 = null;
         var i: usize = 2;
         while (i < args.len) : (i += 1) {
             const arg = args[i];
+            if (takeNodeFlag(args, &i, &out, &node, err) catch break :blk 2) continue;
             if (std.mem.eql(u8, arg, "--no-run")) {
                 run = false;
             } else if (std.mem.eql(u8, arg, "--release-fast")) {
@@ -3571,7 +3814,7 @@ pub fn main(init: std.process.Init) !void {
         break :blk try watchProject(arena, io, source_arg orelse {
             try err.writeAll("usage: lumen watch [--no-run] [--release-fast] <file.ts>\n");
             break :blk 2;
-        }, mode, run, err);
+        }, mode, run, out, node, err);
     } else if (std.mem.eql(u8, args[1], "run")) blk: {
         // `lumen run <file.ts> [args...]`: compile, then execute the produced
         // binary with inherited stdio, forwarding any trailing arguments.
@@ -3580,32 +3823,39 @@ pub fn main(init: std.process.Init) !void {
             break :blk 2;
         }
         var mode: CompileMode = .release_safe;
+        var out: OutTarget = .native;
+        var node: NodeSpec = .{};
         var source_arg: ?[]const u8 = null;
         var i: usize = 2;
         while (i < args.len) : (i += 1) {
             const arg = args[i];
-            if (source_arg == null and std.mem.eql(u8, arg, "--release-fast")) {
+            if (takeNodeFlag(args, &i, &out, &node, err) catch break :blk 2) continue;
+            if (std.mem.eql(u8, arg, "--release-fast")) {
                 mode = .release_fast;
-            } else if (source_arg == null) {
+            } else {
                 source_arg = arg;
                 i += 1;
                 break;
             }
         }
         const src = source_arg orelse {
-            try err.writeAll("usage: lumen run [--release-fast] <file.ts> [args...]\n");
+            try err.writeAll("usage: lumen run [--release-fast] [--target node] <file.ts> [args...]\n");
             break :blk 2;
         };
-        const compile_code = try compileFile(arena, io, src, mode, .build_quiet, &.{}, false, false, .{}, err);
+        const compile_code = try compileFile(arena, io, src, mode, .build_quiet, &.{}, out, node, false, .{}, err);
         if (compile_code != 0) break :blk compile_code;
         try err.flush();
-        // Execute ./<stem> forwarding trailing args.
+        // Execute ./<stem> forwarding trailing args; under `--target node`,
+        // `node <stem>.node/<stem>.mjs` (spec 504).
         const stem = std.fs.path.stem(src);
-        const exe_rel = if (@import("builtin").os.tag == .windows)
+        const exe_rel = if (out == .node)
+            try node.entryPath(arena, src)
+        else if (@import("builtin").os.tag == .windows)
             try std.fmt.allocPrint(arena, "./{s}.exe", .{stem})
         else
             try std.fmt.allocPrint(arena, "./{s}", .{stem});
         var run_argv: std.ArrayListUnmanaged([]const u8) = .empty;
+        if (out == .node) try run_argv.append(arena, "node");
         try run_argv.append(arena, exe_rel);
         while (i < args.len) : (i += 1) try run_argv.append(arena, args[i]);
         var child = std.process.spawn(io, .{
@@ -3634,21 +3884,33 @@ pub fn main(init: std.process.Init) !void {
         var source_arg: ?[]const u8 = null;
         var libs: std.ArrayListUnmanaged([]const u8) = .empty;
         var lib_dirs: std.ArrayListUnmanaged([]const u8) = .empty;
-        var wasm = false;
+        var out: OutTarget = .native;
+        var node: NodeSpec = .{};
         var reactor = false;
         var target: TargetSpec = .{};
         var i: usize = 2;
         while (i < args.len) : (i += 1) {
             const arg = args[i];
+            if (takeNodeFlag(args, &i, &out, &node, err) catch break :blk 2) continue;
             if (std.mem.eql(u8, arg, "--release-fast")) {
                 mode = .release_fast;
             } else if (std.mem.eql(u8, arg, "--release-safe")) {
                 mode = .release_safe;
             } else if (std.mem.eql(u8, arg, "--wasm")) {
-                wasm = true;
+                // Two targets in one command line are refused, whichever came
+                // first (spec 504).
+                if (out == .node) {
+                    try err.writeAll("error: --wasm and --target node are two targets; pick one\n");
+                    break :blk 2;
+                }
+                out = .wasm;
             } else if (std.mem.eql(u8, arg, "--reactor")) {
+                if (out == .node) {
+                    try err.writeAll("error: --reactor is a wasm build; it does not apply to --target node\n");
+                    break :blk 2;
+                }
                 reactor = true;
-                wasm = true; // reactor implies the wasm target
+                out = .wasm; // reactor implies the wasm target
             } else if (std.mem.eql(u8, arg, "--static")) {
                 target.static = true;
             } else if (std.mem.eql(u8, arg, "--target")) {
@@ -3702,7 +3964,7 @@ pub fn main(init: std.process.Init) !void {
         break :blk try compileFile(arena, io, source_arg orelse {
             try err.writeAll(usage);
             break :blk 2;
-        }, mode, .build_exe, libs.items, wasm, reactor, target, err);
+        }, mode, .build_exe, libs.items, out, node, reactor, target, err);
     } else if (std.mem.eql(u8, args[1], "version") or std.mem.eql(u8, args[1], "--version") or std.mem.eql(u8, args[1], "-v")) blk: {
         try err.print("lumen {s}\n", .{lumen_version});
         break :blk 0;
@@ -3711,7 +3973,7 @@ pub fn main(init: std.process.Init) !void {
         break :blk 0;
     } else if (std.mem.endsWith(u8, args[1], ".ts")) blk: {
         // `lumen file.ts` is shorthand for `lumen compile file.ts`.
-        break :blk try compileFile(arena, io, args[1], .release_safe, .build_exe, &.{}, false, false, .{}, err);
+        break :blk try compileFile(arena, io, args[1], .release_safe, .build_exe, &.{}, .native, .{}, false, .{}, err);
     } else blk: {
         try err.print("error: unknown command '{s}'\n\n", .{args[1]});
         try err.writeAll(usage);

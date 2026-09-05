@@ -12,8 +12,8 @@ const CompileOptions = @import("lumen_emit.zig").CompileOptions;
 const CompileError = @import("lumen_diag.zig").CompileError;
 
 pub fn emitNetRuntime(arena: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), program: *const ast.Program, options: CompileOptions) CompileError!void {
-    const needs_http_threadpool = program.needs_http_server and !options.wasm;
-    const needs_net_threadpool = program.needs_net_server and !options.wasm;
+    const needs_http_threadpool = program.needs_http_server and !options.wasm();
+    const needs_net_threadpool = program.needs_net_server and !options.wasm();
     if (program.needs_http_module) {
         // http.request/get (spec 042): one-shot client request via
         // std.http.Client.fetch, with a real method/payload/response body

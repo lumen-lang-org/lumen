@@ -29,6 +29,10 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    // Installed beside the compiler so one manifest can be run on its own
+    // (`zig-out/bin/lumen-conformance <manifest> zig-out/bin/lumen`) without
+    // the whole-corpus `zig build conformance`.
+    b.installArtifact(conformance_runner);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -53,6 +57,7 @@ pub fn build(b: *std.Build) void {
         "src/lumen_lexer.zig",
         "src/lumen_parser.zig",
         "src/lumen_emit.zig",
+        "src/lumen_emit_js.zig",
         "src/lumen_describe.zig",
         "src/lumen_decorator.zig",
         "src/regex_rt.zig",
@@ -97,6 +102,10 @@ pub fn build(b: *std.Build) void {
         "src/lumen_emit_array_string.zig",
         "src/lumen_emit_class.zig",
         "src/lumen_emit_stmt.zig",
+        "src/lumen_emit_js.zig",
+        "src/lumen_emit_js_expr.zig",
+        "src/lumen_emit_js_stmt.zig",
+        "src/lumen_emit_js_class.zig",
         "src/regex_rt.zig",
         "src/regex_specialize.zig",
         "tools/lumen_conformance.zig",
@@ -114,6 +123,15 @@ pub fn build(b: *std.Build) void {
 
     const lint_step = b.step("lint", "Run compiler lint checks");
     lint_step.dependOn(&fmt_check.step);
+
+    // The native emitter's whole-corpus output, kept for diffing against a
+    // later run (spec 504 FR-003): `zig build emit-snapshot -- <out-dir>`.
+    const emit_snapshot = b.addSystemCommand(&[_][]const u8{ "sh", "tools/emit_snapshot.sh" });
+    emit_snapshot.step.dependOn(b.getInstallStep());
+    if (b.args) |args| emit_snapshot.addArgs(args) else emit_snapshot.addArg(".zig-cache/emit-snapshot");
+    emit_snapshot.addArg("zig-out/bin/lumen");
+    const emit_snapshot_step = b.step("emit-snapshot", "Emit the generated Zig for every corpus program into a directory");
+    emit_snapshot_step.dependOn(&emit_snapshot.step);
 
     const conformance_cmd = b.addRunArtifact(conformance_runner);
     conformance_cmd.step.dependOn(b.getInstallStep());

@@ -4,17 +4,27 @@
 
 ## Phase 1: Skeleton and gate
 
-- [ ] T001 `--target node` parsing in `src/lumen.zig` compile/run/test/watch;
-  reject with `--wasm`/`--static`/`--link`.
-- [ ] T002 `CompileOptions.target: enum { native, wasm, node }` replacing the
+- [x] T001 `--target node` parsing in `src/lumen.zig` compile/run/test/watch;
+  reject with `--wasm`/`--static`/`--link`. (`takeNodeFlag` serves every
+  subcommand; `check` accepts it as a no-op; `test --target node` says it is
+  spec 506's until then.)
+- [x] T002 `CompileOptions.target: enum { native, wasm, node }` replacing the
   `wasm: bool` (keep `wasm` as a computed accessor so no call site changes).
-- [ ] T003 `src/lumen_emit_js.zig` `emitProgram` producing the output layout
+  (Zig has no computed fields: the accessor is the method `wasm()`, and the
+  seven call sites gained the parentheses.)
+- [x] T003 `src/lumen_emit_js.zig` `emitProgram` producing the output layout
   for a `console.log("hi")` program; `compileFile` writes the directory.
-- [ ] T004 `node-run` phase in `tools/lumen_conformance.zig`: compile with
+  (`writeNodeOutput` in `src/lumen.zig`; the entry loads the program with
+  `await import(...)` after the globals, see the comment there.)
+- [x] T004 `node-run` phase in `tools/lumen_conformance.zig`: compile with
   `--target node`, run `node`, compare stdout with the case's `expect`.
-- [ ] T005 `tools/emit_snapshot.sh`: emit Zig for the whole corpus to a
+  (Plus `node-diagnostics` for FR-005. The runner is now installed as
+  `zig-out/bin/lumen-conformance` so one manifest can be run alone.)
+- [x] T005 `tools/emit_snapshot.sh`: emit Zig for the whole corpus to a
   directory; a second run diffs. Wire as `zig build emit-snapshot`.
-- [ ] T006 Manifest with the hello case; register in `build.zig`; green.
+  (`LUMEN_EMIT_ZIG=<dir>` makes `lumen compile` keep the generated Zig and
+  skip the backend; the diff against the pre-504 compiler was empty.)
+- [x] T006 Manifest with the hello case; register in `build.zig`; green.
 
 ## Phase 2: Expressions and statements
 

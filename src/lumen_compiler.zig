@@ -133,6 +133,7 @@ const PARSE_RT =
 const regex_specialize = @import("regex_specialize.zig");
 const lumen_opt = @import("lumen_opt.zig");
 const lumen_emit = @import("lumen_emit.zig");
+const lumen_emit_js = @import("lumen_emit_js.zig");
 const emit_analysis = @import("lumen_emit_analysis.zig");
 pub const CompileOptions = lumen_emit.CompileOptions;
 const emitProgram = lumen_emit.emitProgram;
@@ -262,7 +263,9 @@ pub fn compileToZig(arena: std.mem.Allocator, source: []const u8, filename: []co
     return compileToZigWithOptions(arena, source, filename, diag, .{});
 }
 
-pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, filename: []const u8, diag: *Diag, options: CompileOptions) CompileError![]const u8 {
+/// The front end every backend shares: the dynamism gate, the parser and the
+/// checker. What comes back is the typed program both emitters read.
+fn frontEnd(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: CompileOptions) CompileError!ast.Program {
     try rejectUnsupportedDynamic(source, diag);
 
     var p = try Parser.init(arena, source);
@@ -276,6 +279,21 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     };
 
     try check.checkProgram(arena, &program, diag, options.warnings);
+    return program;
+}
+
+/// `lumen compile --target node` (spec 504): the same front end as the native
+/// build, then the JavaScript backend instead of the Zig one. The `lumen_opt`
+/// passes are not run: they mark string and array accumulators and builder
+/// calls for the native allocator's benefit, and JavaScript has nothing to
+/// gain from them.
+pub fn compileToJsWithOptions(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: CompileOptions) CompileError![]const u8 {
+    const program = try frontEnd(arena, source, diag, options);
+    return lumen_emit_js.emitProgram(&program, arena, diag);
+}
+
+pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, filename: []const u8, diag: *Diag, options: CompileOptions) CompileError![]const u8 {
+    var program = try frontEnd(arena, source, diag, options);
 
     // Compile append-only string locals into growable buffers (O(n) builds).
     try markAccumulators(program.stmts, &.{}, arena);
@@ -389,7 +407,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
 
     var out: std.ArrayListUnmanaged(u8) = .empty;
     try out.appendSlice(arena, "const std = @import(\"std\");\n");
-    if (options.gc and !options.wasm) {
+    if (options.gc and !options.wasm()) {
         // Boehm's conservative collector stands behind every allocator the
         // generated program has (`__sa` here, `__alloc` in main): generated
         // code frees nothing, so unreachable memory is reclaimed by scanning
@@ -531,8 +549,8 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     // why the import is skipped entirely under `--wasm`. lumen#11: the same
     // is true of `net.createServer`'s pool now that it gets the identical
     // treatment.
-    const needs_http_threadpool = program.needs_http_server and !options.wasm;
-    const needs_net_threadpool = program.needs_net_server and !options.wasm;
+    const needs_http_threadpool = program.needs_http_server and !options.wasm();
+    const needs_net_threadpool = program.needs_net_server and !options.wasm();
     // Which backend the loop runs on is decided at run time, not here. libxev's
     // package root binds `Backend.default()` -- io_uring on Linux -- so a binary
     // built against it cannot start at all where io_uring is unavailable: a
@@ -1162,7 +1180,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
     if (program.uses_io) {
         try out.appendSlice(arena, "pub fn main(__init: std.process.Init) !void {\n");
         try out.appendSlice(arena, "    __io = __init.io;\n");
-        if (options.gc and !options.wasm) {
+        if (options.gc and !options.wasm()) {
             try out.appendSlice(arena, "    GC_init();\n    GC_allow_register_threads();\n    __alloc = __gc_allocator;\n");
         } else {
             try out.appendSlice(arena, "    __alloc = __init.arena.allocator();\n");
@@ -1192,7 +1210,7 @@ pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, fil
         }
     } else {
         try out.appendSlice(arena, "pub fn main() void {\n");
-        if (options.gc and !options.wasm) {
+        if (options.gc and !options.wasm()) {
             try out.appendSlice(arena, "    GC_init();\n");
         }
     }

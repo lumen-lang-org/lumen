@@ -34,7 +34,10 @@ Module identity follows the source graph one to one, so a stack trace names
 the user's file. Imports are rewritten to relative `.mjs` paths; the runtime
 package (503) is imported by the entry file only, as
 `@lumen-lang/node/globals` resolved through `--runtime <dir>` or the default
-`packages/node-runtime` beside the compiler.
+`packages/node-runtime` beside the compiler. The resolution is Node's own:
+the compiler writes `app.node/node_modules/@lumen-lang/node` as a link to
+that directory, so the entry file carries the bare package name and nothing
+else needs to know where the runtime lives.
 
 ## Lowering table (language core)
 

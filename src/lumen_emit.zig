@@ -1442,6 +1442,8 @@ pub fn emitExpr(e: *const Expr, w: *std.ArrayListUnmanaged(u8), arena: std.mem.A
     }
 }
 
+pub const Target = enum { native, wasm, node };
+
 /// A neutral default value for a flat union-struct field, used so a single
 /// variant's object literal can omit the other variants' fields.
 pub const CompileOptions = struct {
@@ -1459,6 +1461,12 @@ pub const CompileOptions = struct {
     // under `lumen run`/`lumen compile` `main` runs the initializer correctly
     // (spec 449).
     test_mode: bool = false,
+    // The output the CLI asked for (spec 504): a native executable, a wasm
+    // module (`--wasm`, spec 030), or ECMAScript modules for Node (`--target
+    // node`). The Zig emitter never sees `.node` -- the JavaScript backend
+    // replaces it -- but the option travels with the others so the shared front
+    // end can be asked which it is compiling for.
+    target: Target = .native,
     // Threaded down from the CLI's `--wasm` flag (spec 049): wasm32-wasi has
     // no real OS threads, and the CLI's own libxev-wiring gate hard-fails any
     // wasm build whose generated source textually contains `@import("xev")`
@@ -1466,13 +1474,16 @@ pub const CompileOptions = struct {
     // thread-pool-backed concurrent codegen must not emit that import at all
     // under `--wasm`, falling back to the old single-connection-at-a-time
     // loop there instead.
-    wasm: bool = false,
     // Conservative GC (libgc) backing `__alloc` on native targets. A language
     // with no free calls and no ownership annotations otherwise accretes every
     // allocation until the process dies — a long-running server OOMs by
     // design. Off under --wasm (no libgc there); LUMEN_NO_GC=1 restores the
     // old grow-only arena for comparison runs.
     gc: bool = true,
+
+    pub fn wasm(self: CompileOptions) bool {
+        return self.target == .wasm;
+    }
 };
 
 /// Collect the inheritance chain from a root ancestor down to `c` (inclusive).

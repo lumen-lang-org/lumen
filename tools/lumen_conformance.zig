@@ -108,6 +108,58 @@ fn checkCompileRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_path
     return true;
 }
 
+// The node target (spec 504): `lumen compile --target node` writes
+// `<stem>.node/` into the working directory; `node <stem>.node/<stem>.mjs`
+// must print what the case expects -- the same bytes the native binary
+// prints, since a `node-run` case is written against the native expectation.
+// stdout and stderr are concatenated as for `compile-run`.
+fn checkNodeRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
+    const compile = try runProcess(arena, io, &.{ lumen_bin, "compile", "--target", "node", source_path });
+    const out_dir = try std.fmt.allocPrint(arena, "{s}.node", .{std.fs.path.stem(source_path)});
+    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+    if (!termSucceeded(compile.term)) {
+        std.debug.print("FAIL {s}: node compile failed\n{s}\n", .{ case.id, compile.stderr });
+        return false;
+    }
+
+    const entry = try std.fmt.allocPrint(arena, "{s}/{s}.mjs", .{ out_dir, std.fs.path.stem(source_path) });
+    const run = try runProcess(arena, io, &.{ "node", entry });
+    if (!termSucceeded(run.term)) {
+        std.debug.print("FAIL {s}: node run failed\n{s}\n", .{ case.id, run.stderr });
+        return false;
+    }
+
+    const expected = case.expect.stdout orelse "";
+    const combined = std.fmt.allocPrint(arena, "{s}{s}", .{ run.stdout, run.stderr }) catch return false;
+    const actual = trimTrailingNewlines(combined);
+    if (!std.mem.eql(u8, actual, expected)) {
+        std.debug.print("FAIL {s}: node stdout mismatch\nexpected:\n{s}\nactual:\n{s}\n", .{ case.id, expected, actual });
+        return false;
+    }
+    return true;
+}
+
+// A program the node target must refuse at compile time (spec 504 FR-005):
+// `lumen compile --target node` fails and its stderr names the diagnostic.
+fn checkNodeDiagnostics(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
+    const compile = try runProcess(arena, io, &.{ lumen_bin, "compile", "--target", "node", source_path });
+    const out_dir = try std.fmt.allocPrint(arena, "{s}.node", .{std.fs.path.stem(source_path)});
+    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+    if (termSucceeded(compile.term)) {
+        std.debug.print("FAIL {s}: expected a node-target diagnostic but the compile succeeded\n", .{case.id});
+        return false;
+    }
+    const expected = case.expect.diagnostic orelse {
+        std.debug.print("FAIL {s}: node-diagnostics case missing expected diagnostic\n", .{case.id});
+        return false;
+    };
+    if (std.mem.indexOf(u8, compile.stderr, expected) == null) {
+        std.debug.print("FAIL {s}: diagnostic mismatch, expected {s}\nactual:\n{s}\n", .{ case.id, expected, compile.stderr });
+        return false;
+    }
+    return true;
+}
+
 fn checkDiagnostics(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
     const compile = try runProcess(arena, io, &.{ lumen_bin, "compile", source_path });
     const exe_name = try exeNameForSource(arena, source_path);
@@ -225,6 +277,12 @@ fn runCase(arena: std.mem.Allocator, io: std.Io, manifest_path: []const u8, case
     }
     if (std.mem.eql(u8, case.phase, "static")) {
         return try checkStatic(arena, io, case, source_path, lumen_bin);
+    }
+    if (std.mem.eql(u8, case.phase, "node-run")) {
+        return try checkNodeRun(arena, io, case, source_path, lumen_bin);
+    }
+    if (std.mem.eql(u8, case.phase, "node-diagnostics")) {
+        return try checkNodeDiagnostics(arena, io, case, source_path, lumen_bin);
     }
     std.debug.print("SKIP {s}: unsupported phase {s}\n", .{ case.id, case.phase });
     return null;
