@@ -737,7 +737,11 @@ pub fn emitStaticCall(cl: anytype, w: *std.ArrayListUnmanaged(u8), arena: std.me
         try em.emitExpr(cl.args[0], w, arena);
         try w.append(arena, ')');
     } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "normalize")) {
-        try w.appendSlice(arena, "__pathResolve(__alloc, &.{");
+        // Pure normalisation: `__pathJoin` of one path is `std.fs.path.resolve`
+        // without a working-directory anchor. (`__pathResolve` takes `__io`
+        // first and anchors to the cwd; the old call had neither the argument
+        // nor the right meaning, and failed to compile — spec 503.)
+        try w.appendSlice(arena, "__pathJoin(__alloc, &.{");
         try em.emitExpr(cl.args[0], w, arena);
         try w.appendSlice(arena, "})");
     } else if (std.mem.eql(u8, cl.namespace, "path") and std.mem.eql(u8, cl.name, "join")) {

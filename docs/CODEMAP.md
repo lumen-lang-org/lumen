@@ -44,7 +44,7 @@ cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMeth
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
 staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:873, jsonSerializable:955, registerLumenHttpResponse:973, registerLumenHttpRequest:995, promiseCallType:1016, mathCallType:1088, stringCallType:1340, arrayCallType:1406
 
-## src/lumen_check_stdlib_os.zig (1425 lines)
+## src/lumen_check_stdlib_os.zig (1431 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
 fsCallType:18, pathCallType:855, processCallType:1010, osCallType:1289, readlineCallType:1345, childProcessCallType:1367
 
@@ -83,7 +83,7 @@ emitElemEq:26, emitArrayMethod:75, emitStringMethod:455, emitTemplateText:762
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:325, emitSuperCopies:391, collectSuperInStmt:395, collectSuperInExpr:415, ifaceMethodThrows:469, emitIfaceDecl:482, emitClassVtables:500
 
-## src/lumen_emit_static.zig (1187 lines)
+## src/lumen_emit_static.zig (1191 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
 emitStaticCall:12
 

@@ -1,0 +1,7 @@
+# Programs from specs/*/examples/valid that print under node --import globals.mjs
+# what the native binary prints (spec 503 SC-002). One path per line, relative
+# to specs/. Produced by running every program both ways and keeping the ones
+# that agree; tests/corpus.test.mjs re-checks the list.
+503-node-runtime-package/examples/valid/fs-shapes.ts
+503-node-runtime-package/examples/valid/namespaces.ts
+503-node-runtime-package/examples/valid/process-shapes.ts

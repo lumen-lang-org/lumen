@@ -1,0 +1,27 @@
+{
+  "name": "@lumen-lang/node",
+  "version": "0.3.1",
+  "private": true,
+  "description": "Lumen's standard library namespaces, in Lumen's call shapes, over Node's built-ins.",
+  "type": "module",
+  "main": "./index.mjs",
+  "types": "./lumen.d.ts",
+  "exports": {
+    ".": "./index.mjs",
+    "./globals": "./globals.mjs",
+    "./lib/*": "./lib/*.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "globals.mjs",
+    "lumen.d.ts",
+    "lib"
+  ],
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "license": "MIT"
+}

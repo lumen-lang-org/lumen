@@ -1,0 +1,30 @@
+{
+  "feature": "503-node-runtime-package",
+  "notes": "The same three programs are listed in packages/node-runtime/tests/corpus.txt: tests/corpus.test.mjs runs them under node --import globals.mjs and diffs stdout against the native binary. spec 503 also fixed two native compiler bugs these programs exercise: path.normalize emitted a call that did not compile, and an empty [] argument to spawnSync/spawn/writevSync/readvSync failed to infer.",
+  "cases": [
+    {
+      "id": "fs-shapes.native.runs",
+      "source": "../examples/valid/fs-shapes.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "one\n\ntwo!\n9 true false\n0 false false 0\ntrue false false\none\n6\n0\n-1\n1 4\n2 1\n3 4\n2 0\ntrue\nthrew\nfalse"
+      }
+    },
+    {
+      "id": "namespaces.native.runs",
+      "source": "../examples/valid/namespaces.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "b/c.txt y /x .gz\n/ /home/u file.txt file .txt\n/home/u/file.txt / : true /a/c\nhttp: example.com 8080 /p/q ?a=1&b=2 #frag\n1 2 http://example.com:8080/p/q?a=1&b=2#frag\ntrue / /relative\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\na9993e364706816aba3e25717850c26c9cd0d89d\naGVsbG8= hello true\n16 36 32\nsecret true\n5 68656c6c6f aGVsbG8= 101 0 el true\nhello 3 0\ntrue\n5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0\ntrue false\nhello hello hello hello raw raw raw true\ntrue true true /dev/null true\n35 Not Found"
+      }
+    },
+    {
+      "id": "process-shapes.native.runs",
+      "source": "../examples/valid/process-shapes.ts",
+      "phase": "compile-run",
+      "expect": {
+        "stdout": "true true true\ntrue true\ntrue true true\nvia stdout\nout err 3\ntrue -1\ntrue\nadd 1\nadd 1\nadd 2\n1\n5 true true false\ntrue true true\ndone\nvia stderr"
+      }
+    }
+  ]
+}

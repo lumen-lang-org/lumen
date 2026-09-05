@@ -369,6 +369,11 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_502.addArg("specs/502-string-literal-newline/conformance/manifest.json");
     conformance_cmd_502.addArg("zig-out/bin/lumen");
 
+    const conformance_cmd_503 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_503.step.dependOn(b.getInstallStep());
+    conformance_cmd_503.addArg("specs/503-node-runtime-package/conformance/manifest.json");
+    conformance_cmd_503.addArg("zig-out/bin/lumen");
+
     const conformance_cmd_504 = b.addRunArtifact(conformance_runner);
     conformance_cmd_504.step.dependOn(b.getInstallStep());
     conformance_cmd_504.addArg("specs/504-node-target-emitter/conformance/manifest.json");
@@ -441,6 +446,7 @@ pub fn build(b: *std.Build) void {
     conformance_step.dependOn(&conformance_cmd_478.step);
     conformance_step.dependOn(&conformance_cmd_481.step);
     conformance_step.dependOn(&conformance_cmd_502.step);
+    conformance_step.dependOn(&conformance_cmd_503.step);
     conformance_step.dependOn(&conformance_cmd_504.step);
     conformance_step.dependOn(&conformance_cmd_505.step);
     conformance_step.dependOn(&conformance_cmd_506.step);

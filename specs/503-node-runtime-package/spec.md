@@ -67,6 +67,23 @@ contract, and `website/stdlib/<ns>.html` documents each one's type.
   (the 25 raw-newline files stay out until Joule fixes them) and every
   `fs`/`path`/`crypto`/`spawnSync` failure it reported is gone.
 
+  Measured (`LUMEN_PRELUDE=packages/node-runtime/globals.mjs node
+  probe/run_tests.mjs` in Joule's checkout, 2026-09-05):
+
+  | Runtime | Loaded, all pass | Loaded, some fail | Did not load | Tests pass / fail |
+  | --- | --- | --- | --- | --- |
+  | 60-line sketch | 14 | 11 | 84 | 221 / 155 |
+  | this package | 20 | 5 | 84 | 313 / 63 |
+
+  Every `fs`/`path`/`crypto`/`spawnSync` failure is gone: the 5 files that
+  still have failures fail only on the `plat_*`/`tty_*` FFI shims (spec
+  507) and on byte-string semantics (`terminal/text.test.ts`, spec 505).
+  The load count did not move because all 84 non-loading files fail inside
+  Node's loader before any runtime code runs — 37 `https:` imports, 22
+  type-only named imports, 25 raw newlines — which the emitter of spec 504
+  resolves, not a runtime package. The 40-file target therefore belongs to
+  504's gate; 503 meets the failure clause of this criterion.
+
 ## Not planned
 
 | Item | Why |

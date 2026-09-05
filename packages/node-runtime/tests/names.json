@@ -1,0 +1,340 @@
+{
+  "generated_by": "tools/stdlib_names.py",
+  "sources": [
+    "src/lumen_check_stdlib.zig",
+    "src/lumen_check_stdlib_os.zig",
+    "src/lumen_check_methods.zig",
+    "src/lumen_check_expr.zig",
+    "src/lumen_parser.zig"
+  ],
+  "namespaces": {
+    "Array": [
+      "from",
+      "isArray",
+      "isEmpty",
+      "of"
+    ],
+    "Buffer": [
+      "alloc",
+      "from"
+    ],
+    "Date": [
+      "now"
+    ],
+    "JSON": [
+      "parse",
+      "parseOpen",
+      "stringify"
+    ],
+    "Math": [
+      "E",
+      "LN10",
+      "LN2",
+      "LOG10E",
+      "LOG2E",
+      "PI",
+      "SQRT1_2",
+      "SQRT2",
+      "abs",
+      "acos",
+      "acosh",
+      "asin",
+      "asinh",
+      "atan",
+      "atan2",
+      "atanh",
+      "cbrt",
+      "ceil",
+      "clamp",
+      "clz32",
+      "cos",
+      "cosh",
+      "exp",
+      "exp2",
+      "expm1",
+      "floor",
+      "fround",
+      "hypot",
+      "imul",
+      "log",
+      "log10",
+      "log1p",
+      "log2",
+      "max",
+      "min",
+      "pow",
+      "random",
+      "round",
+      "sign",
+      "sin",
+      "sinh",
+      "sqrt",
+      "tan",
+      "tanh",
+      "trunc"
+    ],
+    "Number": [
+      "EPSILON",
+      "MAX_SAFE_INTEGER",
+      "MAX_VALUE",
+      "MIN_SAFE_INTEGER",
+      "MIN_VALUE",
+      "NEGATIVE_INFINITY",
+      "NaN",
+      "POSITIVE_INFINITY",
+      "isFinite",
+      "isInteger",
+      "isNaN",
+      "isSafeInteger",
+      "parseFloat",
+      "parseInt"
+    ],
+    "Promise": [
+      "all",
+      "resolve"
+    ],
+    "String": [
+      "compare",
+      "contains",
+      "fromCharCode",
+      "fromCodePoint",
+      "isEmpty",
+      "startsWith"
+    ],
+    "Worker": [
+      "run"
+    ],
+    "assert": [
+      "equal",
+      "ok"
+    ],
+    "child_process": [
+      "spawn",
+      "spawnSync"
+    ],
+    "crypto": [
+      "base64Decode",
+      "base64Encode",
+      "createHash",
+      "createHmac",
+      "decrypt",
+      "decryptSync",
+      "encrypt",
+      "encryptSync",
+      "hmacSync",
+      "pbkdf2Sync",
+      "randomBytes",
+      "randomBytesBuffer",
+      "randomKey",
+      "randomUUID",
+      "scryptSync",
+      "sha1",
+      "sha1Bytes",
+      "sha256",
+      "timingSafeEqual"
+    ],
+    "fs": [
+      "accessSync",
+      "appendFile",
+      "appendFileSync",
+      "chmodSync",
+      "chownSync",
+      "closeSync",
+      "copyFileSync",
+      "cpSync",
+      "createReadStream",
+      "createWriteStream",
+      "existsSync",
+      "fchmodSync",
+      "fchownSync",
+      "fdatasyncSync",
+      "fstatSync",
+      "fsyncSync",
+      "ftruncateSync",
+      "futimesSync",
+      "lchmodSync",
+      "lchownSync",
+      "linkSync",
+      "lstatSync",
+      "lutimesSync",
+      "mkdir",
+      "mkdirSync",
+      "mkdtempSync",
+      "openSync",
+      "readFile",
+      "readFileSync",
+      "readSync",
+      "readdirSync",
+      "readlinkSync",
+      "readvSync",
+      "realpathSync",
+      "renameSync",
+      "rmSync",
+      "rmdir",
+      "rmdirSync",
+      "stat",
+      "statSync",
+      "symlinkSync",
+      "truncateSync",
+      "unlink",
+      "unlinkSync",
+      "utimesSync",
+      "watch",
+      "writeFile",
+      "writeFileSync",
+      "writeSync",
+      "writevSync"
+    ],
+    "http": [
+      "METHODS",
+      "STATUS_CODES",
+      "createServer",
+      "get",
+      "request",
+      "stream"
+    ],
+    "net": [
+      "connect",
+      "createServer"
+    ],
+    "os": [
+      "EOL",
+      "arch",
+      "availableParallelism",
+      "devNull",
+      "endianness",
+      "freemem",
+      "homedir",
+      "hostname",
+      "loadavg",
+      "machine",
+      "platform",
+      "release",
+      "tmpdir",
+      "totalmem",
+      "type",
+      "uptime",
+      "version"
+    ],
+    "path": [
+      "basename",
+      "delimiter",
+      "dirname",
+      "extname",
+      "format",
+      "isAbsolute",
+      "join",
+      "normalize",
+      "parse",
+      "resolve",
+      "sep"
+    ],
+    "process": [
+      "abort",
+      "arch",
+      "argv",
+      "chdir",
+      "cwd",
+      "env",
+      "exit",
+      "getegid",
+      "geteuid",
+      "getgid",
+      "getuid",
+      "hrtime",
+      "kill",
+      "memoryUsage",
+      "pid",
+      "platform",
+      "setUmask",
+      "sleep",
+      "stderr",
+      "stdin",
+      "stdout",
+      "umask",
+      "uptime",
+      "version"
+    ],
+    "readline": [
+      "question"
+    ],
+    "time": [
+      "monotonic",
+      "now"
+    ],
+    "url": [
+      "format",
+      "parse"
+    ],
+    "zlib": [
+      "deflateSync",
+      "gunzipSync",
+      "gzipSync",
+      "inflateSync"
+    ]
+  },
+  "methods": {
+    "Buffer": [
+      "at",
+      "equals",
+      "slice",
+      "toString"
+    ],
+    "ChildProcess": [
+      "close",
+      "readLine",
+      "write",
+      "writeLine"
+    ],
+    "EventEmitter": [
+      "emit",
+      "listenerCount",
+      "on",
+      "once",
+      "removeAllListeners"
+    ],
+    "Hash": [
+      "digest",
+      "update"
+    ],
+    "Hmac": [
+      "digest",
+      "update"
+    ],
+    "HttpStream": [
+      "close",
+      "done",
+      "header",
+      "read",
+      "readLine",
+      "status",
+      "write"
+    ],
+    "ReadableStream": [
+      "close",
+      "read",
+      "readLine"
+    ],
+    "ResponseWriter": [
+      "end",
+      "write",
+      "writeHead"
+    ],
+    "Socket": [
+      "close",
+      "read",
+      "write"
+    ],
+    "WritableStream": [
+      "close",
+      "write"
+    ]
+  },
+  "globals": [
+    "arg",
+    "argsCount",
+    "defer",
+    "expect",
+    "test"
+  ]
+}

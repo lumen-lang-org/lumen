@@ -1,0 +1,28 @@
+// The pure namespaces: path, url, crypto, zlib, Buffer, time, os constants.
+console.log(path.join("a", "..", "b", "c.txt"), path.basename("/x/y.txt", ".txt"), path.dirname("/x/y.txt"), path.extname("f.tar.gz"));
+let parts = path.parse("/home/u/file.txt");
+console.log(parts.root, parts.dir, parts.base, parts.name, parts.ext);
+console.log(path.format(parts), path.sep(), path.delimiter(), path.isAbsolute("/q"), path.normalize("/a//b/../c"));
+let u = url.parse("http://example.com:8080/p/q?a=1&b=2#frag");
+console.log(u.protocol, u.hostname, u.port, u.pathname, u.search, u.hash);
+console.log(u.query.get("a"), u.query.get("b"), url.format(u));
+let bad = url.parse("/relative");
+console.log(bad.protocol == "", bad.pathname, bad.href);
+console.log(crypto.sha256("abc"));
+console.log(crypto.sha1("abc"));
+console.log(crypto.base64Encode("hello"), crypto.base64Decode("aGVsbG8="), crypto.base64Decode("***") == "");
+console.log(crypto.randomBytes(8).length, crypto.randomUUID().length, crypto.randomKey().length);
+let key = crypto.randomKey();
+console.log(crypto.decrypt(crypto.encrypt("secret", key), key), crypto.decrypt("nope", key) == "");
+let b = Buffer.from("hello");
+console.log(b.length, b.toString("hex"), b.toString("base64"), b.at(1), b.at(99), b.slice(1, 3).toString("utf8"), b.equals(Buffer.from("hello")));
+console.log(Buffer.from("68656c6c6f", "hex").toString("utf8"), Buffer.alloc(3).length, Buffer.from("zz", "hex").length);
+let h = crypto.createHash("sha256");
+h.update(Buffer.from("ab"));
+console.log(h.update(Buffer.from("c")).digest().toString("hex") == crypto.sha256("abc"));
+console.log(crypto.hmacSync(Buffer.from("key"), Buffer.from("data")).toString("hex"));
+console.log(crypto.timingSafeEqual(Buffer.from("a"), Buffer.from("a")), crypto.timingSafeEqual(Buffer.from("a"), Buffer.from("ab")));
+let packed = zlib.gzipSync("hello hello hello hello");
+console.log(zlib.gunzipSync(packed), zlib.inflateSync(zlib.deflateSync("raw raw raw")), zlib.gunzipSync("garbage") == "");
+console.log(time.now() > 0, time.monotonic() >= 0, os.EOL() == "\n", os.devNull(), os.platform() == process.platform());
+console.log(http.METHODS().length, http.STATUS_CODES().get(404));

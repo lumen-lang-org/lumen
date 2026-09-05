@@ -673,11 +673,11 @@ pub fn fsCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
             return null;
         }
         const fd_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        const bufs_type = self.exprType(program, call.args[1], line, col) orelse return null;
-        if (!types.isInteger(fd_type) or !types.same(.string_array, bufs_type)) {
+        if (!types.isInteger(fd_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
+        self.ensureAssignable(program, .string_array, call.args[1], line, col) catch return null;
         program.uses_io = true;
         program.needs_writev_sync = true;
         call.checked_type = .i32;
@@ -689,11 +689,11 @@ pub fn fsCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall, 
             return null;
         }
         const fd_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        const sizes_type = self.exprType(program, call.args[1], line, col) orelse return null;
-        if (!types.isInteger(fd_type) or !types.same(.i32_array, sizes_type)) {
+        if (!types.isInteger(fd_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
+        self.ensureAssignable(program, .i32_array, call.args[1], line, col) catch return null;
         program.uses_io = true;
         program.needs_readv_sync = true;
         call.checked_type = .string_array;
@@ -1371,11 +1371,14 @@ pub fn childProcessCallType(self: *Checker, program: *ast.Program, call: *ast.St
             return null;
         }
         const cmd_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        const args_type = self.exprType(program, call.args[1], line, col) orelse return null;
-        if (!types.same(.string, cmd_type) or !types.same(.string_array, args_type)) {
+        if (!types.same(.string, cmd_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
+        // The argument list is checked against `string[]` the way a user
+        // function's parameter is, so an empty literal `[]` types from the
+        // slot instead of failing to infer (spec 503).
+        self.ensureAssignable(program, .string_array, call.args[1], line, col) catch return null;
         registerLumenSpawnResult(self) orelse return null;
         program.uses_io = true;
         program.needs_child_process_api = true;
@@ -1392,11 +1395,14 @@ pub fn childProcessCallType(self: *Checker, program: *ast.Program, call: *ast.St
             return null;
         }
         const cmd_type = self.exprType(program, call.args[0], line, col) orelse return null;
-        const args_type = self.exprType(program, call.args[1], line, col) orelse return null;
-        if (!types.same(.string, cmd_type) or !types.same(.string_array, args_type)) {
+        if (!types.same(.string, cmd_type)) {
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
+        // The argument list is checked against `string[]` the way a user
+        // function's parameter is, so an empty literal `[]` types from the
+        // slot instead of failing to infer (spec 503).
+        self.ensureAssignable(program, .string_array, call.args[1], line, col) catch return null;
         program.uses_io = true;
         program.needs_child_process_spawn = true;
         call.checked_type = .process_type;
