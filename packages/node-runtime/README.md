@@ -52,6 +52,17 @@ strings before printing them, wherever they sit in a value. A hand-written
 `.ts` module runs under the globals as long as its literals are ASCII,
 which is text and bytes alike.
 
+## The corpus
+
+`tests/corpus.txt` lists every `specs/*/examples/valid` program that prints
+under `node --import globals.mjs`, run as it is (Node strips the types),
+exactly what the native binary prints; the excluded programs are listed
+there with the reason each one needs spec 504's emitter or a later spec.
+`tests/corpus.test.mjs` re-checks the list against the expectation each
+spec's `conformance/manifest.json` pins for the native binary, compared the
+way `tools/lumen_conformance.zig` compares, and compiles natively only for a
+program no manifest pins.
+
 ## Not yet: blocking I/O
 
 `net.connect`, `net.createServer`, `http.request`/`get`/`stream`/
@@ -65,6 +76,6 @@ broker, so a program that reaches them fails by name rather than hanging.
 node --test packages/node-runtime/tests/
 ```
 
-`tests/corpus.txt` lists the `specs/*/examples/valid` programs that print
-under `node` what the native binary prints; `tests/corpus.test.mjs` checks
-them against `zig-out/bin/lumen`.
+The corpus file is the long one (about three minutes): the programs no
+conformance manifest pins are compiled natively with `zig-out/bin/lumen`,
+so run `zig build` first; everything else finishes in about a minute.

@@ -1,7 +1,238 @@
-# Programs from specs/*/examples/valid that print under node --import globals.mjs
-# what the native binary prints (spec 503 SC-002). One path per line, relative
-# to specs/. Produced by running every program both ways and keeping the ones
-# that agree; tests/corpus.test.mjs re-checks the list.
+# Programs from specs/*/examples/valid that print under node --import globals.mjs,
+# run as they are (Node strips the types; nothing is emitted), exactly what
+# the native binary prints (spec 503 SC-002). One path per line, relative to
+# specs/. tests/corpus.test.mjs re-checks the list against the expectation
+# each spec's conformance/manifest.json pins for the native binary.
+#
+# Walked: every specs/*/examples/valid program (228 on 2026-09-05;
+# 157 listed). Excluded, with the reason -- each one needs the spec named,
+# not this package; spec 504's conformance/corpus.txt is the list for
+# emitted programs and carries most of them:
+#   001-typescript-to-zig-native/examples/valid/division.ts -- 505: integer division and number formatting (`__divInt`) need the emitter
+#   001-typescript-to-zig-native/examples/valid/import-main.ts -- Lumen module rule: a default import of a module with no `export default` (the emitter resolves it)
+#   003-iteration-enums-ops/examples/valid/enums.ts -- 504: `enum` (Node strips types only; the emitter lowers it)
+#   007-defer/examples/valid/defer.ts -- 504: `defer` (Lumen syntax the emitter lowers)
+#   008-test/examples/valid/tests.ts -- 504/506: a `test "name" { }` block (Lumen syntax the emitter lowers)
+#   009-ffi/examples/valid/ffi-math.ts -- 507: `extern function` / `declare` (the native build links the library)
+#   013-array-methods/examples/valid/reduce-find-some-every.ts -- 504: `find`/`get` on a miss is `null`, `keys()`/`values()` are arrays (the emitter's nullOnMissing/iteratorToArray)
+#   015-multi-symbol-modules/examples/valid/mathlib.ts -- 504/506: a `test "name" { }` block (Lumen syntax the emitter lowers)
+#   015-multi-symbol-modules/examples/valid/named-import-main.ts -- 504/506: a `test "name" { }` block (Lumen syntax the emitter lowers)
+#   018-class-inheritance-members/examples/valid/inheritance.ts -- 504: an unassigned class field reads as its zero value natively (the emitter initialises it; raw JS reads `undefined`)
+#   020-map-set-tuples/examples/valid/map-basics.ts -- 504: `find`/`get` on a miss is `null`, `keys()`/`values()` are arrays (the emitter's nullOnMissing/iteratorToArray)
+#   020-map-set-tuples/examples/valid/set-basics.ts -- 504: `find`/`get` on a miss is `null`, `keys()`/`values()` are arrays (the emitter's nullOnMissing/iteratorToArray)
+#   024-ref-params/examples/valid/scalar-out-param.ts -- 507: a `Ref<T>` argument
+#   025-declare-ffi/examples/valid/declare-math.ts -- 507: `extern function` / `declare` (the native build links the library)
+#   027-using-disposables/examples/valid/using-defer.ts -- 504: `defer` (Lumen syntax the emitter lowers)
+#   027-using-disposables/examples/valid/using-dispose.ts -- 504: `using` (Lumen syntax the emitter lowers)
+#   450-persistent-subprocess/examples/valid/roundtrip-run.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   451-exported-types-and-module-scoped-imports/examples/valid/export-type-main.ts -- 504: a type-only named import (the emitter drops it; Node's loader rejects it)
+#   451-exported-types-and-module-scoped-imports/examples/valid/shared-type-a.ts -- 504: a type-only named import (the emitter drops it; Node's loader rejects it)
+#   451-exported-types-and-module-scoped-imports/examples/valid/shared-type-b.ts -- 504: a type-only named import (the emitter drops it; Node's loader rejects it)
+#   451-exported-types-and-module-scoped-imports/examples/valid/shared-type-main.ts -- 504: a type-only named import (the emitter drops it; Node's loader rejects it)
+#   451-exported-types-and-module-scoped-imports/examples/valid/unused-type-main.ts -- 504: a type-only named import (the emitter drops it; Node's loader rejects it)
+#   452-streaming-http/examples/valid/both-forms.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   452-streaming-http/examples/valid/stream-client-methods.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   452-streaming-http/examples/valid/stream-error-handle.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   452-streaming-http/examples/valid/stream-server.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   453-ref-for-value-types/examples/valid/plain-array-param-copies.ts -- 504: an array argument is a copy natively (the emitter copies it; raw JS shares it)
+#   453-ref-for-value-types/examples/valid/ref-array-accumulate.ts -- 507: a `Ref<T>` argument
+#   453-ref-for-value-types/examples/valid/ref-array-chain.ts -- 507: a `Ref<T>` argument
+#   453-ref-for-value-types/examples/valid/ref-array-of-records.ts -- 507: a `Ref<T>` argument
+#   453-ref-for-value-types/examples/valid/ref-string-out.ts -- 507: a `Ref<T>` argument
+#   455-decorators/examples/valid/decorated-class-compiles.ts -- 504: a decorator (`@name`), run by the compiler
+#   455-decorators/examples/valid/decorated-function-compiles.ts -- 504: a decorator (`@name`), run by the compiler
+#   455-decorators/examples/valid/decorator-argument-kinds.ts -- 504: a decorator (`@name`), run by the compiler
+#   455-decorators/examples/valid/two-decorators-in-source-order.ts -- 504: a decorator (`@name`), run by the compiler
+#   456-json-for-classes/examples/valid/class-private-excluded.ts -- 504: `JSON.parse<Class>` revives an instance (the emitter installs the class)
+#   456-json-for-classes/examples/valid/class-round-trip.ts -- 504: `JSON.parse<Class>` revives an instance (the emitter installs the class)
+#   458-embed-file/examples/valid/embed-dir.ts -- 504: `embed`/`embedDir` are compile-time (embed-from-import also imports without an extension)
+#   458-embed-file/examples/valid/embed-file.ts -- 504: `embed`/`embedDir` are compile-time (embed-from-import also imports without an extension)
+#   458-embed-file/examples/valid/embed-from-import.ts -- 504: `embed`/`embedDir` are compile-time (embed-from-import also imports without an extension)
+#   458-embed-file/examples/valid/embed-verbatim.ts -- 504: `embed`/`embedDir` are compile-time (embed-from-import also imports without an extension)
+#   459-http-request-headers/examples/valid/read-request-headers.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   459-http-request-headers/examples/valid/request-headers-map-methods.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   459-http-request-headers/examples/valid/streaming-handler-headers.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   459-method-descriptions/examples/valid/class-without-methods.ts -- 504: a decorator (`@name`), run by the compiler
+#   459-method-descriptions/examples/valid/decorated-methods.ts -- 504: a decorator (`@name`), run by the compiler
+#   459-method-descriptions/examples/valid/unaware-decorator.ts -- 504: a decorator (`@name`), run by the compiler
+#   461-parameter-shadowing/examples/valid/extern-shadowing-param-main.ts -- 507: `extern function` / `declare` (the native build links the library)
+#   467-crypto-aead/examples/valid/roundtrip.ts -- 505: a non-ASCII literal is bytes natively and UTF-16 units in a raw .ts (the emitter spells it as bytes)
+#   468-thread-safe-arena/examples/valid/worker-error-isolation.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   468-thread-safe-arena/examples/valid/worker-random-independent.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   468-thread-safe-arena/examples/valid/worker-unwind-depth.ts -- 508: `child_process.spawn`, `http.stream`/`createServer` or `Worker.run` (the I/O broker; the package throws by name)
+#   477-class-metadata/examples/valid/mounted-controllers.ts -- 504: a decorator (`@name`), run by the compiler
+#   478-class-to-record/examples/valid/controllers-without-mount.ts -- 504: a decorator (`@name`), run by the compiler
+#   479-suspending-await/examples/valid/call-does-not-run-the-body.ts -- documented divergence (504's table): `await` ordering follows JavaScript's on Node -- calling an async function runs its body to the first `await`; natively the call only starts the task (479)
+#   479-suspending-await/examples/valid/two-waiters-interleave.ts -- documented divergence (504's table): `await` ordering follows JavaScript's on Node -- calling an async function runs its body to the first `await`; natively the call only starts the task (479)
+#   482-export-class/examples/valid/across-modules.ts -- 504: `enum` (Node strips types only; the emitter lowers it)
+#   483-json-parse-names-the-field/examples/valid/named-field.ts -- 505: `JSON.parse<T>` validation needs T's shape from the emitter
+#   488-class-and-type-alias-names/examples/valid/collide.ts -- 504: `enum` (Node strips types only; the emitter lowers it)
+#   488-class-and-type-alias-names/examples/valid/kinds.ts -- 504: `enum` (Node strips types only; the emitter lowers it)
+#   502-string-literal-newline/examples/valid/hole.ts -- 502/504: a raw newline inside a string literal (the emitter escapes it)
+#   502-string-literal-newline/examples/valid/newline.ts -- 502/504: a raw newline inside a string literal (the emitter escapes it)
+#   502-string-literal-newline/examples/valid/template.ts -- 502/504: a raw newline inside a string literal (the emitter escapes it)
+#   504-node-target-emitter/examples/valid/core.ts -- 504: `enum` (Node strips types only; the emitter lowers it)
+#   504-node-target-emitter/examples/valid/modules_main.ts -- 504: a type-only named import (the emitter drops it; Node's loader rejects it)
+#   505-node-byte-strings-and-integers/examples/valid/bytes.ts -- 505: a non-ASCII literal is bytes natively and UTF-16 units in a raw .ts (the emitter spells it as bytes)
+#   505-node-byte-strings-and-integers/examples/valid/compound.ts -- 505: integer division and number formatting (`__divInt`) need the emitter
+#   505-node-byte-strings-and-integers/examples/valid/ints.ts -- 505: a non-ASCII literal is bytes natively and UTF-16 units in a raw .ts (the emitter spells it as bytes)
+#   505-node-byte-strings-and-integers/examples/valid/json_utf8.ts -- 505: a non-ASCII literal is bytes natively and UTF-16 units in a raw .ts (the emitter spells it as bytes)
+#   505-node-byte-strings-and-integers/examples/valid/roundtrip.ts -- 505: a non-ASCII literal is bytes natively and UTF-16 units in a raw .ts (the emitter spells it as bytes)
+#   507-node-ffi-link/examples/valid/ffi.ts -- 507: `extern function` / `declare` (the native build links the library)
+001-typescript-to-zig-native/examples/valid/arrays.ts
+001-typescript-to-zig-native/examples/valid/block-shadow.ts
+001-typescript-to-zig-native/examples/valid/bool-literal.ts
+001-typescript-to-zig-native/examples/valid/bool-operators.ts
+001-typescript-to-zig-native/examples/valid/break-continue.ts
+001-typescript-to-zig-native/examples/valid/compound-more.ts
+001-typescript-to-zig-native/examples/valid/console-stdlib.ts
+001-typescript-to-zig-native/examples/valid/do-while.ts
+001-typescript-to-zig-native/examples/valid/else-if.ts
+001-typescript-to-zig-native/examples/valid/exceptions.ts
+001-typescript-to-zig-native/examples/valid/export-default-helper.ts
+001-typescript-to-zig-native/examples/valid/export-default-main.ts
+001-typescript-to-zig-native/examples/valid/for-loop.ts
+001-typescript-to-zig-native/examples/valid/function-call.ts
+001-typescript-to-zig-native/examples/valid/function-decl.ts
+001-typescript-to-zig-native/examples/valid/function-hoist.ts
+001-typescript-to-zig-native/examples/valid/hello.ts
+001-typescript-to-zig-native/examples/valid/if-else.ts
+001-typescript-to-zig-native/examples/valid/import-math.ts
+001-typescript-to-zig-native/examples/valid/io-stdlib.ts
+001-typescript-to-zig-native/examples/valid/let-reassign.ts
+001-typescript-to-zig-native/examples/valid/log-string.ts
+001-typescript-to-zig-native/examples/valid/math-more.ts
+001-typescript-to-zig-native/examples/valid/math-stdlib.ts
+001-typescript-to-zig-native/examples/valid/named-type.ts
+001-typescript-to-zig-native/examples/valid/nested-record.ts
+001-typescript-to-zig-native/examples/valid/postfix-and-compound.ts
+001-typescript-to-zig-native/examples/valid/postfix-decrement.ts
+001-typescript-to-zig-native/examples/valid/prefix-update.ts
+001-typescript-to-zig-native/examples/valid/record-array.ts
+001-typescript-to-zig-native/examples/valid/record-flow.ts
+001-typescript-to-zig-native/examples/valid/string-array-stdlib.ts
+001-typescript-to-zig-native/examples/valid/string-basics.ts
+001-typescript-to-zig-native/examples/valid/string-equality.ts
+001-typescript-to-zig-native/examples/valid/string-literal-union.ts
+001-typescript-to-zig-native/examples/valid/switch.ts
+001-typescript-to-zig-native/examples/valid/ternary.ts
+001-typescript-to-zig-native/examples/valid/types.ts
+001-typescript-to-zig-native/examples/valid/void-function.ts
+001-typescript-to-zig-native/examples/valid/void-return.ts
+002-numeric-literals-lexer/examples/valid/block-comment.ts
+002-numeric-literals-lexer/examples/valid/float-literal.ts
+002-numeric-literals-lexer/examples/valid/int-bases.ts
+002-numeric-literals-lexer/examples/valid/strict-equality.ts
+003-iteration-enums-ops/examples/valid/bitwise-exp.ts
+003-iteration-enums-ops/examples/valid/for-of.ts
+003-iteration-enums-ops/examples/valid/interface.ts
+004-nullability/examples/valid/narrowing-chain.ts
+004-nullability/examples/valid/nullable.ts
+004-nullability/examples/valid/optional-coalesce.ts
+005-unions-destructuring-templates/examples/valid/destructuring.ts
+005-unions-destructuring-templates/examples/valid/numeric-union.ts
+005-unions-destructuring-templates/examples/valid/template.ts
+006-functions-closures/examples/valid/arrow.ts
+006-functions-closures/examples/valid/closures.ts
+006-functions-closures/examples/valid/function-values.ts
+010-classes/examples/valid/classes.ts
+013-array-methods/examples/valid/indexof-includes-join.ts
+013-array-methods/examples/valid/map-filter-foreach.ts
+014-string-methods/examples/valid/query-methods.ts
+014-string-methods/examples/valid/split-method.ts
+014-string-methods/examples/valid/transform-methods.ts
+015-multi-symbol-modules/examples/valid/export-list-main.ts
+015-multi-symbol-modules/examples/valid/geomlib.ts
+016-generics/examples/valid/array-sugar.ts
+016-generics/examples/valid/generic-class.ts
+016-generics/examples/valid/generic-interface.ts
+016-generics/examples/valid/identity.ts
+016-generics/examples/valid/multi-param.ts
+017-type-aliases-unions/examples/valid/aliases.ts
+017-type-aliases-unions/examples/valid/discriminated-union.ts
+019-error-handling/examples/valid/conditional-throw.ts
+019-error-handling/examples/valid/nested-rethrow.ts
+019-error-handling/examples/valid/throw-catch-finally.ts
+020-map-set-tuples/examples/valid/tuples.ts
+021-spread-rest-defaults/examples/valid/array-object-spread.ts
+021-spread-rest-defaults/examples/valid/default-params.ts
+021-spread-rest-defaults/examples/valid/rest-and-spread-call.ts
+022-async-await/examples/valid/async-chain.ts
+022-async-await/examples/valid/resolved-promises.ts
+022-async-await/examples/valid/timers.ts
+024-ref-params/examples/valid/record-by-ref.ts
+028-test-fn/examples/valid/test-fn.ts
+062-optional-call/examples/valid/call-chained.ts
+062-optional-call/examples/valid/field-chained.ts
+062-optional-call/examples/valid/local-short-circuit.ts
+062-optional-call/examples/valid/null-closure.ts
+062-optional-call/examples/valid/set-closure.ts
+449-module-level-bindings-in-tests/examples/valid/module-binding-direct.ts
+449-module-level-bindings-in-tests/examples/valid/module-binding-run-parity.ts
+449-module-level-bindings-in-tests/examples/valid/module-binding-through-function.ts
+449-module-level-bindings-in-tests/examples/valid/module-init-once.ts
+449-module-level-bindings-in-tests/examples/valid/module-record-array.ts
+450-persistent-subprocess/examples/valid/roundtrip.ts
+451-exported-types-and-module-scoped-imports/examples/valid/aliased-import-main.ts
+451-exported-types-and-module-scoped-imports/examples/valid/field-alias-main.ts
+451-exported-types-and-module-scoped-imports/examples/valid/greet-lib.ts
+451-exported-types-and-module-scoped-imports/examples/valid/greet-mid.ts
+451-exported-types-and-module-scoped-imports/examples/valid/point.ts
+451-exported-types-and-module-scoped-imports/examples/valid/same-module-main.ts
+451-exported-types-and-module-scoped-imports/examples/valid/same-name-a.ts
+451-exported-types-and-module-scoped-imports/examples/valid/same-name-b.ts
+451-exported-types-and-module-scoped-imports/examples/valid/same-name-main.ts
+451-exported-types-and-module-scoped-imports/examples/valid/unused-type-lib.ts
+451-exported-types-and-module-scoped-imports/examples/valid/wrapper-lib.ts
+451-exported-types-and-module-scoped-imports/examples/valid/wrapper-main.ts
+451-exported-types-and-module-scoped-imports/examples/valid/wrapper-mid.ts
+453-ref-for-value-types/examples/valid/ref-array-push.ts
+453-ref-for-value-types/examples/valid/ref-array-read.ts
+456-json-for-classes/examples/valid/class-inherits.ts
+456-json-for-classes/examples/valid/class-no-constructor-on-parse.ts
+458-embed-file/examples/valid/embed-not-a-call.ts
+461-parameter-shadowing/examples/valid/arrow-shadowing-param-main.ts
+461-parameter-shadowing/examples/valid/cross-package-param-main.ts
+461-parameter-shadowing/examples/valid/reassigned-shadowing-param-main.ts
+461-parameter-shadowing/examples/valid/ref-shadowing-param-main.ts
+461-parameter-shadowing/examples/valid/replies.ts
+461-parameter-shadowing/examples/valid/same-file-param-main.ts
+461-parameter-shadowing/examples/valid/store.ts
+464-generated-temporaries/examples/valid/array-and-string-mixed.ts
+464-generated-temporaries/examples/valid/array-methods-nested-receiver.ts
+464-generated-temporaries/examples/valid/independent-temporaries.ts
+464-generated-temporaries/examples/valid/nested-array-from.ts
+464-generated-temporaries/examples/valid/nested-array-methods.ts
+464-generated-temporaries/examples/valid/nested-optional-chain.ts
+464-generated-temporaries/examples/valid/nested-string-receiver.ts
+464-generated-temporaries/examples/valid/string-methods-nested-receiver.ts
+464-generated-temporaries/examples/valid/three-levels.ts
+467-crypto-aead/examples/valid/fresh-nonce.ts
+467-crypto-aead/examples/valid/malformed.ts
+467-crypto-aead/examples/valid/random-key.ts
+467-crypto-aead/examples/valid/tampered.ts
+468-thread-safe-arena/examples/valid/single-thread-unchanged.ts
+474-sha1-for-websocket/examples/valid/vectors.ts
+475-process-sleep/examples/valid/sleep.ts
+476-exported-name-collisions/examples/valid/collide.ts
+476-exported-name-collisions/examples/valid/one.ts
+476-exported-name-collisions/examples/valid/private.ts
+476-exported-name-collisions/examples/valid/two.ts
+481-optional-fields-absent/examples/valid/absent.ts
+487-chained-assignment-targets/examples/valid/chained-targets.ts
+488-class-and-type-alias-names/examples/valid/gate.ts
+488-class-and-type-alias-names/examples/valid/kinds_type.ts
+488-class-and-type-alias-names/examples/valid/shape.ts
+489-method-and-module-function-names/examples/valid/collide.ts
+489-method-and-module-function-names/examples/valid/inherited.ts
+489-method-and-module-function-names/examples/valid/lib.ts
+492-map-set-thread-safety/examples/valid/single-thread-unchanged.ts
 503-node-runtime-package/examples/valid/fs-shapes.ts
 503-node-runtime-package/examples/valid/namespaces.ts
 503-node-runtime-package/examples/valid/process-shapes.ts
+504-node-target-emitter/examples/valid/hello.ts
+504-node-target-emitter/examples/valid/modules_geometry.ts
+505-node-byte-strings-and-integers/examples/valid/byte_tests.ts
+505-node-byte-strings-and-integers/examples/valid/hot_path.ts
+506-node-test-runner/examples/valid/tests.ts
+506-node-test-runner/examples/valid/tests_helper.ts

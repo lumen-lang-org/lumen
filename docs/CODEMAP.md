@@ -16,9 +16,9 @@ FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumVa
 The type checker -- stage 3, between parsing and codegen.
 classImplements:74, hasMustUse:110, Checker:148, refInner:1868, isAddressable:1880, isCSafe:1888, findField:1895, checkProgram:1902
 
-## src/lumen_check_assign.zig (429 lines)
+## src/lumen_check_assign.zig (433 lines)
 Assignability and cast checking: "can a value of type X be used where Y is
-ensureAssignable:19, castAllowed:392, recordConverter:413
+ensureAssignable:19, castAllowed:396, recordConverter:417
 
 ## src/lumen_check_class.zig (128 lines)
 Class member resolution: field/method/accessor lookup across the

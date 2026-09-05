@@ -62,27 +62,19 @@ contract, and `website/stdlib/<ns>.html` documents each one's type.
   synchronous stdlib, printing what the native binary prints (list pinned in
   `tests/corpus.txt`; the initial list is produced by running them all and
   recording which pass).
-- **SC-003**: Joule's probe (`specs/501-node-runtime/probe/run_tests.mjs`)
-  with this package in place of the prelude loads at least 40 of 109 files
-  (the 25 raw-newline files stay out until Joule fixes them) and every
-  `fs`/`path`/`crypto`/`spawnSync` failure it reported is gone.
 
-  Measured (`LUMEN_PRELUDE=packages/node-runtime/globals.mjs node
-  probe/run_tests.mjs` in Joule's checkout, 2026-09-05):
-
-  | Runtime | Loaded, all pass | Loaded, some fail | Did not load | Tests pass / fail |
-  | --- | --- | --- | --- | --- |
-  | 60-line sketch | 14 | 11 | 84 | 221 / 155 |
-  | this package | 20 | 5 | 84 | 313 / 63 |
-
-  Every `fs`/`path`/`crypto`/`spawnSync` failure is gone: the 5 files that
-  still have failures fail only on the `plat_*`/`tty_*` FFI shims (spec
-  507) and on byte-string semantics (`terminal/text.test.ts`, spec 505).
-  The load count did not move because all 84 non-loading files fail inside
-  Node's loader before any runtime code runs — 37 `https:` imports, 22
-  type-only named imports, 25 raw newlines — which the emitter of spec 504
-  resolves, not a runtime package. The 40-file target therefore belongs to
-  504's gate; 503 meets the failure clause of this criterion.
+  Measured (every `specs/*/examples/valid` program, run natively and as a
+  raw `.ts` under `node --import globals.mjs`, 2026-09-05): 228 programs,
+  157 print identically and are listed. The 71 excluded are listed in
+  `corpus.txt` with the reason, and none of them is the package's: 43 need
+  spec 504's emitter (most do not load at all — `enum`, `defer`, `using`,
+  `test "name" { }` blocks, decorators, `embed`, type-only imports, raw
+  newlines — and the rest print a semantic the emitter supplies: integer
+  division, `null` for a miss, zero-valued fields, array copies, the
+  documented `await` ordering), 8 need spec 505's byte strings, 9 need
+  `Ref<T>`/`extern` (507) and 11 the I/O broker (508). `tests/corpus.test.mjs`
+  checks the 157 against the native expectation each spec's conformance
+  manifest pins.
 
 ## Not planned
 

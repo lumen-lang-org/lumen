@@ -37,19 +37,28 @@
 
 - [x] T013 Per-module behaviour tests, each pinned to the introducing spec's
   documented fallback values.
-- [ ] T014 Run every `specs/*/examples/valid/*.ts` under
+- [x] T014 Run every `specs/*/examples/valid/*.ts` under
   `node --import ./packages/node-runtime/globals.mjs`; write the passing
   list to `tests/corpus.txt`; add `tests/corpus.test.mjs` that runs the list
-  and diffs stdout against the native binary's output.
+  and diffs stdout against the native binary's output. (228 programs walked:
+  157 listed, 71 excluded with the reason each — every one needs spec
+  504/505/507/508, none the package; the numbers are in spec.md SC-002.
+  The test takes a program's native expectation from the `compile-run` case
+  its spec's conformance manifest pins, compared as
+  `tools/lumen_conformance.zig` compares, and compiles natively only for the
+  36 programs no manifest pins — helper modules and `test`-only files, four
+  at a time, since each native compile is ~20 s single-threaded.)
 - [x] T015 Run Joule's probe with the package; record the numbers in
   spec.md SC-003. (`LUMEN_PRELUDE=<pkg>/globals.mjs` on `run_tests.mjs`.
   The fs/path/crypto/spawnSync failures are gone; the load count stays at
   25 because the 84 files that do not load fail in Node's loader — `https:`
   imports, type-only imports, raw newlines — which the package cannot
   reach; spec 504 owns those. Recorded in spec.md.)
-- [ ] T016 `node --test packages/node-runtime/tests/` green; `zig build test`
-  unaffected.
-- [ ] T017 `sh tools/codemap.sh`; commit.
+- [x] T016 `node --test packages/node-runtime/tests/` green; `zig build test`
+  unaffected. (The corpus file is the long one: ~3 minutes for the 36
+  native fallbacks; the other 127 tests take a minute.)
+- [x] T017 `sh tools/codemap.sh`; commit. (T020 moved two line numbers in
+  `lumen_check_assign.zig`.)
 
 ## Discovered while writing the corpus programs
 
