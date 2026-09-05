@@ -18,6 +18,14 @@ const Expect = struct {
     noDiagnostic: ?[]const u8 = null, // compile-warn: text that must NOT appear on the compile's stderr
     inferredTypes: ?std.json.Value = null,
     acceptedTypes: ?[]const []const u8 = null,
+    // test-run / node-test-run: substrings that must all appear in the test
+    // run's stderr (specs 242, 243 -- the `ok`/`FAIL`/tally rendering). When
+    // set, the case's outcome is judged by these substrings rather than by
+    // plain exit success: any substring containing "FAIL " means the fixture
+    // has a deliberately failing test, so the run is expected to exit
+    // nonzero; otherwise it is expected to exit zero, same as a plain
+    // `test-run`/`node-test-run` case.
+    testOutput: ?[]const []const u8 = null,
 };
 
 const Stats = struct {
@@ -224,10 +232,44 @@ fn checkStatic(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []
     return true;
 }
 
+// Shared by `checkTestRun`/`checkNodeTestRun` when a case sets
+// `expect.testOutput` (specs 242, 243): checks that every listed substring
+// appears in the run's stderr, that the exit status agrees with whether any
+// of them names a failure, and (when `expect.stdout` is also set) that it
+// appears as a substring of the program's own stdout -- console.log inside a
+// test passes through unrouted through the test reporter.
+fn checkTestOutputExpectation(case: Case, run: std.process.RunResult, expected: []const []const u8) bool {
+    var want_fail = false;
+    for (expected) |s| {
+        if (std.mem.indexOf(u8, s, "FAIL ") != null) want_fail = true;
+    }
+    const succeeded = termSucceeded(run.term);
+    if (want_fail == succeeded) {
+        std.debug.print("FAIL {s}: expected the run to exit {s}\n{s}\n", .{ case.id, if (want_fail) "nonzero (a test fails)" else "zero (all tests pass)", run.stderr });
+        return false;
+    }
+    for (expected) |s| {
+        if (std.mem.indexOf(u8, run.stderr, s) == null) {
+            std.debug.print("FAIL {s}: expected output to contain {s}\nactual:\n{s}\n", .{ case.id, s, run.stderr });
+            return false;
+        }
+    }
+    if (case.expect.stdout) |want_stdout| {
+        if (std.mem.indexOf(u8, run.stdout, want_stdout) == null) {
+            std.debug.print("FAIL {s}: expected stdout to contain {s}\nactual:\n{s}\n", .{ case.id, want_stdout, run.stdout });
+            return false;
+        }
+    }
+    return true;
+}
+
 fn checkTestRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
     const run = try runProcess(arena, io, &.{ lumen_bin, "test", source_path });
     const exe_name = try exeNameForSource(arena, source_path);
     defer removeGenerated(io, source_path, exe_name);
+    if (case.expect.testOutput) |expected| {
+        return checkTestOutputExpectation(case, run, expected);
+    }
     if (!termSucceeded(run.term)) {
         std.debug.print("FAIL {s}: tests failed\n{s}\n", .{ case.id, run.stderr });
         return false;
@@ -242,6 +284,9 @@ fn checkNodeTestRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_pat
     const out_dir = try std.fmt.allocPrint(arena, "{s}.node", .{std.fs.path.stem(source_path)});
     defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
     const run = try runProcess(arena, io, &.{ lumen_bin, "test", "--target", "node", source_path });
+    if (case.expect.testOutput) |expected| {
+        return checkTestOutputExpectation(case, run, expected);
+    }
     if (!termSucceeded(run.term)) {
         std.debug.print("FAIL {s}: node tests failed\n{s}\n", .{ case.id, run.stderr });
         return false;

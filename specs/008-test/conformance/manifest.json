@@ -8,6 +8,12 @@
       "expect": {}
     },
     {
+      "id": "test.valid.tests-node",
+      "source": "../examples/valid/tests.ts",
+      "phase": "node-test-run",
+      "expect": {}
+    },
+    {
       "id": "test.invalid.expect-nonbool",
       "source": "../examples/invalid/expect-nonbool.ts",
       "phase": "diagnostics",

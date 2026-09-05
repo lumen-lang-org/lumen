@@ -1,0 +1,33 @@
+{
+  "feature": "242-test-output",
+  "cases": [
+    {
+      "id": "output.native",
+      "source": "../examples/valid/output.ts",
+      "phase": "test-run",
+      "expect": {
+        "stdout": "checking",
+        "testOutput": [
+          "ok adds",
+          "ok logs while running",
+          "FAIL fails — expected 4, found 3",
+          "2 passed, 1 failed"
+        ]
+      }
+    },
+    {
+      "id": "output.node",
+      "source": "../examples/valid/output.ts",
+      "phase": "node-test-run",
+      "expect": {
+        "stdout": "checking",
+        "testOutput": [
+          "ok adds",
+          "ok logs while running",
+          "FAIL fails — expected 4, found 3",
+          "2 passed, 1 failed"
+        ]
+      }
+    }
+  ]
+}

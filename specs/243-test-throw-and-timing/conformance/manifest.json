@@ -1,0 +1,27 @@
+{
+  "feature": "243-test-throw-and-timing",
+  "cases": [
+    {
+      "id": "throws.native",
+      "source": "../examples/valid/throws.ts",
+      "phase": "test-run",
+      "expect": {
+        "testOutput": [
+          "FAIL throws — Uncaught Error: kaput",
+          "0 passed, 1 failed"
+        ]
+      }
+    },
+    {
+      "id": "throws.node",
+      "source": "../examples/valid/throws.ts",
+      "phase": "node-test-run",
+      "expect": {
+        "testOutput": [
+          "FAIL throws — Uncaught Error: kaput",
+          "0 passed, 1 failed"
+        ]
+      }
+    }
+  ]
+}

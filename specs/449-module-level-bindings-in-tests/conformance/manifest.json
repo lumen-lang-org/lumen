@@ -8,9 +8,21 @@
       "expect": {}
     },
     {
+      "id": "module-bindings.valid.direct-node",
+      "source": "../examples/valid/module-binding-direct.ts",
+      "phase": "node-test-run",
+      "expect": {}
+    },
+    {
       "id": "module-bindings.valid.through-function",
       "source": "../examples/valid/module-binding-through-function.ts",
       "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "module-bindings.valid.through-function-node",
+      "source": "../examples/valid/module-binding-through-function.ts",
+      "phase": "node-test-run",
       "expect": {}
     },
     {
@@ -20,15 +32,33 @@
       "expect": {}
     },
     {
+      "id": "module-bindings.valid.record-array-node",
+      "source": "../examples/valid/module-record-array.ts",
+      "phase": "node-test-run",
+      "expect": {}
+    },
+    {
       "id": "module-bindings.valid.init-once",
       "source": "../examples/valid/module-init-once.ts",
       "phase": "test-run",
       "expect": {}
     },
     {
+      "id": "module-bindings.valid.init-once-node",
+      "source": "../examples/valid/module-init-once.ts",
+      "phase": "node-test-run",
+      "expect": {}
+    },
+    {
       "id": "module-bindings.valid.run-parity-tests",
       "source": "../examples/valid/module-binding-run-parity.ts",
       "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "module-bindings.valid.run-parity-tests-node",
+      "source": "../examples/valid/module-binding-run-parity.ts",
+      "phase": "node-test-run",
       "expect": {}
     },
     {

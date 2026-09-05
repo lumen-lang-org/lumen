@@ -22,11 +22,38 @@
   008/028/242/243/449 manifests' `test-run` cases. (The phase exists; 505
   and 506 use it. Adding it to the 008/028/242/243/449 manifests is the
   remaining part -- T004b.)
-- [ ] T004b `node-test-run` cases in the 008/028/242/243/449 manifests.
+- [x] T004b `node-test-run` cases in the 008/028/242/243/449 manifests.
+  (008 and 028 already had `test-run` cases against their existing
+  pass-only examples; added `node-test-run` mirrors of each. 449 got a
+  `node-test-run` mirror of every `test-run` case. 242 and 243 had no
+  `conformance/` folder at all -- their FAIL/throw rendering had never been
+  conformance-checked on *either* target -- so this added
+  `examples/valid/output.ts` and `throws.ts`, a manifest for each with a
+  `test-run` and a `node-test-run` case, and registered both in
+  `build.zig`'s `conformance` step. Checking a deliberately-failing test's
+  rendered text (not just its exit code) needed a new `Expect.testOutput`
+  field in `tools/lumen_conformance.zig` -- a list of substrings that must
+  all appear in the run's stderr, with the expected exit status inferred
+  from whether any of them is a `FAIL ` line -- shared by `checkTestRun`
+  and `checkNodeTestRun`. The node target's `at <file>:<line>` still names
+  the generated module rather than the `.ts` line (the open item T002
+  already noted), so the node-test-run cases don't pin that line.)
 - [x] T005 `examples/valid/tests.ts` + manifest (`test-run` and
   `node-test-run`); register in `build.zig`. (`tests.ts` imports
   `tests_helper.ts`, whose own failing test proves FR-002 on both targets;
   the manifest was already registered.)
-- [ ] T006 Joule sweep script `tools/joule_node_tests.sh <joule-dir>`;
-  record per-file parity in Joule spec 004.
-- [ ] T007 Gate green; `codemap.sh`; commit.
+- [x] T006 Joule sweep script `tools/joule_node_tests.sh <joule-dir>`;
+  record per-file parity in Joule spec 004. (Builds the two shim `.o`s are
+  the caller's job -- the script itself just runs `lumen test` and `lumen
+  test --target node` over every `src/**/*.test.ts` and reports pass/fail
+  per file, cleaning up the generated `.node` dir and `.lumen-*.zig`/binary
+  it leaves at the repo root -- spec 504 names artifacts by the source's
+  basename stem, not its full path. Run against `/home/user/code`: 109/109
+  native, 38/109 node; every one of the 71 mismatches is a node-target
+  *compile* failure classified as `E_FFI_NODE_LINK` (50, this repo's own
+  spec 004 T002 -- the `tty`/`platform` shim JS twins don't exist yet) or
+  `E_TARGET_UNSUPPORTED` (21, Lumen spec 508's `http` gap) -- none from
+  anything spec 506 owns. Recorded in
+  `/home/user/code/specs/004-node-runtime/spec.md` under "Node target
+  parity (Lumen 506 T006)", with its T005 ticked.)
+- [x] T007 Gate green; `codemap.sh`; commit.

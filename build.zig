@@ -272,6 +272,16 @@ pub fn build(b: *std.Build) void {
     conformance_cmd_028.addArg("specs/028-test-fn/conformance/manifest.json");
     conformance_cmd_028.addArg("zig-out/bin/lumen");
 
+    const conformance_cmd_242 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_242.step.dependOn(b.getInstallStep());
+    conformance_cmd_242.addArg("specs/242-test-output/conformance/manifest.json");
+    conformance_cmd_242.addArg("zig-out/bin/lumen");
+
+    const conformance_cmd_243 = b.addRunArtifact(conformance_runner);
+    conformance_cmd_243.step.dependOn(b.getInstallStep());
+    conformance_cmd_243.addArg("specs/243-test-throw-and-timing/conformance/manifest.json");
+    conformance_cmd_243.addArg("zig-out/bin/lumen");
+
     const conformance_cmd_449 = b.addRunArtifact(conformance_runner);
     conformance_cmd_449.step.dependOn(b.getInstallStep());
     conformance_cmd_449.addArg("specs/449-module-level-bindings-in-tests/conformance/manifest.json");
@@ -457,6 +467,8 @@ pub fn build(b: *std.Build) void {
     conformance_step.dependOn(&conformance_cmd_007.step);
     conformance_step.dependOn(&conformance_cmd_008.step);
     conformance_step.dependOn(&conformance_cmd_009.step);
+    conformance_step.dependOn(&conformance_cmd_242.step);
+    conformance_step.dependOn(&conformance_cmd_243.step);
     conformance_step.dependOn(&conformance_cmd_449.step);
     conformance_step.dependOn(&conformance_cmd_450.step);
     conformance_step.dependOn(&conformance_cmd_451.step);
