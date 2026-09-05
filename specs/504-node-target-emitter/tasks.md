@@ -101,7 +101,11 @@
   `node-diagnostics` cases in the manifest.)
 - [x] T018 `lumen run --target node`, `--out`, `--runtime`. (`lumen test
   --target node` reports that it is spec 506's.)
-- [ ] T019 Joule pure modules compile (`SC-002` list); note results in spec.
+- [x] T019 Joule pure modules compile (`SC-002` list); note results in spec.
+  (All eight compile, parse under `node --check` and run; the five test
+  files among them pass under `lumen test --target node`, 140 tests in all.
+  The numbers, and the Joule commit they were measured at, are in spec.md
+  under SC-002.)
 
 ## Phase 5: Close
 

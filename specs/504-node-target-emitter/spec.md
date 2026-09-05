@@ -102,7 +102,16 @@ else needs to know where the runtime lives.
   in `conformance/corpus.txt` with the exclusion reason per excluded file).
 - **SC-002**: Joule's pure modules (`protocol/`, `approval/`, `terminal/
   wrap.ts`, `text.ts`, `markdown.ts`) compile with `--target node` and their
-  `.test.ts` files pass under 506.
+  `.test.ts` files pass under 506. Measured (T019) against `joule-sh/code`
+  at 44f8612 (2026-09-02): all eight modules -- `protocol/frames.ts`,
+  `approval/command_safety.ts`, `gate.ts`, `plan_briefing.ts`,
+  `settled_frame.ts`, `terminal/wrap.ts`, `text.ts`, `markdown.ts` --
+  compile, every one of the 27 emitted `.mjs` files passes `node --check`,
+  and every entry runs to exit 0; the only compiler output is the native
+  checker's unused-variable warnings. Under `lumen test --target node`
+  their test files all pass: `frames.test.ts` 32, `command_safety.test.ts`
+  47, `gate.test.ts` 27, `text.test.ts` 8, `markdown.test.ts` 26
+  (`wrap.ts`, `plan_briefing.ts` and `settled_frame.ts` have no test file).
 - **SC-003**: emitter size stays under 3000 lines of Zig across
   `src/lumen_emit_js*.zig`; anything larger means the front end should have
   done the work.
