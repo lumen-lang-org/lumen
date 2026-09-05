@@ -52,7 +52,8 @@ else needs to know where the runtime lives.
 | `using x = ...` / `defer(fn)` | `try { } finally { x.dispose() }` in reverse order | 007, 027 |
 | `Ref<T>` params | not reachable: FFI-only (024), rejected on this target by 507 | |
 | `test(...)` | see 506 | |
-| `JSON.parse<T>(s)` | `__json_parse(s, <validator for T>)` | 437, 483: the validator is generated per `T` |
+| `JSON.parse<T>(s)` | `JSON.parse(s, <shape of T>)` | 437, 483: the shape is generated per `T`; the runtime refuses what the native parser refuses (505) |
+| `JSON.parse<C>` for a class `C` | `new C(__lang.REVIVE)`: every constructor opens with `if (arguments[0] === __lang.REVIVE) return;` (a derived one hands the sentinel to `super` first) | 456: the constructor body must not run, but JavaScript installs a `#private` field only while constructing, so the fields take their declared defaults and the body is skipped |
 | `embed(p)`, `embedDir(p)` | string / array literal | inlined at emit, as for Zig |
 | `Class.nameOf`, decorators | already rewritten before emit | 455, 477 |
 | `x as T`, `!` | erased | |

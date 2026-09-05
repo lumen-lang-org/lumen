@@ -23,7 +23,6 @@
 #   453-ref-for-value-types/examples/valid/ref-array-push.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
 #   453-ref-for-value-types/examples/valid/ref-array-read.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
 #   453-ref-for-value-types/examples/valid/ref-string-out.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
-#   456-json-for-classes/examples/valid/class-private-excluded.ts -- T014: `JSON.parse<Class>` revives an instance without its constructor, so a `#private` field is not installed and a method reading it throws (456)
 #   459-http-request-headers/examples/valid/read-request-headers.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
 #   459-http-request-headers/examples/valid/request-headers-map-methods.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
 #   459-http-request-headers/examples/valid/streaming-handler-headers.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
@@ -162,6 +161,7 @@
 455-decorators/examples/valid/two-decorators-in-source-order.ts
 456-json-for-classes/examples/valid/class-inherits.ts
 456-json-for-classes/examples/valid/class-no-constructor-on-parse.ts
+456-json-for-classes/examples/valid/class-private-excluded.ts
 456-json-for-classes/examples/valid/class-round-trip.ts
 458-embed-file/examples/valid/embed-dir.ts
 458-embed-file/examples/valid/embed-file.ts

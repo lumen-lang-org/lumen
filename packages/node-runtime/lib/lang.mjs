@@ -179,14 +179,24 @@ function blame(v, shape, open, why) {
   return "JSON.parse: invalid JSON (" + why + ")";
 }
 
+/** The argument `JSON.parse<Class>` constructs an instance with. A `#private`
+ *  field exists on an object only when the class's field initializers ran,
+ *  and JavaScript runs them during construction and nowhere else, so a
+ *  revived instance is `new C(REVIVE)`: the emitter (spec 504) opens every
+ *  constructor with `if (arguments[0] === __lang.REVIVE) return;`, so the
+ *  fields get their declared defaults and the constructor body never runs
+ *  (spec 456). A derived class forwards the sentinel to `super` first. */
+export const REVIVE = Symbol.for("lumen.revive");
+
 /** `v`, checked, as the program's type holds it: a class instance gets its
- *  prototype without its constructor running (spec 456), and an optional
- *  field not sent is null, as it is natively. */
+ *  prototype and field defaults without its constructor body running
+ *  (spec 456; `REVIVE`), and an optional field not sent is null, as it is
+ *  natively. */
 function revive(v, shape) {
   if (typeof shape === "string" || v === null || v === undefined) return v;
   if (shape.o !== undefined) return revive(v, shape.o);
   if (shape.a !== undefined) return v.map((x) => revive(x, shape.a));
-  const out = shape.c !== undefined ? Object.create(shape.c.prototype) : {};
+  const out = shape.c !== undefined ? new shape.c(REVIVE) : {};
   for (const [name, field] of Object.entries(shape.f)) out[name] = name in v ? revive(v[name], field) : null;
   for (const k of Object.keys(v)) if (!(k in shape.f)) out[k] = v[k];
   return out;

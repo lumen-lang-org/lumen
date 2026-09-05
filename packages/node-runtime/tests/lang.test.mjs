@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bytes, text, toBuffer, fromBuffer, divInt, defer, errorMessage, __bytes, __text, __divInt, fmt, charCodeAt, toUpperCase, toLowerCase, trim, trimStart, trimEnd, localeCompare, repeat, replace, replaceAll, jsonParse, printable, printArg } from "../lib/lang.mjs";
+import { bytes, text, toBuffer, fromBuffer, divInt, defer, errorMessage, __bytes, __text, __divInt, fmt, charCodeAt, toUpperCase, toLowerCase, trim, trimStart, trimEnd, localeCompare, repeat, replace, replaceAll, jsonParse, printable, printArg, REVIVE } from "../lib/lang.mjs";
 
 test("a string is its bytes, one code unit each (spec 505 decision 1)", () => {
   const s = bytes("é");
@@ -128,9 +128,16 @@ test("JSON.parse<T> checks the document against T's shape and blames the field t
   assert.equal(jsonParse('{"anything": [1, "two"]}', "any").anything[1], "two");
 });
 
-test("JSON.parse<Class> revives an instance without running the constructor (spec 456)", () => {
+test("JSON.parse<Class> revives an instance without running the constructor body (spec 456)", () => {
+  // The classes are written as the emitter (spec 504) writes them: the
+  // constructor returns before its body when handed `REVIVE`.
   let constructed = 0;
-  class Agent { constructor(id, maxSteps) { constructed += 1; this.id = id; this.maxSteps = maxSteps; } describe() { return this.id + ":" + this.maxSteps; } }
+  class Agent {
+    id = "";
+    maxSteps = 0;
+    constructor(id, maxSteps) { if (arguments[0] === REVIVE) return; constructed += 1; this.id = id; this.maxSteps = maxSteps; }
+    describe() { return this.id + ":" + this.maxSteps; }
+  }
   const shape = { c: Agent, f: { id: "string", maxSteps: "int" } };
   const back = jsonParse('{"id":"a1","maxSteps":5}', shape);
   assert.ok(back instanceof Agent);
@@ -138,4 +145,30 @@ test("JSON.parse<Class> revives an instance without running the constructor (spe
   assert.equal(constructed, 0);
   const many = jsonParse('[{"id":"a","maxSteps":1}]', { a: shape });
   assert.equal(many[0].describe(), "a:1");
+});
+
+test("JSON.parse<Class> installs a #private field at its default, through the whole chain (spec 456, 504 T014)", () => {
+  let constructed = 0;
+  class Base {
+    kind = "";
+    #stamp = "";
+    constructor(k) { if (arguments[0] === REVIVE) return; constructed += 1; this.kind = k; this.#stamp = "set:" + k; }
+    stamp() { return this.#stamp; }
+  }
+  class Child extends Base {
+    name = "";
+    #token = "";
+    constructor(k, n) { if (arguments[0] === REVIVE) { super(REVIVE); return; } super(k); constructed += 1; this.name = n; this.#token = "t:" + n; }
+    reveal() { return this.#token; }
+  }
+  class Plain extends Base { note = "x"; }
+  const child = jsonParse('{"kind":"animal","name":"rex"}', { c: Child, f: { kind: "string", name: "string" } });
+  assert.ok(child instanceof Child);
+  assert.equal(child.kind + "|" + child.name + "|[" + child.reveal() + "]|[" + child.stamp() + "]", "animal|rex|[]|[]");
+  // A class without a constructor of its own forwards the sentinel through
+  // JavaScript's default constructor.
+  const plain = jsonParse('{"kind":"k","note":"n"}', { c: Plain, f: { kind: "string", note: "string" } });
+  assert.equal(plain.note + "|" + plain.stamp(), "n|");
+  assert.equal(constructed, 0);
+  assert.equal(REVIVE, Symbol.for("lumen.revive"));
 });

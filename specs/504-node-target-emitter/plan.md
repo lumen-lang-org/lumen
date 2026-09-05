@@ -104,3 +104,4 @@ emitter's benefit, then confirmed on the 001-052 corpus walk.
 | `ThrowStmt` of a string literal (249) | `throw new Error("...")`, so `catch (e) { e.message }` reads it |
 | `lumen_opt` marks (`is_accumulator`, `is_into_call`, dest passing) | not produced: the passes are not run for this target |
 | `DestructBinding.default_unwraps` (309: an optional source field takes the default when `null`) | open: JavaScript applies a default on `undefined` only; revisit at T015 |
+| `JSON.parse<C>` reviving a class without its constructor (456) | the runtime constructs with `__lang.REVIVE` and the emitted constructor returns before its body (a derived class after `super(__lang.REVIVE)`), so a `#private` field is installed at its declared default: JavaScript installs private fields only while constructing (T014) |

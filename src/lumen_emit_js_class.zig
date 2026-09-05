@@ -73,6 +73,18 @@ fn emitConstructor(e: *Emitter, c: *const ast.ClassDecl) CompileError!void {
     try js_expr.emitParams(e, c.ctor_params);
     try e.w(" {\n");
     e.indent += 1;
+    // `JSON.parse<C>` revives an instance without running the constructor
+    // (spec 456). JavaScript installs a `#private` field only while
+    // constructing, so the runtime constructs with its `REVIVE` sentinel and
+    // the constructor answers it by returning before its body: the field
+    // initializers above have already run, so a `#token: string` reads `""`
+    // as it does natively. A derived class hands the sentinel to `super`,
+    // which does the same, so the whole chain's fields are installed.
+    if (c.parent != null) {
+        try e.line("if (arguments[0] === __lang.REVIVE) { super(__lang.REVIVE); return; }");
+    } else {
+        try e.line("if (arguments[0] === __lang.REVIVE) return;");
+    }
     // The parser already put `this.p = p` for each parameter property after
     // the `super(...)` call (`lumen_parser_decl.zig`), so the body is emitted
     // as it stands.
@@ -133,11 +145,38 @@ test "a class keeps its shape: fields, parameter properties after super, accesso
         \\class Square extends Shape {
         \\  count = 0;
         \\  constructor(side) {
+        \\    if (arguments[0] === __lang.REVIVE) { super(__lang.REVIVE); return; }
         \\    super("square");
         \\    this.side = side;
         \\  }
         \\  get area() {
         \\    return this.side;
+        \\  }
+        \\}
+        \\
+    , e.out.items);
+}
+
+test "a base class constructor returns before its body for JSON.parse's revival sentinel (spec 456)" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var diag: @import("lumen_diag.zig").Diag = .{};
+    var program: ast.Program = .{ .stmts = &.{} };
+    var e: Emitter = .{ .arena = arena, .diag = &diag, .program = &program };
+    var token_param: ast.Expr = .{ .var_ref = .{ .name = "t" } };
+    var ctor_body = [_]ast.Stmt{.{ .member_assign = .{ .field = "#token", .value = &token_param, .line = 2, .col = 3 } }};
+    var params = [_]ast.FunctionParam{.{ .name = "t", .annotation = "string" }};
+    var fields = [_]ast.TypeField{.{ .name = "#token", .annotation = "string", .checked_type = .string, .visibility = .private }};
+    const decl: ast.ClassDecl = .{ .name = "Secretive", .fields = &fields, .has_ctor = true, .ctor_params = &params, .ctor_body = &ctor_body, .line = 1, .col = 1 };
+    try emitClass(&e, &decl);
+    try t.expectEqualStrings(
+        \\class Secretive {
+        \\  #token = "";
+        \\  constructor(t) {
+        \\    if (arguments[0] === __lang.REVIVE) return;
+        \\    this.#token = t;
         \\  }
         \\}
         \\

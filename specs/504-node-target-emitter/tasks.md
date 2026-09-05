@@ -65,14 +65,18 @@
   (`src/lumen_emit_js_class.zig`. A generic class's specializations are
   emitted where the template stood: the checker appends them after the
   code that uses them, and a class is not hoisted in JavaScript.)
-- [ ] T014 `JSON.parse<T>` validators; `embed`/`embedDir`. (`embed` is
+- [x] T014 `JSON.parse<T>` validators; `embed`/`embedDir`. (`embed` is
   done by the front end before parsing, so it needs nothing here. The
   validators landed under spec 505 T011: `JSON.parse<T>` passes T's shape
   to the runtime, which refuses what the native parser refuses with the
   same message (483) and revives a class instance without its constructor
-  (456). What remains is a `#private` field on a revived instance, which
-  JavaScript installs only by running the constructor: `corpus.txt` names
-  the one program waiting on it.)
+  (456). A `#private` field on a revived instance is installed by
+  JavaScript only while constructing, so the runtime now revives with
+  `new C(__lang.REVIVE)` and every emitted constructor returns before its
+  body when handed the sentinel, a derived one after `super(__lang.REVIVE)`;
+  the fields keep their declared defaults, so `#token: string` reads `""`
+  as natively. `examples/valid/json_revive.ts` pins it on both targets and
+  456's `class-private-excluded.ts` joined `corpus.txt`.)
 - [x] T015 Walk `specs/053..500` corpus; extend `corpus.txt`. (109 more
   programs: 84 print identically; 20 are 507/508 refusals; 467/roundtrip
   waits for 505's byte strings; 479/two-waiters-interleave is the

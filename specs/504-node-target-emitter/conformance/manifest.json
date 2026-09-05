@@ -7,6 +7,8 @@
     { "id": "node.modules.native", "source": "../examples/valid/modules_main.ts", "phase": "compile-run", "expect": { "stdout": "5" } },
     { "id": "node.core", "source": "../examples/valid/core.ts", "phase": "node-run", "expect": { "stdout": "square 13\ngreen\na,b,c\nnone\ncaught boom\ndone" } },
     { "id": "node.core.native", "source": "../examples/valid/core.ts", "phase": "compile-run", "expect": { "stdout": "square 13\ngreen\na,b,c\nnone\ncaught boom\ndone" } },
+    { "id": "node.json-revive", "source": "../examples/valid/json_revive.ts", "phase": "node-run", "expect": { "stdout": "animal|rex|stamped:animal|t:rex\nplant|fern|[]|[]\n{\"kind\":\"plant\",\"name\":\"fern\"}" } },
+    { "id": "node.json-revive.native", "source": "../examples/valid/json_revive.ts", "phase": "compile-run", "expect": { "stdout": "animal|rex|stamped:animal|t:rex\nplant|fern|[]|[]\n{\"kind\":\"plant\",\"name\":\"fern\"}" } },
     { "id": "node.unsupported.extern", "source": "../examples/invalid/extern-function.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "extern-function.ts:2:1: error: declare function abs has no JavaScript implementation: add // @link-node <module.mjs> exporting abs [E_FFI_NODE_LINK]" } },
     { "id": "node.unsupported.ref", "source": "../examples/invalid/ref-argument.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "ref-argument.ts:6:1: error: a `Ref<T>` argument is not supported by the node target yet (spec 507) [E_TARGET_UNSUPPORTED]" } },
     { "id": "node.unsupported.net", "source": "../examples/invalid/needs-io-broker.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "needs-io-broker.ts:5:9: error: `net.*` is not supported by the node target yet (spec 508) [E_TARGET_UNSUPPORTED]" } },
