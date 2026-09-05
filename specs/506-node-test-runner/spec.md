@@ -16,23 +16,35 @@ failing test exits non-zero; output names each test and the failure.
 ## Lowering
 
 - `test("name", () => { ... })` and the block form `test "name" { ... }`
-  both emit `__test("name", () => { ... })` where `__test` is
-  `node:test`'s `test` re-exported by the runtime (`lib/test.mjs`).
-- `expect(cond)` emits `__expect(cond)`; `expect(a).toBe(b)` emits
-  `__expect(a).toBe(b)`; `.toEqual` likewise. The runtime maps them to
-  `node:assert` (`ok`, `strictEqual`, `deepStrictEqual`) so a failure
-  message shows both values.
+  both emit `test("name", () => { ... })`, where `test` is the global the
+  runtime installs (`lib/test.mjs`, spec 503): under `node --test` it
+  registers with `node:test`; under a plain `node` it does nothing, the way
+  `lumen run` leaves test blocks out. (`test` and `expect` are keywords of
+  the statement grammar, so a program cannot declare either; no `__`
+  prefix is needed.)
+- `expect(cond)` emits `expect(cond)`; `expect(a).toBe(b)` emits
+  `expect(a).toBe(b)`; `.toEqual` likewise (the checker's `__expectToBe`,
+  `__expectToEqual` and `__expectStrEqual` calls). A matcher failure is an
+  assertion whose message is the native runner's, `expected <b>, found
+  <a>`, with strings quoted and numbers printed as the program prints them.
 - Imported modules' tests are dropped by the front end already (012
   FR-007); the emitter needs no rule.
 - Module-level bindings are visible to tests (449) — natural in ESM.
-- The entry the runner executes is `<stem>.node/<stem>.test.mjs`, which
-  imports the module (so module-level statements run once) and then lets
-  `node --test` collect. `lumen test --target node` runs
-  `node --test <that file>` and forwards the exit status.
-- Output format: Node's `spec` reporter. `lumen test` native prints
-  `ok <name>` / `N passed` (242, 243); a `--reporter lumen` option in the
-  runtime makes Node print the same lines so CI logs read alike. Default is
-  the Lumen format.
+- The entry the runner executes is the same `<stem>.node/<stem>.mjs` that
+  `lumen run --target node` executes: it imports the module (so
+  module-level statements run once) and `node --test` collects what the
+  test blocks registered. `lumen test --target node` runs
+  `node --test --test-reporter=<runtime>/lib/test_reporter.mjs
+  --test-reporter-destination=stderr <that file>` and forwards the exit
+  status (0 iff every test passed).
+- Output format: the runtime's `lumen` reporter (`lib/test_reporter.mjs`)
+  prints what the native runner prints (242, 243) -- `ok <name>`,
+  `FAIL <name> — <why>` with `    at <file>:<line>` under it, `N passed`
+  or `N passed, M failed`, `<file>: no tests` -- on stderr, with the
+  program's own stdout and stderr passed through, so CI logs read alike.
+  The location is the frame in the generated module
+  (`<stem>.node/modules/<stem>.mjs:<line>`); mapping it back to the `.ts`
+  line is open (see tasks).
 
 ## Requirements
 

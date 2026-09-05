@@ -490,7 +490,8 @@ modules, one per source file, with your identifiers and statement order
 intact.</p>
 <pre><code class="lumen">lumen compile --target node app.ts   # writes app.node/
 node app.node/app.mjs                # or: lumen run --target node app.ts
-lumen check --target node app.ts     # the same diagnostics as native</code></pre>
+lumen check --target node app.ts     # the same diagnostics as native
+lumen test --target node app.ts      # the test blocks, under node --test</code></pre>
 <p class="sub">Types, interfaces and generics are erased; <code>enum</code> becomes a
 frozen object; <code>using</code> and <code>defer</code> become
 <code>try</code>/<code>finally</code>; the standard library namespaces come from

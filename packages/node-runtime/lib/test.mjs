@@ -10,9 +10,13 @@
 // `expect(cond);` asserts a boolean, `expect(a).toBe(b)` compares. So a
 // call records itself as pending; a matcher call claims it, and any
 // unclaimed `expect(false)` fails at the next `expect` or when the test
-// body ends. Matchers map to `node:assert` so a failure shows both values.
+// body ends. Matchers compare as `node:assert` does and fail with the line
+// the native runner prints, `expected <b>, found <a>` (spec 242), so a
+// failure reads the same on both targets.
 import nassert from "node:assert/strict";
 import { env } from "node:process";
+import { inspect } from "node:util";
+import { bytes, fmt, printable } from "./lang.mjs";
 
 const INLINE = env.LUMEN_TEST === "inline";
 const RUNNING_UNDER_TEST_RUNNER = !INLINE && (env.NODE_TEST_CONTEXT !== undefined || env.LUMEN_TEST === "1");
@@ -37,12 +41,43 @@ function unclaimedFalse(run) {
   return list.find((p) => !p.claimed && p.value === false);
 }
 
-function failExpectFalse() {
-  return new nassert.AssertionError({ message: "expect(false)", actual: false, expected: true, operator: "expect" });
+/** The failure of an unclaimed `expect(false)`, placed at the `expect` call
+ *  itself: the failure surfaces later, but the call is where it happened. */
+function failExpectFalse(entry) {
+  const e = new nassert.AssertionError({ message: "expect(false)", actual: false, expected: true, operator: "expect" });
+  e.stack = "AssertionError: expect(false)\n" + entry.frames;
+  return e;
 }
 
 function flush(run) {
-  if (unclaimedFalse(run)) throw failExpectFalse();
+  const entry = unclaimedFalse(run);
+  if (entry) throw failExpectFalse(entry);
+}
+
+/** The stack frames above an `expect` call, for placing its failure. */
+function framesAbove() {
+  const stack = new Error().stack ?? "";
+  return stack.split("\n").slice(3).join("\n");
+}
+
+/** A value as the failure line shows it: a number the way the program
+ *  would print it, a string quoted, anything else inspected. The result is a
+ *  byte string like every message a program raises, so the reporter decodes
+ *  each once. (`JSON.stringify` copies a byte string's code units and adds
+ *  ASCII escapes only.) */
+function show(v) {
+  if (typeof v === "number") return fmt(v);
+  if (typeof v === "string") return JSON.stringify(v);
+  return bytes(inspect(printable(v)));
+}
+
+function mismatch(actual, expected) {
+  return new nassert.AssertionError({
+    message: "expected " + show(expected) + ", found " + show(actual),
+    actual,
+    expected,
+    operator: "toBe",
+  });
 }
 
 class Expectation {
@@ -50,18 +85,23 @@ class Expectation {
   constructor(entry) { this.#entry = entry; }
   toBe(expected) {
     this.#entry.claimed = true;
-    nassert.strictEqual(this.#entry.value, expected);
+    if (!Object.is(this.#entry.value, expected)) throw mismatch(this.#entry.value, expected);
   }
   toEqual(expected) {
     this.#entry.claimed = true;
-    nassert.deepStrictEqual(this.#entry.value, expected);
+    try {
+      nassert.deepStrictEqual(this.#entry.value, expected);
+    } catch (e) {
+      if (!(e instanceof nassert.AssertionError)) throw e;
+      throw mismatch(this.#entry.value, expected);
+    }
   }
 }
 
 export function expect(value) {
   const run = current ?? fallback;
   flush(run);
-  const entry = { value, claimed: false };
+  const entry = { value, claimed: false, frames: framesAbove() };
   run.pending.push(entry);
   return new Expectation(entry);
 }

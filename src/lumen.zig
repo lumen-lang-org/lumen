@@ -93,6 +93,10 @@ var g_color: bool = false;
 // grow-only arena), read once in `main` like `g_color`.
 var g_no_gc: bool = false;
 
+/// The process environment, read once in `main`: the node test runner's
+/// child (spec 506) inherits it plus the name of the file under test.
+var g_environ: ?*const std.process.Environ.Map = null;
+
 /// Merged-source line origins for the file being compiled (import inlining
 /// shifts lines); empty when unavailable. Diagnostics display the origin
 /// file:line while excerpts read the merged text (identical content).
@@ -1592,7 +1596,9 @@ fn appendExpandedSource(
             continue;
         }
         const trimmed = std.mem.trim(u8, line, " \t\r");
-        if (depth > 0 and std.mem.startsWith(u8, trimmed, "test \"")) {
+        // Both spellings: the block form `test "name" {` (spec 008) and the
+        // function form `test("name", () => {` (spec 028).
+        if (depth > 0 and (std.mem.startsWith(u8, trimmed, "test \"") or std.mem.startsWith(u8, trimmed, "test(") or std.mem.startsWith(u8, trimmed, "test ("))) {
             test_skip = braceDelta(line);
             continue;
         }
@@ -2257,6 +2263,45 @@ fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js: c
         return 2;
     };
     return 0;
+}
+
+/// `lumen test --target node` (spec 506): runs the entry `writeNodeOutput`
+/// wrote under `node --test`, with the runtime package's `lumen` reporter so
+/// the results read as the native runner's (`ok <name>`, `FAIL <name> — <why>`,
+/// `N passed`; spec 242) on stderr, the program's own output on stdout. The
+/// test blocks register with `node:test` because that command sets
+/// `NODE_TEST_CONTEXT` in the file's process; under a plain `node` the same
+/// module leaves them out (spec 008). Exit status: 0 iff every test passed.
+fn runNodeTests(arena: std.mem.Allocator, io: std.Io, path: []const u8, node: NodeSpec, err: *std.Io.Writer) !u8 {
+    // `writeNodeOutput` found and linked the runtime; the reporter lives in it.
+    const runtime = findNodeRuntime(arena, io, node.runtime_dir) orelse return 2;
+    const reporter = try std.fmt.allocPrint(arena, "--test-reporter={s}", .{try std.fs.path.join(arena, &.{ runtime, "lib", "test_reporter.mjs" })});
+    const entry = try node.entryPath(arena, path);
+    var environ = std.process.Environ.Map.init(arena);
+    if (g_environ) |parent| {
+        var it = parent.iterator();
+        while (it.next()) |kv| try environ.put(kv.key_ptr.*, kv.value_ptr.*);
+    }
+    try environ.put("LUMEN_TEST_SOURCE", path);
+    try err.flush();
+    var child = std.process.spawn(io, .{
+        .argv = &.{ "node", "--test", reporter, "--test-reporter-destination=stderr", entry },
+        .stdin = .inherit,
+        .stdout = .inherit,
+        .stderr = .inherit,
+        .environ_map = &environ,
+    }) catch {
+        try err.print("error: could not run node on {s}\n", .{entry});
+        return 2;
+    };
+    const term = child.wait(io) catch {
+        try err.print("error: node --test {s} was interrupted\n", .{entry});
+        return 2;
+    };
+    return switch (term) {
+        .exited => |c| if (c == 0) 0 else 1,
+        else => 1,
+    };
 }
 
 /// Either the triple to hand the backend (`null` = leave the target alone) or
@@ -3305,12 +3350,9 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
 
     // The node target (spec 504): the same front end, then the JavaScript
     // backend and the module directory instead of the Zig backend and a
-    // binary. Running `test` blocks under Node is spec 506's.
+    // binary. `lumen test --target node` (spec 506) writes the same modules
+    // and hands the entry to `node --test`.
     if (out == .node) {
-        if (action == .run_test) {
-            try err.writeAll("error: `lumen test --target node` is not available yet (spec 506); `lumen test` runs the tests natively\n");
-            return 2;
-        }
         const js_src = compiler.compileToJsWithOptions(arena, source, &diag, options) catch {
             try printDiag(err, written, path, diag);
             try printWarnings(err, written, path, warnings.items, diag);
@@ -3322,6 +3364,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             return 0;
         }
         const code = try writeNodeOutput(arena, io, path, js_src, node, err);
+        if (code == 0 and action == .run_test) return try runNodeTests(arena, io, path, node, err);
         if (code == 0 and action != .build_quiet) {
             const elapsed = compile_start.durationTo(std.Io.Clock.Timestamp.now(io, .awake));
             const ms: u64 = @intCast(@max(0, @divTrunc(elapsed.raw.nanoseconds, std.time.ns_per_ms)));
@@ -3703,8 +3746,16 @@ fn renderTestResults(arena: std.mem.Allocator, err: *std.Io.Writer, ts_source: [
     var it = std.mem.splitScalar(u8, stderr_text, '\n');
     while (it.next()) |raw| {
         const line = std.mem.trimEnd(u8, raw, "\r");
-        // "1/2 <gen>.test.<name>...<status>" — one line per test.
-        if (std.mem.indexOf(u8, line, ".test.")) |tpos| {
+        // "1/2 <gen>.test.<name>...<status>" — one line per test. The
+        // module name is the generated file's stem, so a `.test.` inside it
+        // (`frames.test.ts` compiles to `.lumen-frames.test.zig`) is not the
+        // separator; the one that follows the stem is.
+        const gen_stem = if (std.mem.endsWith(u8, gen_base, ".zig")) gen_base[0 .. gen_base.len - ".zig".len] else gen_base;
+        const sep_pos: ?usize = if (std.mem.indexOf(u8, line, gen_stem)) |gpos| blk: {
+            const rest = line[gpos + gen_stem.len ..];
+            break :blk if (std.mem.startsWith(u8, rest, ".test.")) gpos + gen_stem.len else std.mem.indexOf(u8, line, ".test.");
+        } else std.mem.indexOf(u8, line, ".test.");
+        if (sep_pos) |tpos| {
             if (line.len > 0 and line[0] >= '0' and line[0] <= '9') {
                 const after = line[tpos + ".test.".len ..];
                 const dots = std.mem.indexOf(u8, after, "...") orelse continue;
@@ -3803,6 +3854,7 @@ pub fn main(init: std.process.Init) !void {
     const err = &err_fw.interface;
 
     // Color diagnostics when stderr is a terminal, honoring NO_COLOR.
+    g_environ = init.environ_map;
     g_no_gc = init.environ_map.get("LUMEN_NO_GC") != null;
     g_no_local = init.environ_map.get("LUMEN_NO_LOCAL") != null;
     g_emit_zig_dir = init.environ_map.get("LUMEN_EMIT_ZIG");
@@ -3818,7 +3870,7 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(2);
     }
 
-    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--target <triple>|node] [--static] [--link <lib>] [--library-path <dir>] [--out <dir>] [--runtime <dir>] <file.ts>\n       lumen run [--release-fast] [--target node] <file.ts> [args...]\n       lumen check [--target node] <file.ts>\n       lumen watch [--no-run] [--release-fast] [--target node] <file.ts>\n       lumen test <file.ts>\n";
+    const usage = "usage: lumen init [dir]\n       lumen compile [--release-fast] [--wasm] [--reactor] [--target <triple>|node] [--static] [--link <lib>] [--library-path <dir>] [--out <dir>] [--runtime <dir>] <file.ts>\n       lumen run [--release-fast] [--target node] <file.ts> [args...]\n       lumen check [--target node] <file.ts>\n       lumen watch [--no-run] [--release-fast] [--target node] <file.ts>\n       lumen test [--target node] <file.ts>\n";
     const code = if (std.mem.eql(u8, args[1], "init")) blk: {
         if (args.len > 3) {
             try err.writeAll(usage);
@@ -3836,12 +3888,12 @@ pub fn main(init: std.process.Init) !void {
             if (source_arg == null) {
                 source_arg = args[i];
             } else {
-                try err.writeAll("usage: lumen test <file.ts>\n");
+                try err.writeAll("usage: lumen test [--target node] <file.ts>\n");
                 break :blk 2;
             }
         }
         break :blk try compileFile(arena, io, source_arg orelse {
-            try err.writeAll("usage: lumen test <file.ts>\n");
+            try err.writeAll("usage: lumen test [--target node] <file.ts>\n");
             break :blk 2;
         }, .release_safe, .run_test, &.{}, out, node, false, .{}, err);
     } else if (std.mem.eql(u8, args[1], "check")) blk: {

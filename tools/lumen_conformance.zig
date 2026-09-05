@@ -235,6 +235,20 @@ fn checkTestRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: [
     return true;
 }
 
+// The node target's test runner (spec 506): `lumen test --target node` writes
+// `<stem>.node/` and runs the entry under `node --test`; the case passes iff
+// every test in the file did, the same rule as `test-run`.
+fn checkNodeTestRun(arena: std.mem.Allocator, io: std.Io, case: Case, source_path: []const u8, lumen_bin: []const u8) !bool {
+    const out_dir = try std.fmt.allocPrint(arena, "{s}.node", .{std.fs.path.stem(source_path)});
+    defer std.Io.Dir.cwd().deleteTree(io, out_dir) catch {};
+    const run = try runProcess(arena, io, &.{ lumen_bin, "test", "--target", "node", source_path });
+    if (!termSucceeded(run.term)) {
+        std.debug.print("FAIL {s}: node tests failed\n{s}\n", .{ case.id, run.stderr });
+        return false;
+    }
+    return true;
+}
+
 // A program that must be rejected specifically when compiled for `lumen test`
 // (some diagnostics fire only in test mode — e.g. a module-level binding whose
 // initializer can't be replayed before tests run, spec 449). Mirrors
@@ -306,6 +320,9 @@ fn runCase(arena: std.mem.Allocator, io: std.Io, manifest_path: []const u8, case
     }
     if (std.mem.eql(u8, case.phase, "node-run")) {
         return try checkNodeRun(arena, io, case, source_path, lumen_bin);
+    }
+    if (std.mem.eql(u8, case.phase, "node-test-run")) {
+        return try checkNodeTestRun(arena, io, case, source_path, lumen_bin);
     }
     if (std.mem.eql(u8, case.phase, "node-diagnostics")) {
         return try checkNodeDiagnostics(arena, io, case, source_path, lumen_bin);

@@ -472,6 +472,20 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             if (c.is_global_parse and c.args.len == 1 and std.mem.eql(u8, c.name, "String") and c.stringify_type != null and c.stringify_type.? == .f64) {
                 return emitFloatToString(e, c.args[0]);
             }
+            // `expect(actual).toBe(expected)` / `.toEqual(expected)`: the
+            // parser folds the matcher into one call carrying both values
+            // (spec 008); the runtime's `expect` takes them back as the
+            // matcher call (spec 506).
+            // (`__expectStrEqual` is the checker's `toBe` on strings, which
+            // natively compares bytes; a byte string is one JavaScript value.)
+            if (c.args.len == 2 and (std.mem.eql(u8, c.name, "__expectToBe") or std.mem.eql(u8, c.name, "__expectToEqual") or std.mem.eql(u8, c.name, "__expectStrEqual"))) {
+                try e.w("expect(");
+                try emitExpr(e, c.args[0]);
+                try e.w(if (std.mem.eql(u8, c.name, "__expectToEqual")) ").toEqual(" else ").toBe(");
+                try emitExpr(e, c.args[1]);
+                try e.byte(')');
+                return;
+            }
             // A call to a generic function names the specialization the checker
             // made for these type arguments; the template itself is never emitted.
             const name = if (c.emit_name != null and js.isGenericFunction(e, c.name)) c.emit_name.? else c.name;
