@@ -83,8 +83,15 @@
 - [ ] T011 Joule `text.test.ts`, `markdown.test.ts`, websocket frame tests
   under `lumen test --target node` (506); record in spec SC-002. (Blocked:
   `lumen test --target node` is spec 506's and refuses today.)
-- [ ] T012 Gate: `zig build test`, `zig build conformance`, `emit-snapshot`
-  diff empty, `node-run` for `corpus.txt`.
+- [x] T012 Gate: `zig build test`, `zig build conformance`, `emit-snapshot`
+  diff empty, `node-run` for `corpus.txt`. (`zig build conformance`: every
+  `node-run` case green, `corpus.txt` included; the 20 red cases are stale
+  `invalid` fixtures and spec 507's manifest, all red on the parent commit
+  2cfa073 too -- 001's condition/coercion/throw diagnostics superseded by
+  specs 142/143/249/420, 013/014/020 unknown-method codes, 455's
+  argument-is-not-an-expression, which trips the not-imported check first.
+  `emit-snapshot` against 2cfa073: identical for every program; only
+  `505/compound.ts` is new, which the old checker rejected.)
 - [x] T013 Document Decision 1 in `website/stdlib/strings.html` ("on the
   Node target, strings are bytes too"); `stamp.py`; `codemap.sh`; commit.
   (The `fromCodePoint` row there still described spec 119's byte-masking;
