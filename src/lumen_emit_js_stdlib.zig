@@ -58,3 +58,32 @@ test "only the methods whose miss is undefined get the null" {
     const own_find = ast.Expr{ .method_call = .{ .obj = &obj, .name = "find", .args = &.{} } };
     try t.expect(!nullOnMissing(own_find.method_call));
 }
+
+test "the refusals name calls the checker accepts, and all of `net` (503 names.json)" {
+    // `names.json` is what `tools/stdlib_names.py` extracted from the checker:
+    // every namespace call a program can make. A refusal for a name the
+    // checker does not accept would be dead; a `net` call it accepts and
+    // this table lets through would reach the runtime's stub instead of the
+    // compile-time diagnostic FR-005 promises.
+    const t = std.testing;
+    var parsed = try std.json.parseFromSlice(std.json.Value, t.allocator, @embedFile("names.json"), .{});
+    defer parsed.deinit();
+    const namespaces = parsed.value.object.get("namespaces").?.object;
+    const refused = [_][2][]const u8{
+        .{ "net", "connect" },         .{ "net", "createServer" }, .{ "http", "request" },
+        .{ "http", "get" },            .{ "http", "stream" },      .{ "http", "createServer" },
+        .{ "child_process", "spawn" }, .{ "Worker", "run" },
+    };
+    for (refused) |r| {
+        try t.expect(unsupportedStaticCall(r[0], r[1]) != null);
+        var known = false;
+        for (namespaces.get(r[0]).?.array.items) |n| if (std.mem.eql(u8, n.string, r[1])) {
+            known = true;
+        };
+        try t.expect(known);
+    }
+    for (namespaces.get("net").?.array.items) |n| try t.expect(unsupportedStaticCall("net", n.string) != null);
+    // The rest of `http` and `child_process` is real in the runtime package.
+    try t.expect(unsupportedStaticCall("http", "METHODS") == null);
+    try t.expect(unsupportedStaticCall("child_process", "spawnSync") == null);
+}

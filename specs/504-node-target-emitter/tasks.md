@@ -72,12 +72,15 @@
 
 ## Phase 4: Stdlib static calls and CLI
 
-- [ ] T016 `lumen_emit_js_stdlib.zig` table; Zig test cross-checking 503's
-  `names.json`. (The file exists with the instance-method exceptions the
+- [x] T016 `lumen_emit_js_stdlib.zig` table; Zig test cross-checking 503's
+  `names.json`. (Static calls are identity -- the runtime package carries
+  every name in Lumen's shape -- so the table holds the exceptions: the
+  507/508 refusals, checked against `names.json` (embedded through
+  `build.zig`, as `lumen.d.ts` is) so a refusal names a call the checker
+  accepts and all of `net` is refused; and the instance methods the
   001-049 walk found: `find`/`at`/`pop`/`shift`/`Map.get` answer
-  `undefined` for a miss and get `?? null`; `Map`/`Set` `keys`/`values`/
-  `entries` answer iterators and get `Array.from`. The `names.json` test
-  remains.)
+  `undefined` for a miss and get `?? null`, `Map`/`Set` `keys`/`values`/
+  `entries` answer iterators and get `Array.from`.)
 - [x] T017 `E_TARGET_UNSUPPORTED` for 507/508 constructs. (`extern
   function`, a `Ref<T>` argument, an FFI call -> 507; `net.*`,
   `http.request`/`get`/`stream`/`createServer`, `child_process.spawn`,

@@ -19,6 +19,11 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addAnonymousImport("lumen.d.ts", .{
         .root_source_file = b.path("lumen.d.ts"),
     });
+    // The node target's stdlib table (spec 504) checks itself against the
+    // runtime package's name contract (spec 503); the file lives outside
+    // `src/`, so it comes in the same way.
+    const names_json: std.Build.Module.CreateOptions = .{ .root_source_file = b.path("packages/node-runtime/tests/names.json") };
+    exe.root_module.addAnonymousImport("names.json", names_json);
     b.installArtifact(exe);
 
     const conformance_runner = b.addExecutable(.{
@@ -70,6 +75,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
             }),
         });
+        if (std.mem.eql(u8, root, "src/lumen_emit_js.zig")) unit.root_module.addAnonymousImport("names.json", names_json);
         test_step.dependOn(&b.addRunArtifact(unit).step);
     }
 
