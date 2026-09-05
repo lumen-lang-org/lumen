@@ -500,6 +500,15 @@ pub fn emitIfaceDecl(decl: *const ast.TypeDecl, decls: *std.ArrayListUnmanaged(u
 pub fn emitClassVtables(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), arena: std.mem.Allocator) CompileError!void {
     for (c.implements) |iface| {
         const methods = ifaceMethods(iface) orelse continue;
+        // A data-only interface (`interface Named { label: string }`) is a
+        // structural record, not a vtable: no `VT_<Name>` was declared for it
+        // (see the `emitIfaceDecl` condition in `lumen_emit_stmt.zig`), so an
+        // instance would name a type that does not exist.
+        var has_method = false;
+        for (methods) |f| if (f.checked_type != null and f.checked_type.? == .func_type) {
+            has_method = true;
+        };
+        if (!has_method) continue;
         try decls.print(arena, "const __vt_{s}_{s}: VT_{s} = .{{\n", .{ c.name, iface, iface });
         for (methods) |f| {
             const ft = f.checked_type orelse continue;

@@ -1,2 +1,107 @@
 # Programs from specs/*/examples/valid that must print identically under node.
-# One path per line, relative to specs/. Filled in by tasks T009/T015.
+# One path per line, relative to specs/. The conformance runner also runs a
+# manifest's compile-run case as node-run when its source is listed here
+# (tools/lumen_conformance.zig loadNodeCorpus), so `zig build conformance`
+# covers the node target for every listed program.
+#
+# Walked so far: specs 001-049 (T009). Excluded, with the reason:
+#   001-typescript-to-zig-native/examples/valid/division.ts -- 505: integer division truncates natively, `17 / 5` is 3.4 in JavaScript
+#   009-ffi/examples/valid/ffi-math.ts -- 507: `extern function` (E_TARGET_UNSUPPORTED)
+#   018-class-inheritance-members/examples/valid/inheritance.ts -- native build fails before this spec (tasks.md T023b); not eligible until it runs natively
+#   024-ref-params/examples/valid/record-by-ref.ts -- 507: `Ref<T>` argument (E_TARGET_UNSUPPORTED)
+#   024-ref-params/examples/valid/scalar-out-param.ts -- 507: `Ref<T>` argument (E_TARGET_UNSUPPORTED)
+#   025-declare-ffi/examples/valid/declare-math.ts -- 507: `extern function` (E_TARGET_UNSUPPORTED)
+
+001-typescript-to-zig-native/examples/valid/arrays.ts
+001-typescript-to-zig-native/examples/valid/block-shadow.ts
+001-typescript-to-zig-native/examples/valid/bool-literal.ts
+001-typescript-to-zig-native/examples/valid/bool-operators.ts
+001-typescript-to-zig-native/examples/valid/break-continue.ts
+001-typescript-to-zig-native/examples/valid/compound-more.ts
+001-typescript-to-zig-native/examples/valid/console-stdlib.ts
+001-typescript-to-zig-native/examples/valid/do-while.ts
+001-typescript-to-zig-native/examples/valid/else-if.ts
+001-typescript-to-zig-native/examples/valid/exceptions.ts
+001-typescript-to-zig-native/examples/valid/export-default-helper.ts
+001-typescript-to-zig-native/examples/valid/export-default-main.ts
+001-typescript-to-zig-native/examples/valid/for-loop.ts
+001-typescript-to-zig-native/examples/valid/function-call.ts
+001-typescript-to-zig-native/examples/valid/function-decl.ts
+001-typescript-to-zig-native/examples/valid/function-hoist.ts
+001-typescript-to-zig-native/examples/valid/hello.ts
+001-typescript-to-zig-native/examples/valid/if-else.ts
+001-typescript-to-zig-native/examples/valid/import-main.ts
+001-typescript-to-zig-native/examples/valid/import-math.ts
+001-typescript-to-zig-native/examples/valid/io-stdlib.ts
+001-typescript-to-zig-native/examples/valid/let-reassign.ts
+001-typescript-to-zig-native/examples/valid/log-string.ts
+001-typescript-to-zig-native/examples/valid/math-more.ts
+001-typescript-to-zig-native/examples/valid/math-stdlib.ts
+001-typescript-to-zig-native/examples/valid/named-type.ts
+001-typescript-to-zig-native/examples/valid/nested-record.ts
+001-typescript-to-zig-native/examples/valid/postfix-and-compound.ts
+001-typescript-to-zig-native/examples/valid/postfix-decrement.ts
+001-typescript-to-zig-native/examples/valid/prefix-update.ts
+001-typescript-to-zig-native/examples/valid/record-array.ts
+001-typescript-to-zig-native/examples/valid/record-flow.ts
+001-typescript-to-zig-native/examples/valid/string-array-stdlib.ts
+001-typescript-to-zig-native/examples/valid/string-basics.ts
+001-typescript-to-zig-native/examples/valid/string-equality.ts
+001-typescript-to-zig-native/examples/valid/string-literal-union.ts
+001-typescript-to-zig-native/examples/valid/switch.ts
+001-typescript-to-zig-native/examples/valid/ternary.ts
+001-typescript-to-zig-native/examples/valid/types.ts
+001-typescript-to-zig-native/examples/valid/void-function.ts
+001-typescript-to-zig-native/examples/valid/void-return.ts
+002-numeric-literals-lexer/examples/valid/block-comment.ts
+002-numeric-literals-lexer/examples/valid/float-literal.ts
+002-numeric-literals-lexer/examples/valid/int-bases.ts
+002-numeric-literals-lexer/examples/valid/strict-equality.ts
+003-iteration-enums-ops/examples/valid/bitwise-exp.ts
+003-iteration-enums-ops/examples/valid/enums.ts
+003-iteration-enums-ops/examples/valid/for-of.ts
+003-iteration-enums-ops/examples/valid/interface.ts
+004-nullability/examples/valid/narrowing-chain.ts
+004-nullability/examples/valid/nullable.ts
+004-nullability/examples/valid/optional-coalesce.ts
+005-unions-destructuring-templates/examples/valid/destructuring.ts
+005-unions-destructuring-templates/examples/valid/numeric-union.ts
+005-unions-destructuring-templates/examples/valid/template.ts
+006-functions-closures/examples/valid/arrow.ts
+006-functions-closures/examples/valid/closures.ts
+006-functions-closures/examples/valid/function-values.ts
+007-defer/examples/valid/defer.ts
+008-test/examples/valid/tests.ts
+010-classes/examples/valid/classes.ts
+013-array-methods/examples/valid/indexof-includes-join.ts
+013-array-methods/examples/valid/map-filter-foreach.ts
+013-array-methods/examples/valid/reduce-find-some-every.ts
+014-string-methods/examples/valid/query-methods.ts
+014-string-methods/examples/valid/split-method.ts
+014-string-methods/examples/valid/transform-methods.ts
+015-multi-symbol-modules/examples/valid/export-list-main.ts
+015-multi-symbol-modules/examples/valid/geomlib.ts
+015-multi-symbol-modules/examples/valid/mathlib.ts
+015-multi-symbol-modules/examples/valid/named-import-main.ts
+016-generics/examples/valid/array-sugar.ts
+016-generics/examples/valid/generic-class.ts
+016-generics/examples/valid/generic-interface.ts
+016-generics/examples/valid/identity.ts
+016-generics/examples/valid/multi-param.ts
+017-type-aliases-unions/examples/valid/aliases.ts
+017-type-aliases-unions/examples/valid/discriminated-union.ts
+019-error-handling/examples/valid/conditional-throw.ts
+019-error-handling/examples/valid/nested-rethrow.ts
+019-error-handling/examples/valid/throw-catch-finally.ts
+020-map-set-tuples/examples/valid/map-basics.ts
+020-map-set-tuples/examples/valid/set-basics.ts
+020-map-set-tuples/examples/valid/tuples.ts
+021-spread-rest-defaults/examples/valid/array-object-spread.ts
+021-spread-rest-defaults/examples/valid/default-params.ts
+021-spread-rest-defaults/examples/valid/rest-and-spread-call.ts
+022-async-await/examples/valid/async-chain.ts
+022-async-await/examples/valid/resolved-promises.ts
+022-async-await/examples/valid/timers.ts
+027-using-disposables/examples/valid/using-defer.ts
+027-using-disposables/examples/valid/using-dispose.ts
+028-test-fn/examples/valid/test-fn.ts

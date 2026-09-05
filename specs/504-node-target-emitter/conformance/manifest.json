@@ -6,6 +6,11 @@
     { "id": "node.modules", "source": "../examples/valid/modules_main.ts", "phase": "node-run", "expect": { "stdout": "5" } },
     { "id": "node.modules.native", "source": "../examples/valid/modules_main.ts", "phase": "compile-run", "expect": { "stdout": "5" } },
     { "id": "node.core", "source": "../examples/valid/core.ts", "phase": "node-run", "expect": { "stdout": "square 13\ngreen\na,b,c\nnone\ncaught boom\ndone" } },
-    { "id": "node.core.native", "source": "../examples/valid/core.ts", "phase": "compile-run", "expect": { "stdout": "square 13\ngreen\na,b,c\nnone\ncaught boom\ndone" } }
+    { "id": "node.core.native", "source": "../examples/valid/core.ts", "phase": "compile-run", "expect": { "stdout": "square 13\ngreen\na,b,c\nnone\ncaught boom\ndone" } },
+    { "id": "node.unsupported.extern", "source": "../examples/invalid/extern-function.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "extern-function.ts:2:1: error: `extern function` is not supported by the node target yet (spec 507) [E_TARGET_UNSUPPORTED]" } },
+    { "id": "node.unsupported.ref", "source": "../examples/invalid/ref-argument.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "ref-argument.ts:6:1: error: a `Ref<T>` argument is not supported by the node target yet (spec 507) [E_TARGET_UNSUPPORTED]" } },
+    { "id": "node.unsupported.net", "source": "../examples/invalid/needs-io-broker.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "needs-io-broker.ts:5:9: error: `net.*` is not supported by the node target yet (spec 508) [E_TARGET_UNSUPPORTED]" } },
+    { "id": "node.unsupported.extern.native", "source": "../examples/invalid/extern-function.ts", "phase": "static", "expect": {} },
+    { "id": "node.unsupported.net.native", "source": "../examples/invalid/needs-io-broker.ts", "phase": "static", "expect": {} }
   ]
 }

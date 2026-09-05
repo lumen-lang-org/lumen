@@ -77,3 +77,30 @@ tools/emit_snapshot.sh          # native emit no-regression diff
   benefit (e.g. 303 ternary casts, 421 coalesce casts). Each such rewrite
   must be a no-op in JavaScript or be undone; list them while walking
   `emitExpr` and keep the list in the plan as they are handled.
+
+## The checker's rewrites and what the JavaScript emitter does with them (T010)
+
+Found by grepping `lumen_check*.zig` for every field it sets for the Zig
+emitter's benefit, then confirmed on the 001-052 corpus walk.
+
+| Rewrite (where) | JavaScript |
+| --- | --- |
+| `wrapStringify`: a non-string operand of string `+` becomes `String(x)` (`call.is_global_parse`) | identity: `String(x)` is JavaScript's own |
+| `wrapFloat`: an `int` operand of float arithmetic becomes `Number(x)` | identity, a no-op on a number |
+| `cast.float_to_int` (`x as int`, `.charAt(i)` arguments) | `Math.trunc(x)` |
+| `cast.int_array_to_float`, `cast.iface_class`, `cast.checked_type`, `is_satisfies` | erased: the inner expression |
+| `ternary.result_type`, `coalesce.result_type` (303, 421: both branches cast to `?T`) | erased |
+| `var_ref.unwrap`, `field.unwrap`, `non_null.unwraps` (narrowing `.?`) | erased |
+| `var_ref.builtin_const` (`NaN`, `Infinity`: Zig literal text) | the name itself |
+| `field.builtin_const` (`Math.PI`, `Number.EPSILON`: Zig literal text) | the member access; the runtime's overlay makes the constant read as a number |
+| `for_of.is_array_entries` / `is_array_keys`: the iterable rewritten to the bare array | `.entries()` / `.keys()` put back on the iterable |
+| `for_of.is_pair`, `is_tuple_pairs`, `value_binding` | `for (const [k, v] of ...)` |
+| `call.emit_name` naming a generic specialization (`mangledName`) | the specialization, since the template is never emitted; every other `emit_name` (461 parameter renames, `__lumen_N_` locals) is ignored, shadowing being legal |
+| `new_expr.class_name` rewritten to a specialized class | identity: the specialized class is emitted under that name |
+| `static_call.object_keys/values/entries`, `from_length`, `cb_wants_index` | identity: `Object.keys(x)`, `Array.from({ length }, cb)` |
+| `method_call.sized_fill`, `new_expr.copy_container`, `regex_arg`, `string_method`, ... | identity |
+| `typeof_expr.result` (compile-time string), `instanceof_expr.result` (compile-time bool) | the runtime operator; for a class instance held in a base-typed binding JavaScript answers from the object where Zig answered from the static type |
+| `process.env.K` -> `process.env("K")` (439) | identity: the runtime's `process.env` is a function |
+| `ThrowStmt` of a string literal (249) | `throw new Error("...")`, so `catch (e) { e.message }` reads it |
+| `lumen_opt` marks (`is_accumulator`, `is_into_call`, dest passing) | not produced: the passes are not run for this target |
+| `DestructBinding.default_unwraps` (309: an optional source field takes the default when `null`) | open: JavaScript applies a default on `undefined` only; revisit at T015 |

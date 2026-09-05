@@ -69,6 +69,7 @@
     <a href="#modules">Modules and URL imports</a>
     <p class="docs-nav-title">Working with it</p>
     <a href="#build">Build, run and test</a>
+    <a href="#node">Run on Node</a>
     <a href="#not">What is left out</a>
     <a href="#reference">Reference summary</a>
   </nav></aside>
@@ -480,6 +481,25 @@ lumen test main.ts                  # run the test blocks</code></pre>
 self-contained binary with <code>--static</code>, and link a vendored C library with
 <code>--link</code> / <code>--library-path</code>. The <a href="/#quickstart">install
 section</a> walks through each.</p>
+
+<h2 id="node">Run on Node</h2>
+<p class="sub">The same program, checked the same way, can also run on Node 22.
+<code>--target node</code> keeps the whole front end and swaps the last step:
+instead of a native binary you get a directory of readable ECMAScript
+modules, one per source file, with your identifiers and statement order
+intact.</p>
+<pre><code class="lumen">lumen compile --target node app.ts   # writes app.node/
+node app.node/app.mjs                # or: lumen run --target node app.ts
+lumen check --target node app.ts     # the same diagnostics as native</code></pre>
+<p class="sub">Types, interfaces and generics are erased; <code>enum</code> becomes a
+frozen object; <code>using</code> and <code>defer</code> become
+<code>try</code>/<code>finally</code>; the standard library namespaces come from
+the <code>@lumen-lang/node</code> runtime package, which the output links to
+(<code>--runtime &lt;dir&gt;</code> names it, <code>--out &lt;dir&gt;</code> moves the
+output). A construct the Node target cannot run yet — C FFI, <code>Ref</code>
+parameters, the blocking <code>net</code>/<code>http</code> calls — is reported at
+compile time as <code>E_TARGET_UNSUPPORTED</code>, never as a runtime error.
+Integer arithmetic and byte strings follow in the next slices.</p>
 
 
 <h2 id="not">What is deliberately left out</h2>

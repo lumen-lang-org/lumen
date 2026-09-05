@@ -1467,6 +1467,12 @@ pub const CompileOptions = struct {
     // replaces it -- but the option travels with the others so the shared front
     // end can be asked which it is compiling for.
     target: Target = .native,
+    // The node target's module map (spec 504): the entry file as the CLI
+    // named it, every module's output path, and the import edges between
+    // them. Empty for the other targets.
+    entry_file: []const u8 = "",
+    module_paths: []const @import("lumen_diag.zig").ModulePath = &.{},
+    module_edges: []const @import("lumen_diag.zig").ModuleEdge = &.{},
     // Threaded down from the CLI's `--wasm` flag (spec 049): wasm32-wasi has
     // no real OS threads, and the CLI's own libxev-wiring gate hard-fails any
     // wasm build whose generated source textually contains `@import("xev")`

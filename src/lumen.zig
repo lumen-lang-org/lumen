@@ -1227,6 +1227,14 @@ const Expander = struct {
     visiting: std.StringHashMapUnmanaged(void) = .empty,
     /// Modules already inlined, by canonical key.
     emitted: std.StringHashMapUnmanaged(*ModuleInfo) = .empty,
+    /// The import graph as inlined: importer -> imported, in the file
+    /// spellings the line map uses. The node target splits its output along
+    /// these edges (spec 504).
+    edges: std.ArrayListUnmanaged(compiler.ModuleEdge) = .empty,
+    /// Modules that were named by URL and resolved to a local file: the file
+    /// spelling alongside the URL, so the node target can place them under
+    /// `modules/https/<host>/`.
+    urls: std.ArrayListUnmanaged(ModuleUrl) = .empty,
     /// Value identifier in the flat program -> key of the module that declared it.
     taken: std.StringHashMapUnmanaged([]const u8) = .empty,
     /// Type name in the flat program -> path of the module that declared it.
@@ -1296,6 +1304,7 @@ fn appendExpandedSource(
                 setImportDetail(arena, "cannot find module '{s}'", .{displayPath(path_in)});
             return error.ImportReadFailed;
         };
+        try exp.urls.append(arena, .{ .file = path, .url = path_in });
     } else {
         ensurePackageFile(arena, io, path);
     }
@@ -1560,6 +1569,7 @@ fn appendExpandedSource(
             }
             child_recorded = true;
             const child = try appendExpandedSource(exp, imported_path, import_spec.kind, avoid_child.items, depth + 1);
+            try exp.edges.append(arena, .{ .from = path, .to = child.path });
             switch (import_spec.kind) {
                 .named => |binds| for (binds) |b| {
                     const target = child.exports.get(b.name) orelse b.name;
@@ -1603,6 +1613,7 @@ fn appendExpandedSource(
             const re_kind: ?ImportSpec.Kind = if (re.binds) |b| .{ .named = b } else null;
             child_recorded = true;
             const child = try appendExpandedSource(exp, re_path, re_kind, &.{}, depth + 1);
+            try exp.edges.append(arena, .{ .from = path, .to = child.path });
             if (re.binds) |binds| {
                 for (binds) |b| try info.exports.put(arena, b.alias, child.exports.get(b.name) orelse b.name);
             } else {
@@ -1644,7 +1655,14 @@ fn appendExpandedSource(
     return info;
 }
 
-const ExpandedSource = struct { text: []const u8, line_map: []const LineOrigin };
+const ModuleUrl = struct { file: []const u8, url: []const u8 };
+
+const ExpandedSource = struct {
+    text: []const u8,
+    line_map: []const LineOrigin,
+    edges: []const compiler.ModuleEdge = &.{},
+    urls: []const ModuleUrl = &.{},
+};
 
 fn readSourceWithImports(arena: std.mem.Allocator, io: std.Io, path: []const u8) !ExpandedSource {
     var out: std.ArrayListUnmanaged(u8) = .empty;
@@ -1659,7 +1677,7 @@ fn readSourceWithImports(arena: std.mem.Allocator, io: std.Io, path: []const u8)
         std.Io.Dir.cwd().deleteFile(io, exe) catch {};
     };
     _ = try appendExpandedSource(&exp, path, null, &.{}, 0);
-    return .{ .text = out.items, .line_map = line_map.items };
+    return .{ .text = out.items, .line_map = line_map.items, .edges = exp.edges.items, .urls = exp.urls.items };
 }
 
 /// Walks the LOCAL import closure of `path`, appending each resolved local file
@@ -2125,13 +2143,71 @@ fn findNodeRuntime(arena: std.mem.Allocator, io: std.Io, explicit: ?[]const u8) 
     return null;
 }
 
+/// Where each source module's JavaScript lands under the output's
+/// `modules/` directory (spec 504): a module named by URL under
+/// `https/<host>/<path>.mjs`; a local file under its path relative to the
+/// directory every local module shares, so `src/main.ts` importing
+/// `../lib/x.ts` gives `src/main.mjs` and `lib/x.mjs`. Files are spelled as
+/// the line map spells them, the entry as the CLI named it.
+fn nodeModulePaths(arena: std.mem.Allocator, entry: []const u8, expanded: ExpandedSource) ![]const compiler.ModulePath {
+    var files: std.ArrayListUnmanaged([]const u8) = .empty;
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    try files.append(arena, entry);
+    try seen.put(arena, entry, {});
+    for (expanded.line_map) |origin| {
+        if (seen.get(origin.file) != null) continue;
+        try seen.put(arena, origin.file, {});
+        try files.append(arena, origin.file);
+    }
+    // Absolute, normalized spellings for the local files; the URL for the rest.
+    const abs = try arena.alloc(?[]const u8, files.items.len);
+    const urls = try arena.alloc(?[]const u8, files.items.len);
+    for (files.items, 0..) |file, i| {
+        urls[i] = null;
+        for (expanded.urls) |u| if (std.mem.eql(u8, u.file, file)) {
+            urls[i] = u.url;
+        };
+        if (urls[i] == null and std.mem.startsWith(u8, file, "https://")) urls[i] = file;
+        abs[i] = if (urls[i] == null) try std.fs.path.resolve(arena, &.{file}) else null;
+    }
+    // The longest directory prefix the local files share.
+    var common: ?[]const u8 = null;
+    for (abs) |a| {
+        const dir = std.fs.path.dirname(a orelse continue) orelse "/";
+        if (common == null) {
+            common = dir;
+            continue;
+        }
+        var c = common.?;
+        while (!(std.mem.eql(u8, c, dir) or (std.mem.startsWith(u8, dir, c) and (c.len == 1 or dir.len == c.len or dir[c.len] == '/')))) {
+            c = std.fs.path.dirname(c) orelse "/";
+        }
+        common = c;
+    }
+    const out = try arena.alloc(compiler.ModulePath, files.items.len);
+    for (files.items, 0..) |file, i| {
+        var rel: []const u8 = undefined;
+        if (urls[i]) |url| {
+            const after = url["https://".len..];
+            rel = try std.fmt.allocPrint(arena, "https/{s}", .{after});
+        } else {
+            const a = abs[i].?;
+            const c = common.?;
+            rel = if (std.mem.eql(u8, c, "/")) a[1..] else a[c.len + 1 ..];
+        }
+        if (std.mem.endsWith(u8, rel, ".ts")) rel = rel[0 .. rel.len - 3];
+        out[i] = .{ .file = file, .out = try std.fmt.allocPrint(arena, "{s}.mjs", .{rel}) };
+    }
+    return out;
+}
+
 /// Writes the node target's output (spec 504): `<out>/<stem>.mjs` (the entry:
-/// the runtime's globals, then the program), `<out>/modules/<stem>.mjs` (the
-/// program), `<out>/package.json` (`"type": "module"`), and
+/// the runtime's globals, then the program), `<out>/modules/<path>.mjs` (one
+/// per source module), `<out>/package.json` (`"type": "module"`), and
 /// `<out>/node_modules/@lumen-lang/node`, a link to the runtime package so the
 /// entry's bare `@lumen-lang/node/globals` import resolves the way Node
 /// resolves any package.
-fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js_src: []const u8, node: NodeSpec, err: *std.Io.Writer) !u8 {
+fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js: compiler.JsOutput, node: NodeSpec, err: *std.Io.Writer) !u8 {
     const base = std.fs.path.stem(path);
     const runtime = findNodeRuntime(arena, io, node.runtime_dir) orelse {
         if (node.runtime_dir) |dir| {
@@ -2149,17 +2225,20 @@ fn writeNodeOutput(arena: std.mem.Allocator, io: std.Io, path: []const u8, js_sr
         try err.print("error: cannot create {s}\n", .{dir});
         return 2;
     };
-    const files = [_]struct { rel: []const u8, data: []const u8 }{
-        .{ .rel = "package.json", .data = "{ \"type\": \"module\" }\n" },
-        .{ .rel = try std.fmt.allocPrint(arena, "modules/{s}.mjs", .{base}), .data = js_src },
-        // The program is loaded with a dynamic import, after the globals have
-        // finished installing: the runtime package has a top-level `await` in
-        // its graph, and two static imports of an entry file may evaluate a
-        // synchronous sibling before an asynchronous one has completed.
-        .{ .rel = try std.fmt.allocPrint(arena, "{s}.mjs", .{base}), .data = try std.fmt.allocPrint(arena, "import \"@lumen-lang/node/globals\";\nawait import(\"./modules/{s}.mjs\");\n", .{base}) },
-    };
-    for (files) |f| {
+    var files: std.ArrayListUnmanaged(struct { rel: []const u8, data: []const u8 }) = .empty;
+    try files.append(arena, .{ .rel = "package.json", .data = "{ \"type\": \"module\" }\n" });
+    for (js.modules) |m| try files.append(arena, .{ .rel = try std.fmt.allocPrint(arena, "modules/{s}", .{m.out}), .data = m.text });
+    // The program is loaded with a dynamic import, after the globals have
+    // finished installing: the runtime package has a top-level `await` in
+    // its graph, and two static imports of an entry file may evaluate a
+    // synchronous sibling before an asynchronous one has completed.
+    try files.append(arena, .{ .rel = try std.fmt.allocPrint(arena, "{s}.mjs", .{base}), .data = try std.fmt.allocPrint(arena, "import \"@lumen-lang/node/globals\";\nawait import(\"./modules/{s}\");\n", .{js.entry_out}) });
+    for (files.items) |f| {
         const full = try std.fs.path.join(arena, &.{ out_dir, f.rel });
+        if (std.fs.path.dirname(full)) |parent| cwd.createDirPath(io, parent) catch {
+            try err.print("error: cannot create {s}\n", .{parent});
+            return 2;
+        };
         cwd.writeFile(io, .{ .sub_path = full, .data = f.data }) catch {
             try err.print("error: cannot write {s}\n", .{full});
             return 2;
@@ -3214,6 +3293,9 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .warnings = &warnings,
         .line_map = expanded.line_map,
         .test_mode = action == .run_test,
+        .entry_file = path,
+        .module_paths = if (out == .node) try nodeModulePaths(arena, path, expanded) else &.{},
+        .module_edges = expanded.edges,
     };
 
     // The node target (spec 504): the same front end, then the JavaScript

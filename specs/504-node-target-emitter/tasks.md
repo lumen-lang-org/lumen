@@ -28,39 +28,81 @@
 
 ## Phase 2: Expressions and statements
 
-- [ ] T007 Literals, identifiers, binary/unary/ternary/coalesce/optional
+- [x] T007 Literals, identifiers, binary/unary/ternary/coalesce/optional
   chains, calls, member access, index, template literals, arrows, object and
   array literals, spread/rest, destructuring (mirror `emitExpr` arms).
-- [ ] T008 Statements: var decls, assignments, if/while/do/for/for-of/for-in,
+  (`src/lumen_emit_js_expr.zig`; operands are parenthesized by JavaScript's
+  precedence table, so `a + b * c` prints as written. The checker packs a
+  `...rest` call's trailing arguments into one array literal for the native
+  slice; the emitter splices them back.)
+- [x] T008 Statements: var decls, assignments, if/while/do/for/for-of/for-in,
   switch, return/throw/try/finally, break/continue, blocks, expression
-  statements, `using`/`defer`.
-- [ ] T009 Walk `specs/001..052` corpus; add each passing program to
-  `conformance/corpus.txt`; record exclusion reasons for the rest.
-- [ ] T010 List the checker's Zig-motivated in-place rewrites met so far and
+  statements, `using`/`defer`. (`src/lumen_emit_js_stmt.zig`.)
+- [x] T009 Walk `specs/001..052` corpus; add each passing program to
+  `conformance/corpus.txt`; record exclusion reasons for the rest. (99
+  programs in 001-049 -- 050-052 have no examples; 93 print identically,
+  6 excluded with the reason in the file. The runner also runs a listed
+  program's `compile-run` case as `node-run`, so every manifest's
+  `zig build conformance` covers it.)
+- [x] T010 List the checker's Zig-motivated in-place rewrites met so far and
   their JS treatment (plan §Risks); keep in plan.md.
 
 ## Phase 3: Modules and declarations
 
-- [ ] T011 Module boundary at emit time (plan context); per-module files.
-- [ ] T012 Import rewriting, type-only import elision, `export` forms,
-  https modules under `modules/https/`.
-- [ ] T013 Classes (fields, ctor param properties, accessors, static,
+- [x] T011 Module boundary at emit time (plan context); per-module files.
+  (The line map already names each statement's file; the expander now also
+  records the import edges and the URL a module was named by, and the
+  driver maps every file to `modules/<path>.mjs` relative to the directory
+  the local modules share, URL modules under `modules/https/<host>/`.)
+- [x] T012 Import rewriting, type-only import elision, `export` forms,
+  https modules under `modules/https/`. (A module imports the names it
+  refers to from the module that declares them and exports exactly what is
+  imported; a source edge with no name becomes a bare import so the
+  module's top-level code still runs, in the inlined order. Types are
+  erased, so a type-only import leaves nothing to elide.)
+- [x] T013 Classes (fields, ctor param properties, accessors, static,
   private names, inheritance, `super`), interfaces erased, enums.
-- [ ] T014 `JSON.parse<T>` validators; `embed`/`embedDir`.
+  (`src/lumen_emit_js_class.zig`. A generic class's specializations are
+  emitted where the template stood: the checker appends them after the
+  code that uses them, and a class is not hoisted in JavaScript.)
+- [ ] T014 `JSON.parse<T>` validators; `embed`/`embedDir`. (`embed` is
+  done by the front end before parsing, so it needs nothing here; the
+  validators remain.)
 - [ ] T015 Walk `specs/053..500` corpus; extend `corpus.txt`.
 
 ## Phase 4: Stdlib static calls and CLI
 
 - [ ] T016 `lumen_emit_js_stdlib.zig` table; Zig test cross-checking 503's
-  `names.json`.
-- [ ] T017 `E_TARGET_UNSUPPORTED` for 507/508 constructs.
-- [ ] T018 `lumen run --target node`, `--out`, `--runtime`.
+  `names.json`. (The file exists with the instance-method exceptions the
+  001-049 walk found: `find`/`at`/`pop`/`shift`/`Map.get` answer
+  `undefined` for a miss and get `?? null`; `Map`/`Set` `keys`/`values`/
+  `entries` answer iterators and get `Array.from`. The `names.json` test
+  remains.)
+- [x] T017 `E_TARGET_UNSUPPORTED` for 507/508 constructs. (`extern
+  function`, a `Ref<T>` argument, an FFI call -> 507; `net.*`,
+  `http.request`/`get`/`stream`/`createServer`, `child_process.spawn`,
+  `Worker.run` -> 508, the calls the runtime package stubs. Pinned by the
+  `node-diagnostics` cases in the manifest.)
+- [x] T018 `lumen run --target node`, `--out`, `--runtime`. (`lumen test
+  --target node` reports that it is spec 506's.)
 - [ ] T019 Joule pure modules compile (`SC-002` list); note results in spec.
 
 ## Phase 5: Close
 
 - [ ] T020 `zig build test`, `zig build conformance`, `emit-snapshot` diff
   empty, `node-run` green for `corpus.txt`.
-- [ ] T021 Website: a "Run on Node" section in `website/learn.html`;
-  `stamp.py`.
+- [x] T021 Website: a "Run on Node" section in `website/learn.html`;
+  `stamp.py` (no asset changed, so nothing to restamp).
 - [ ] T022 `sh tools/codemap.sh`; commit.
+
+## Discovered while walking the corpus
+
+- [x] T023a Native emitter: a class implementing a data-only interface
+  (`interface Named { label: string }`) emitted `__vt_<Class>_Named:
+  VT_Named = .{}` although no `VT_Named` is declared for an interface
+  without methods, so `018/inheritance.ts` never built. `emitClassVtables`
+  now skips such interfaces, as `emitIfaceDecl` already did.
+- [ ] T023b Native backend: `018/inheritance.ts` still fails after T023a
+  with "unused function parameter" attributed to `Animal.count += 1` in a
+  constructor (a static field increment). Pre-existing on the base commit,
+  outside this spec; needs its own slice.

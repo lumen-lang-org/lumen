@@ -12,6 +12,7 @@ const std = @import("std");
 const ast = @import("lumen_ast.zig");
 const js = @import("lumen_emit_js.zig");
 const js_stmt = @import("lumen_emit_js_stmt.zig");
+const js_stdlib = @import("lumen_emit_js_stdlib.zig");
 
 const Emitter = js.Emitter;
 const CompileError = js.CompileError;
@@ -77,12 +78,70 @@ fn emitReceiver(e: *Emitter, x: *const Expr) CompileError!void {
 }
 
 pub fn emitArgs(e: *Emitter, args: []const *Expr) CompileError!void {
+    try emitArgsFor(e, args, &.{});
+}
+
+/// The argument list of a call to `params`. The checker packed the arguments
+/// for a `...rest` parameter into one array literal (the native rest is a
+/// slice); JavaScript's rest parameter collects them itself, so the packed
+/// literal is spliced back into the list, its own spreads kept.
+pub fn emitArgsFor(e: *Emitter, args: []const *Expr, params: []const ast.FunctionParam) CompileError!void {
     try e.byte('(');
-    for (args, 0..) |a, i| {
-        if (i > 0) try e.w(", ");
+    const packed_rest = params.len > 0 and params[params.len - 1].is_rest and args.len == params.len and args[args.len - 1].* == .array;
+    const plain = if (packed_rest) args[0 .. args.len - 1] else args;
+    var n: usize = 0;
+    for (plain) |a| {
+        if (n > 0) try e.w(", ");
         try emitExpr(e, a);
+        n += 1;
     }
+    if (packed_rest) for (args[args.len - 1].array.items) |a| {
+        if (n > 0) try e.w(", ");
+        try emitExpr(e, a);
+        n += 1;
+    };
     try e.byte(')');
+}
+
+/// The parameters of the top-level function `name`, for splicing a packed
+/// rest argument; empty when it is not a user function.
+fn functionParams(e: *Emitter, name: []const u8) []const ast.FunctionParam {
+    for (e.program.stmts) |stmt| switch (stmt) {
+        .function_decl => |f| if (f.type_params.len == 0 and std.mem.eql(u8, f.name, name)) return f.params,
+        else => {},
+    };
+    return &.{};
+}
+
+fn findClass(e: *Emitter, name: []const u8) ?*const ast.ClassDecl {
+    for (e.program.stmts) |*stmt| switch (stmt.*) {
+        .class_decl => |*c| if (c.type_params.len == 0 and std.mem.eql(u8, c.name, name)) return c,
+        else => {},
+    };
+    return null;
+}
+
+/// The parameters of method `name` on class `class_name` or an ancestor.
+fn methodParams(e: *Emitter, class_name: []const u8, name: []const u8) []const ast.FunctionParam {
+    var cur: ?[]const u8 = class_name;
+    while (cur) |cn| {
+        const c = findClass(e, cn) orelse return &.{};
+        for (c.methods) |m| if (std.mem.eql(u8, m.name, name)) return m.params;
+        cur = c.parent;
+    }
+    return &.{};
+}
+
+/// The constructor parameters that apply to `new C(...)`: the class's own or
+/// the nearest ancestor's (spec 269).
+fn ctorParams(e: *Emitter, class_name: []const u8) []const ast.FunctionParam {
+    var cur: ?[]const u8 = class_name;
+    while (cur) |cn| {
+        const c = findClass(e, cn) orelse return &.{};
+        if (c.has_ctor) return c.ctor_params;
+        cur = c.parent;
+    }
+    return &.{};
 }
 
 /// A parameter list, shared by functions, methods and arrows: defaults as
@@ -269,12 +328,18 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
         .new_expr => |n| {
             try e.w("new ");
             try e.w(n.class_name);
-            try emitArgs(e, n.args);
+            try emitArgsFor(e, n.args, ctorParams(e, n.class_name));
         },
         .method_call => |m| {
+            const null_on_missing = js_stdlib.nullOnMissing(m);
+            const to_array = js_stdlib.iteratorToArray(m);
+            if (null_on_missing) try e.byte('(');
+            if (to_array) try e.w("Array.from(");
             try emitReceiver(e, m.obj);
             try emitFieldAccess(e, m.name, m.optional_chain);
-            try emitArgs(e, m.args);
+            try emitArgsFor(e, m.args, if (m.class_name) |cn| methodParams(e, cn, m.name) else &.{});
+            if (to_array) try e.byte(')');
+            if (null_on_missing) try e.w(" ?? null)");
         },
         .template => |parts| {
             try e.byte('`');
@@ -323,11 +388,17 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
         .call => |c| {
             for (c.ref_args) |is_ref| if (is_ref) return e.unsupported(e.cur_line, e.cur_col, "a `Ref<T>` argument", "507");
             if (c.ffi_string_return or c.ffi_string_args.len > 0) return e.unsupported(e.cur_line, e.cur_col, "a call to an `extern function`", "507");
+            // The checker's numeric promotion wraps an `int` operand in
+            // `Number(...)` (spec 255); on a literal that is noise in JavaScript,
+            // where every number is already a double.
+            if (c.is_global_parse and c.args.len == 1 and std.mem.eql(u8, c.name, "Number") and (c.args[0].* == .num or c.args[0].* == .float)) {
+                return emitExpr(e, c.args[0]);
+            }
             // A call to a generic function names the specialization the checker
             // made for these type arguments; the template itself is never emitted.
             const name = if (c.emit_name != null and js.isGenericFunction(e, c.name)) c.emit_name.? else c.name;
             try e.w(name);
-            try emitArgs(e, c.args);
+            try emitArgsFor(e, c.args, functionParams(e, name));
         },
         .optional_call => |o| {
             try emitReceiver(e, o.callee);
@@ -335,6 +406,7 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             try emitArgs(e, o.args);
         },
         .static_call => |s| {
+            if (js_stdlib.unsupportedStaticCall(s.namespace, s.name)) |what| return e.unsupported(e.cur_line, e.cur_col, what, "508");
             try e.w(s.namespace);
             try e.byte('.');
             try e.w(s.name);

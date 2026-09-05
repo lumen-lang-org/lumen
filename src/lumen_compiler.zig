@@ -154,6 +154,9 @@ const types = @import("lumen_types.zig");
 pub const CompileError = diag_mod.CompileError;
 pub const Diag = diag_mod.Diag;
 pub const LineOrigin = diag_mod.LineOrigin;
+pub const ModuleEdge = diag_mod.ModuleEdge;
+pub const ModulePath = diag_mod.ModulePath;
+pub const JsOutput = lumen_emit_js.Output;
 
 fn findClassDecl(program: *const ast.Program, name: []const u8) ?*const ast.ClassDecl {
     for (program.stmts) |*stmt| {
@@ -287,9 +290,9 @@ fn frontEnd(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: 
 /// passes are not run: they mark string and array accumulators and builder
 /// calls for the native allocator's benefit, and JavaScript has nothing to
 /// gain from them.
-pub fn compileToJsWithOptions(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: CompileOptions) CompileError![]const u8 {
+pub fn compileToJsWithOptions(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: CompileOptions) CompileError!lumen_emit_js.Output {
     const program = try frontEnd(arena, source, diag, options);
-    return lumen_emit_js.emitProgram(&program, arena, diag);
+    return lumen_emit_js.emitProgram(&program, arena, diag, options.entry_file, options.line_map, options.module_paths, options.module_edges);
 }
 
 pub fn compileToZigWithOptions(arena: std.mem.Allocator, source: []const u8, filename: []const u8, diag: *Diag, options: CompileOptions) CompileError![]const u8 {

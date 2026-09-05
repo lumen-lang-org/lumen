@@ -258,6 +258,32 @@ fn checkTestDiagnostics(arena: std.mem.Allocator, io: std.Io, case: Case, source
     return true;
 }
 
+/// The node target's corpus (spec 504 SC-001): the programs, from every spec,
+/// that must print the same bytes under `node` as natively -- one path per
+/// line relative to `specs/`, `#` comments. A `compile-run` case whose source
+/// is listed is also run as `node-run` against the same expectation, so the
+/// whole-corpus `zig build conformance` covers the node target without a
+/// second copy of every case. Missing file: no node runs.
+fn loadNodeCorpus(arena: std.mem.Allocator, io: std.Io, manifest_path: []const u8) []const []const u8 {
+    const path = std.fs.path.resolve(arena, &.{ manifestDir(manifest_path), "..", "..", "504-node-target-emitter", "conformance", "corpus.txt" }) catch return &.{};
+    const text = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1024 * 1024)) catch return &.{};
+    var list: std.ArrayListUnmanaged([]const u8) = .empty;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trim(u8, raw, " \t\r");
+        if (line.len == 0 or line[0] == '#') continue;
+        list.append(arena, line) catch return &.{};
+    }
+    return list.items;
+}
+
+fn inNodeCorpus(corpus: []const []const u8, source_path: []const u8) bool {
+    for (corpus) |entry| {
+        if (source_path.len > entry.len and std.mem.endsWith(u8, source_path, entry) and source_path[source_path.len - entry.len - 1] == '/') return true;
+    }
+    return false;
+}
+
 fn runCase(arena: std.mem.Allocator, io: std.Io, manifest_path: []const u8, case: Case, lumen_bin: []const u8) !?bool {
     const source_path = try resolveSource(arena, manifest_path, case.source);
     if (std.mem.eql(u8, case.phase, "compile-run")) {
@@ -302,6 +328,7 @@ pub fn main(init: std.process.Init) !void {
     const manifest = try std.json.parseFromSliceLeaky(Manifest, arena, manifest_json, .{ .ignore_unknown_fields = true });
 
     var stats: Stats = .{};
+    const node_corpus = loadNodeCorpus(arena, init.io, manifest_path);
     std.debug.print("conformance: {s} ({d} cases)\n", .{ manifest.feature, manifest.cases.len });
     for (manifest.cases) |case| {
         const result = runCase(arena, init.io, manifest_path, case, lumen_bin) catch |err| {
@@ -318,6 +345,23 @@ pub fn main(init: std.process.Init) !void {
             }
         } else {
             stats.skipped += 1;
+        }
+        // The same program under the node target (spec 504), when listed.
+        if (!std.mem.eql(u8, case.phase, "compile-run")) continue;
+        const source_path = resolveSource(arena, manifest_path, case.source) catch continue;
+        if (!inNodeCorpus(node_corpus, source_path)) continue;
+        var node_case = case;
+        node_case.id = try std.fmt.allocPrint(arena, "{s}.node", .{case.id});
+        const node_result = checkNodeRun(arena, init.io, node_case, source_path, lumen_bin) catch |err| {
+            stats.failed += 1;
+            std.debug.print("FAIL {s}: {s}\n", .{ node_case.id, @errorName(err) });
+            continue;
+        };
+        if (node_result) {
+            stats.passed += 1;
+            std.debug.print("PASS {s}\n", .{node_case.id});
+        } else {
+            stats.failed += 1;
         }
     }
 

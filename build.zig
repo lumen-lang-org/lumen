@@ -106,6 +106,7 @@ pub fn build(b: *std.Build) void {
         "src/lumen_emit_js_expr.zig",
         "src/lumen_emit_js_stmt.zig",
         "src/lumen_emit_js_class.zig",
+        "src/lumen_emit_js_stdlib.zig",
         "src/regex_rt.zig",
         "src/regex_specialize.zig",
         "tools/lumen_conformance.zig",

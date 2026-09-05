@@ -236,15 +236,56 @@ pub fn emitFunction(e: *Emitter, f: *const ast.FunctionDecl) CompileError!void {
     try e.w("\n");
 }
 
-/// A top-level statement. Type declarations and generic templates emit
-/// nothing: the checker specialized every use, and a type binds no value.
+/// Whether `name` is a specialization of the generic template `base`: the
+/// checker's `mangledName` is the template's name, then `__<tag>` per type
+/// argument.
+fn isSpecializationOf(name: []const u8, base: []const u8) bool {
+    return name.len > base.len + 2 and std.mem.startsWith(u8, name, base) and name[base.len] == '_' and name[base.len + 1] == '_';
+}
+
+/// A top-level statement. A type declaration emits nothing; a generic
+/// template emits its specializations in its place. The checker appends them
+/// to the end of the program, after the top-level code that uses them, and a
+/// class in JavaScript is not hoisted: `new Box__int()` before `class
+/// Box__int` is a ReferenceError. Emitting them where the template stood
+/// keeps the source order as well.
 pub fn emitTopLevel(e: *Emitter, s: *const ast.Stmt) CompileError!void {
     switch (s.*) {
-        .function_decl => |*f| if (f.type_params.len > 0) return,
-        .class_decl => |*c| if (c.type_params.len > 0) return,
+        .function_decl => |*f| if (f.type_params.len > 0) {
+            for (e.program.stmts) |*other| switch (other.*) {
+                .function_decl => |*g| if (g.type_params.len == 0 and isSpecializationOf(g.name, f.name)) try emitStmt(e, other),
+                else => {},
+            };
+            return;
+        },
+        .class_decl => |*c| if (c.type_params.len > 0) {
+            for (e.program.stmts) |*other| switch (other.*) {
+                .class_decl => |*d| if (d.type_params.len == 0 and isSpecializationOf(d.name, c.name)) try emitStmt(e, other),
+                else => {},
+            };
+            return;
+        },
         else => {},
     }
+    // A specialization at its appended position was emitted with its template.
+    if (isSpecialization(e, s)) return;
     try emitStmt(e, s);
+}
+
+/// Whether this declaration is a specialization the program also holds the
+/// template of.
+pub fn isSpecialization(e: *Emitter, s: *const ast.Stmt) bool {
+    const name: []const u8 = switch (s.*) {
+        .function_decl => |f| if (f.type_params.len == 0) f.name else return false,
+        .class_decl => |c| if (c.type_params.len == 0) c.name else return false,
+        else => return false,
+    };
+    for (e.program.stmts) |other| switch (other) {
+        .function_decl => |g| if (g.type_params.len > 0 and s.* == .function_decl and isSpecializationOf(name, g.name)) return true,
+        .class_decl => |d| if (d.type_params.len > 0 and s.* == .class_decl and isSpecializationOf(name, d.name)) return true,
+        else => {},
+    };
+    return false;
 }
 
 /// The source position of a statement, for diagnostics raised while emitting
