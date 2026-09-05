@@ -110,7 +110,14 @@
   VT_Named = .{}` although no `VT_Named` is declared for an interface
   without methods, so `018/inheritance.ts` never built. `emitClassVtables`
   now skips such interfaces, as `emitIfaceDecl` already did.
-- [ ] T023b Native backend: `018/inheritance.ts` still fails after T023a
-  with "unused function parameter" attributed to `Animal.count += 1` in a
-  constructor (a static field increment). Pre-existing on the base commit,
-  outside this spec; needs its own slice.
+- [x] T023b Native backend: `018/inheritance.ts` still failed after T023a.
+  The Zig compiler error's line/col (attributed to `Animal.count += 1`) was
+  the nearest preceding `__lumen_line`/`__lumen_col` marker, not the real
+  site: `zig build-exe` on the emitted file pointed at `Counter.
+  jsonStringify`'s `self` parameter. `Counter`'s only field (`private
+  value`) is excluded from the private-state `jsonStringify` (spec 456), so
+  the generated body never reads `self` -- an unused function parameter is
+  a Zig compile error, not a warning. `emitClass` (`lumen_emit_class.zig`)
+  now discards `self` there when the class has no public field to write.
+  `emit_snapshot.sh` confirms this is the corpus's only front-end-output
+  change since the pre-504 baseline; the rest of the corpus is untouched.

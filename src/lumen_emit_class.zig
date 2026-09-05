@@ -98,7 +98,20 @@ pub fn emitClass(c: *const ast.ClassDecl, decls: *std.ArrayListUnmanaged(u8), ar
     // marker means — a secret crossing a process boundary because the mapper
     // could reach it.
     if (has_private_field) {
+        var has_public_field = false;
+        for (chain) |cc| {
+            for (cc.fields) |field| {
+                if (!field.is_static and field.visibility != .private) has_public_field = true;
+            }
+        }
         try decls.appendSlice(arena, "    pub fn jsonStringify(self: @This(), jws: anytype) !void {\n");
+        // A class whose only fields are private (e.g. `Counter` in
+        // 018/inheritance.ts) writes no `self.<field>` below, so `self` would
+        // otherwise go unused -- an unused function parameter is a Zig compile
+        // error, not a warning. Discarding it only when there is no public
+        // field to write avoids the opposite failure, a pointless discard of a
+        // parameter the loop below does use.
+        if (!has_public_field) try decls.appendSlice(arena, "        _ = self;\n");
         try decls.appendSlice(arena, "        try jws.beginObject();\n");
         for (chain) |cc| {
             for (cc.fields) |field| {
