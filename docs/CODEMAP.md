@@ -107,7 +107,7 @@ exprHasAwait:26, bodyHasAwait:70, arrowIsAsync:109, emitBody:120, emitFunction:2
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,
 emitStaticCall:12
 
-## src/lumen_emit_stmt.zig (1191 lines)
+## src/lumen_emit_stmt.zig (1214 lines)
 Statement codegen -- the `Stmt`-union counterpart of `emitExpr`.
 emitStmt:158, emitAssignExpr:162, bodyHasSwitchBreak:235, emitSwitchCaseMatch:298, stmtDiverges:320, emitBody:329, emitStmtWithThrow:336
 

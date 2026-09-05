@@ -57,3 +57,26 @@
   `/home/user/code/specs/004-node-runtime/spec.md` under "Node target
   parity (Lumen 506 T006)", with its T005 ticked.)
 - [x] T007 Gate green; `codemap.sh`; commit.
+- [x] T008 Fix native test isolation for FR-004: an uncaught `throw`
+  reachable from a test body compiled to `@panic`, which `zig test` cannot
+  recover from -- the whole binary aborts (confirmed: SIGABRT, no more
+  test lines print), so a second, passing test in the same file was
+  silently dropped rather than reported. `test_decl` emission
+  (`lumen_emit_stmt.zig:505`) now treats a test body like a throwing
+  function's (`g_fn_can_error = true` while emitting it, spec 245's
+  existing mechanism): a bare `throw` or an unhandled call to a throwing
+  function returns `error.LumenThrow` instead of panicking, so `zig test`
+  marks that one test FAIL and keeps running the rest. `__lumen_throwing`
+  is reset at the top of each test body (it is a threadlocal shared by
+  every test in the binary) and an `errdefer` prints "Uncaught Error:
+  <msg>" before the error unwinds -- the same trick
+  `std.testing.expectEqual` already uses for its own "expected X, found
+  Y", which the CLI's reporter (`renderTestResults`,
+  `lumen.zig:3801`) already reads off each test's own progress line, so no
+  reporter change was needed. New case
+  `specs/506-node-test-runner/examples/valid/multi_throw.ts` (a throwing
+  test followed by a passing one) pins the fix on both targets
+  (`multi_throw.native`/`multi_throw.node` in this spec's manifest); a
+  `try`/`catch` around the throwing call inside a test, and a throw
+  propagated through an intermediate non-test function, were checked by
+  hand and still isolate correctly.

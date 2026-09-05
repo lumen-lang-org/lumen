@@ -2,6 +2,30 @@
   "feature": "506-node-test-runner",
   "cases": [
     { "id": "tests.native", "source": "../examples/valid/tests.ts", "phase": "test-run", "expect": {} },
-    { "id": "tests.node", "source": "../examples/valid/tests.ts", "phase": "node-test-run", "expect": {} }
+    { "id": "tests.node", "source": "../examples/valid/tests.ts", "phase": "node-test-run", "expect": {} },
+    {
+      "id": "multi_throw.native",
+      "source": "../examples/valid/multi_throw.ts",
+      "phase": "test-run",
+      "expect": {
+        "testOutput": [
+          "FAIL throws — Uncaught Error: kaput",
+          "ok still runs",
+          "1 passed, 1 failed"
+        ]
+      }
+    },
+    {
+      "id": "multi_throw.node",
+      "source": "../examples/valid/multi_throw.ts",
+      "phase": "node-test-run",
+      "expect": {
+        "testOutput": [
+          "FAIL throws — Uncaught Error: kaput",
+          "ok still runs",
+          "1 passed, 1 failed"
+        ]
+      }
+    }
   ]
 }

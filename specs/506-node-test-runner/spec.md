@@ -53,7 +53,12 @@ failing test exits non-zero; output names each test and the failure.
 - **FR-003**: an `expect` failure reports the test name, the file and line
   of the `expect`, and for matchers both values.
 - **FR-004**: a `throw` inside a test fails that test only and names the
-  error (243).
+  error (243). On the native target this held only for a *single*-test
+  file until 506 T008: an uncaught throw compiled to `@panic`, which `zig
+  test` cannot recover from — the whole binary aborted, silently dropping
+  every test after the throwing one instead of reporting it. Pinned by
+  `multi_throw.native`/`multi_throw.node` in this spec's own manifest (a
+  throwing test followed by a passing one).
 - **FR-005**: `test-run` conformance cases (`008`, `028`, `242`, `243`,
   `449`) also pass as `node-test-run` — a new runner phase mirroring
   `checkTestRun` with `--target node`.

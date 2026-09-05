@@ -522,6 +522,29 @@ pub fn emitStmtWithThrow(stmt: *const Stmt, decls: *std.ArrayListUnmanaged(u8), 
             // test (spec 449). It must come *after* the `__io` wiring above:
             // an initializer may itself do I/O.
             try decls.print(arena, "    {s}();\n", .{emit_mod.MODULE_INIT_FN});
+            // An uncaught `throw` inside the test must fail only this test
+            // (FR-004), not take the whole `zig test` binary down: unlike
+            // `main`, a Zig test block is free to return an error, so treat
+            // its body the way a throwing function's is treated — a bare
+            // `throw` or an unhandled call to a throwing function returns
+            // `error.LumenThrow` instead of `@panic`ing. `zig test` reports a
+            // returned error as that one test's failure and keeps running the
+            // rest; a `@panic` aborts the process (confirmed against Zig
+            // 0.16: a panicking test terminates with SIGABRT and every test
+            // after it never runs, while one that returns an error is
+            // reported FAIL and the next test still runs). The flag is reset
+            // first because it is a threadlocal shared by every test in the
+            // binary — a previous test's throw must not be mistaken for this
+            // one's — and the `errdefer` prints the thrown message before the
+            // error unwinds, the same way `std.testing.expectEqual` prints
+            // its own "expected X, found Y" before returning its error, so
+            // the CLI's per-test reporter (which reads whatever the test
+            // printed on its own progress line) picks it up unchanged.
+            try decls.appendSlice(arena, "    __lumen_throwing = false;\n");
+            try decls.appendSlice(arena, "    errdefer if (__lumen_throwing) std.debug.print(\"Uncaught Error: {s}\\n\", .{__lumen_err_msg});\n");
+            const saved_can_error = emit_mod.g_fn_can_error;
+            emit_mod.g_fn_can_error = true;
+            defer emit_mod.g_fn_can_error = saved_can_error;
             try emitBody(t.body, decls, decls, arena, throw_target, switch_break_target, options);
             try decls.appendSlice(arena, "}\n");
         },
