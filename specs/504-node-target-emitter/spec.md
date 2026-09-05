@@ -61,7 +61,7 @@ else needs to know where the runtime lives.
 | string literal with raw newline (502) | `\n` escaped | |
 | `console.log(a, b)` | `console.log` via the runtime's byte-string aware `__log` (505) | |
 | `throw new Error(m)` / `catch (e)` / `e.message` | identity | |
-| `async`/`await`/`Promise` | identity, plus a top-level `await` guard | 479's ordering is Lumen's own; the Node target follows JavaScript's here, documented as the one intentional divergence |
+| `async`/`await`/`Promise` | identity, plus a top-level `await` guard | 479's ordering is Lumen's own; the Node target follows JavaScript's here, documented as the one intentional divergence. 479 is not implemented natively yet (its manifest is not in `build.zig`), so both of its programs are excluded from `corpus.txt` with the reason, and its landing cannot turn the node sweep red |
 | `process.env.K` / `process.env[k]` | `process.env(k)` (439's rewrite happens in the checker) | |
 | numeric ops | see 505 | |
 

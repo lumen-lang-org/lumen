@@ -31,7 +31,8 @@
 #   468-thread-safe-arena/examples/valid/worker-error-isolation.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   468-thread-safe-arena/examples/valid/worker-random-independent.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   468-thread-safe-arena/examples/valid/worker-unwind-depth.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
-#   479-suspending-await/examples/valid/two-waiters-interleave.ts -- documented divergence (spec table): `await` ordering follows JavaScript's on Node
+#   479-suspending-await/examples/valid/call-does-not-run-the-body.ts -- 479 pins task semantics the native compiler does not implement yet (its manifest is not in build.zig): the body runs at the first `await` of the task, while JavaScript runs it at the call. Today both targets print the eager order; the Node target keeps JavaScript's (spec table), so the program is excluded before 479 lands
+#   479-suspending-await/examples/valid/two-waiters-interleave.ts -- 479 again: today the native `await` drives the loop, so the two targets already print different orders, and 479's manifest pins a third (spec table: `await` ordering follows JavaScript's on Node)
 001-typescript-to-zig-native/examples/valid/arrays.ts
 001-typescript-to-zig-native/examples/valid/block-shadow.ts
 001-typescript-to-zig-native/examples/valid/bool-literal.ts
@@ -200,7 +201,6 @@
 476-exported-name-collisions/examples/valid/two.ts
 477-class-metadata/examples/valid/mounted-controllers.ts
 478-class-to-record/examples/valid/controllers-without-mount.ts
-479-suspending-await/examples/valid/call-does-not-run-the-body.ts
 481-optional-fields-absent/examples/valid/absent.ts
 482-export-class/examples/valid/across-modules.ts
 483-json-parse-names-the-field/examples/valid/named-field.ts

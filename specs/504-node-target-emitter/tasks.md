@@ -78,9 +78,9 @@
   as natively. `examples/valid/json_revive.ts` pins it on both targets and
   456's `class-private-excluded.ts` joined `corpus.txt`.)
 - [x] T015 Walk `specs/053..500` corpus; extend `corpus.txt`. (109 more
-  programs: 84 print identically; 20 are 507/508 refusals; 467/roundtrip
-  waits for 505's byte strings; 479/two-waiters-interleave is the
-  documented `await`-ordering divergence; 456's two and 483's one need
+  programs: 83 print identically; 20 are 507/508 refusals; 467/roundtrip
+  waits for 505's byte strings; 479's two are the documented
+  `await`-ordering divergence (T023d); 456's two and 483's one need
   T014's validators and class revival.)
 
 ## Phase 4: Stdlib static calls and CLI
@@ -113,8 +113,15 @@
   empty, `node-run` green for `corpus.txt`. (`zig build test` green and the
   `emit-snapshot` diff between the pre-T014 compiler (5a255ba) and bef0f05
   empty over all 229 programs; the 504 and 456 manifests pass under the
-  runner. `zig build conformance`, which runs `node-run` for every
-  `corpus.txt` entry, is the orchestrator's sweep: ticked when it is green.)
+  runner. Round 2: the corpus's node side re-checked against every
+  manifest's `compile-run` expectation -- 145 of the 181 listed programs
+  have one and all 145 print it under `node`, 0 compile errors; the other
+  36 are libraries and test files no `compile-run` case runs. The one
+  mismatch found is T023d. `zig build conformance`, which runs `node-run`
+  for every `corpus.txt` entry, is the orchestrator's sweep: ticked when
+  it is green. Known: 19 native cases of specs 001/013/014/019/020/455 fail
+  identically at the merge-base 6ac4b77 (`lumen check` prints the same
+  bytes there and here), so they are not this spec's.)
 - [x] T021 Website: a "Run on Node" section in `website/learn.html`;
   `stamp.py` (no asset changed, so nothing to restamp).
 - [x] T022 `sh tools/codemap.sh`; commit. (Regenerated after T014 moved
@@ -143,3 +150,14 @@
   working directory (`std.fs.path.resolve` no longer prefixes it), so the
   file's "directory" was `/` and the relative spelling lost its first byte.
   Found and fixed under spec 505 (its T014).
+- [x] T023d `corpus.txt` listed `479/call-does-not-run-the-body.ts`, whose
+  manifest expects `after the call` before `inside the body`, while Node
+  prints the body first: JavaScript runs an async body up to its first
+  `await` at the call. The T015 walk compared Node's output with the native
+  binary's, and the two agree today -- spec 479 (the body runs at the first
+  `await` of the task) is not implemented natively and its manifest is not
+  in `build.zig`, so the walk saw no mismatch and the entry was listed. The
+  spec table already names 479's ordering as the one intentional divergence,
+  so both 479 programs are now excluded with that reason (181 listed), and
+  the table row says why 479's landing cannot turn the node sweep red. Found
+  by re-running the corpus's node side against the manifests (T020).
