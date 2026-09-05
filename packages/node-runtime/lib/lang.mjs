@@ -120,9 +120,95 @@ function encodeStrings(v) {
   return out;
 }
 
-/** `JSON.parse(s)` over a byte string, answering byte strings. */
-export function jsonParse(s) {
-  return encodeStrings(jsParse(text(s)));
+/** What a scalar shape wants, in the words the native parser uses (483). */
+const WANTS = { string: "a string", int: "a whole number", number: "a number", bool: "a true or false" };
+
+/** Whether `v` is a value of the scalar shape `kind`. */
+function isScalar(kind, v) {
+  switch (kind) {
+    case "string": return typeof v === "string";
+    case "int": return typeof v === "number" && Number.isInteger(v);
+    case "number": return typeof v === "number";
+    case "bool": return typeof v === "boolean";
+    default: return true;
+  }
+}
+
+/** Why `v` is not a value of `shape` -- the native parser's error name
+ *  (`MissingField`, `UnknownField`, `UnexpectedToken`) -- or null. An
+ *  optional shape admits null. `open` lets a record carry members its type
+ *  does not declare (spec 500). */
+function mismatch(v, shape, open) {
+  if (typeof shape === "string") return isScalar(shape, v) ? null : "UnexpectedToken";
+  if (shape.o !== undefined) return v === null || v === undefined ? null : mismatch(v, shape.o, open);
+  if (shape.a !== undefined) {
+    if (!Array.isArray(v)) return "UnexpectedToken";
+    for (const x of v) { const why = mismatch(x, shape.a, open); if (why) return why; }
+    return null;
+  }
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return "UnexpectedToken";
+  for (const [name, field] of Object.entries(shape.f)) {
+    if (!(name in v)) { if (isOptional(field)) continue; return "MissingField"; }
+    const why = mismatch(v[name], field, open);
+    if (why) return why;
+  }
+  if (!open) for (const k of Object.keys(v)) if (!(k in shape.f)) return "UnknownField";
+  return null;
+}
+
+function isOptional(shape) {
+  return typeof shape === "object" && shape.o !== undefined;
+}
+
+/** The native parser's account of a refused document, which looks at the
+ *  top-level record only: a required field not sent, then a member the
+ *  type does not declare, then a scalar field of the wrong kind (483). Any
+ *  other refusal is `invalid JSON (<error name>)`. */
+function blame(v, shape, open, why) {
+  if (typeof shape === "object" && shape.f !== undefined && v !== null && typeof v === "object" && !Array.isArray(v)) {
+    for (const [name, field] of Object.entries(shape.f)) {
+      if (!(name in v) && !isOptional(field)) return "JSON.parse: the field \"" + name + "\" is required and was not sent";
+    }
+    if (!open) for (const k of Object.keys(v)) if (!(k in shape.f)) return "JSON.parse: the field \"" + k + "\" is not one this accepts";
+    for (const [name, field] of Object.entries(shape.f)) {
+      const kind = isOptional(field) ? field.o : field;
+      if (typeof kind !== "string" || !(kind in WANTS)) continue;
+      if (name in v && v[name] !== null && !isScalar(kind, v[name])) return "JSON.parse: the field \"" + name + "\" wants " + WANTS[kind];
+    }
+  }
+  return "JSON.parse: invalid JSON (" + why + ")";
+}
+
+/** `v`, checked, as the program's type holds it: a class instance gets its
+ *  prototype without its constructor running (spec 456), and an optional
+ *  field not sent is null, as it is natively. */
+function revive(v, shape) {
+  if (typeof shape === "string" || v === null || v === undefined) return v;
+  if (shape.o !== undefined) return revive(v, shape.o);
+  if (shape.a !== undefined) return v.map((x) => revive(x, shape.a));
+  const out = shape.c !== undefined ? Object.create(shape.c.prototype) : {};
+  for (const [name, field] of Object.entries(shape.f)) out[name] = name in v ? revive(v[name], field) : null;
+  for (const k of Object.keys(v)) if (!(k in shape.f)) out[k] = v[k];
+  return out;
+}
+
+/** `JSON.parse<T>(s)` over a byte string, answering byte strings: `shape`
+ *  is T as the emitter describes it (`"string"`, `{f: {...}}`, `{a: ...}`,
+ *  `{o: ...}`, `{c: Class, f: ...}`, `"any"`); without one the document is
+ *  taken as it is. A refused document throws with the message the native
+ *  parser gives; malformed JSON is `invalid JSON (SyntaxError)`. */
+export function jsonParse(s, shape, open = false) {
+  let v;
+  try {
+    v = jsParse(text(s));
+  } catch (e) {
+    throw new Error("JSON.parse: invalid JSON (SyntaxError)");
+  }
+  v = encodeStrings(v);
+  if (shape === undefined) return v;
+  const why = mismatch(v, shape, open);
+  if (why) throw new Error(blame(v, shape, open, why));
+  return revive(v, shape);
 }
 
 // ---------------------------------------------------------------------------

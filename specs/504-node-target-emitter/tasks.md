@@ -67,8 +67,12 @@
   code that uses them, and a class is not hoisted in JavaScript.)
 - [ ] T014 `JSON.parse<T>` validators; `embed`/`embedDir`. (`embed` is
   done by the front end before parsing, so it needs nothing here. The
-  validators remain, and with them class revival for `JSON.parse<Class>`
-  (456): the corpus programs waiting on this are named in `corpus.txt`.)
+  validators landed under spec 505 T011: `JSON.parse<T>` passes T's shape
+  to the runtime, which refuses what the native parser refuses with the
+  same message (483) and revives a class instance without its constructor
+  (456). What remains is a `#private` field on a revived instance, which
+  JavaScript installs only by running the constructor: `corpus.txt` names
+  the one program waiting on it.)
 - [x] T015 Walk `specs/053..500` corpus; extend `corpus.txt`. (109 more
   programs: 84 print identically; 20 are 507/508 refusals; 467/roundtrip
   waits for 505's byte strings; 479/two-waiters-interleave is the

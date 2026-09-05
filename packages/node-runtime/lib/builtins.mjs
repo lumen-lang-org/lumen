@@ -126,8 +126,8 @@ export const numberExtras = {
 // result (spec 505; `lang.mjs` `jsonParse`). `stringify` stays JavaScript's,
 // which over byte strings writes the right bytes.
 export const jsonExtras = {
-  parse: jsonParse,
-  parseOpen: jsonParse,
+  parse: (s, shape) => jsonParse(s, shape, false),
+  parseOpen: (s, shape) => jsonParse(s, shape, true),
 };
 
 function overlay(base, extras) {

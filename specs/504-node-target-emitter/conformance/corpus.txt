@@ -23,8 +23,7 @@
 #   453-ref-for-value-types/examples/valid/ref-array-push.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
 #   453-ref-for-value-types/examples/valid/ref-array-read.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
 #   453-ref-for-value-types/examples/valid/ref-string-out.ts -- 507: a `Ref<T>` argument (E_TARGET_UNSUPPORTED)
-#   456-json-for-classes/examples/valid/class-private-excluded.ts -- T014: `JSON.parse<Class>` must revive a class instance (456)
-#   456-json-for-classes/examples/valid/class-round-trip.ts -- T014: `JSON.parse<Class>` must revive a class instance (456)
+#   456-json-for-classes/examples/valid/class-private-excluded.ts -- T014: `JSON.parse<Class>` revives an instance without its constructor, so a `#private` field is not installed and a method reading it throws (456)
 #   459-http-request-headers/examples/valid/read-request-headers.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
 #   459-http-request-headers/examples/valid/request-headers-map-methods.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
 #   459-http-request-headers/examples/valid/streaming-handler-headers.ts -- 508: `http.request`/`get`/`stream`/`createServer` (E_TARGET_UNSUPPORTED)
@@ -34,7 +33,6 @@
 #   468-thread-safe-arena/examples/valid/worker-random-independent.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   468-thread-safe-arena/examples/valid/worker-unwind-depth.ts -- 508: `Worker.run` (E_TARGET_UNSUPPORTED)
 #   479-suspending-await/examples/valid/two-waiters-interleave.ts -- documented divergence (spec table): `await` ordering follows JavaScript's on Node
-#   483-json-parse-names-the-field/examples/valid/named-field.ts -- T014: `JSON.parse<T>` validators name the field (437, 483)
 001-typescript-to-zig-native/examples/valid/arrays.ts
 001-typescript-to-zig-native/examples/valid/block-shadow.ts
 001-typescript-to-zig-native/examples/valid/bool-literal.ts
@@ -164,6 +162,7 @@
 455-decorators/examples/valid/two-decorators-in-source-order.ts
 456-json-for-classes/examples/valid/class-inherits.ts
 456-json-for-classes/examples/valid/class-no-constructor-on-parse.ts
+456-json-for-classes/examples/valid/class-round-trip.ts
 458-embed-file/examples/valid/embed-dir.ts
 458-embed-file/examples/valid/embed-file.ts
 458-embed-file/examples/valid/embed-from-import.ts
@@ -204,6 +203,7 @@
 479-suspending-await/examples/valid/call-does-not-run-the-body.ts
 481-optional-fields-absent/examples/valid/absent.ts
 482-export-class/examples/valid/across-modules.ts
+483-json-parse-names-the-field/examples/valid/named-field.ts
 487-chained-assignment-targets/examples/valid/chained-targets.ts
 488-class-and-type-alias-names/examples/valid/collide.ts
 488-class-and-type-alias-names/examples/valid/gate.ts

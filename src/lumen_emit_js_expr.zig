@@ -13,6 +13,7 @@ const ast = @import("lumen_ast.zig");
 const js = @import("lumen_emit_js.zig");
 const js_stmt = @import("lumen_emit_js_stmt.zig");
 const js_stdlib = @import("lumen_emit_js_stdlib.zig");
+const types = @import("lumen_types.zig");
 
 const Emitter = js.Emitter;
 const CompileError = js.CompileError;
@@ -118,6 +119,90 @@ fn functionParams(e: *Emitter, name: []const u8) []const ast.FunctionParam {
         else => {},
     };
     return &.{};
+}
+
+fn findTypeDecl(e: *Emitter, name: []const u8) ?*const ast.TypeDecl {
+    for (e.program.stmts) |*stmt| switch (stmt.*) {
+        .type_decl => |*d| if (d.type_params.len == 0 and std.mem.eql(u8, d.name, name)) return d,
+        else => {},
+    };
+    return null;
+}
+
+/// The shape of a type as the runtime's `JSON.parse` reads it (spec 505
+/// decision 1 names the runtime; specs 051/500/483 the rules): `"string"`,
+/// `"int"`, `"number"`, `"bool"`, `{a: elem}` for an array, `{o: inner}` for
+/// an optional, `{f: {name: shape, ...}}` for a record, `{c: Class, f: ...}`
+/// for a class (the instance is revived without running the constructor,
+/// spec 456), and `"any"` where the native parser has no check of its own
+/// (a union, an enum). Records may nest; a self-referential one bottoms out
+/// as `"any"` past a depth no document is checked beyond.
+fn emitJsonShape(e: *Emitter, t: types.Type, depth: u32) CompileError!void {
+    if (depth > 8) return e.w("\"any\"");
+    switch (t) {
+        .string, .string_literal_union => try e.w("\"string\""),
+        .i32, .i64, .int_literal_union => try e.w("\"int\""),
+        .f64 => try e.w("\"number\""),
+        .bool => try e.w("\"bool\""),
+        .i32_array, .i64_array, .f64_array, .bool_array, .string_array, .named_array, .nested_array => {
+            try e.w("{a: ");
+            try emitJsonShape(e, types.arrayElem(t) orelse .void, depth + 1);
+            try e.byte('}');
+        },
+        .optional => |inner| {
+            try e.w("{o: ");
+            try emitJsonShape(e, inner.*, depth + 1);
+            try e.byte('}');
+        },
+        .named => |name| {
+            const decl = findTypeDecl(e, name) orelse return e.w("\"any\"");
+            if (decl.alias) |alias| return emitJsonShape(e, types.fromAnnotation(alias), depth + 1);
+            if (decl.string_literals != null) return e.w("\"string\"");
+            if (decl.int_literals != null) return e.w("\"int\"");
+            if (decl.union_variants != null) return e.w("\"any\"");
+            try e.w("{f: {");
+            var first = true;
+            try emitRecordFields(e, decl, depth, &first);
+            try e.w("}}");
+        },
+        .class_type => |name| {
+            const decl = findClass(e, name) orelse return e.w("\"any\"");
+            try e.print("{{c: {s}, f: {{", .{name});
+            var first = true;
+            var cur: ?*const ast.ClassDecl = decl;
+            while (cur) |c| : (cur = if (c.parent) |p| findClass(e, p) else null) {
+                for (c.fields) |f| {
+                    // A `#private` field is not in the document (456); a
+                    // static one is not the instance's.
+                    if (f.is_static or (f.name.len > 0 and f.name[0] == '#')) continue;
+                    try emitShapeField(e, f, depth, &first);
+                }
+            }
+            try e.w("}}");
+        },
+        else => try e.w("\"any\""),
+    }
+}
+
+/// A record's fields, parents' first (`interface B extends A`), each once.
+fn emitRecordFields(e: *Emitter, decl: *const ast.TypeDecl, depth: u32, first: *bool) CompileError!void {
+    for (decl.parents) |p| if (findTypeDecl(e, p)) |parent| try emitRecordFields(e, parent, depth, first);
+    for (decl.fields) |f| try emitShapeField(e, f, depth, first);
+}
+
+fn emitShapeField(e: *Emitter, f: ast.TypeField, depth: u32, first: *bool) CompileError!void {
+    if (!first.*) try e.w(", ");
+    first.* = false;
+    try js.emitPropertyKey(e, f.name);
+    try e.w(": ");
+    // A field the checker typed carries its type; one it did not (a class
+    // field declared by an initializer alone) is read from its annotation.
+    if (f.checked_type) |t| return emitJsonShape(e, t, depth + 1);
+    if (std.mem.endsWith(u8, f.annotation, "?")) {
+        const inner = types.fromAnnotation(f.annotation[0 .. f.annotation.len - 1]);
+        return emitJsonShape(e, .{ .optional = &inner }, depth + 1);
+    }
+    try emitJsonShape(e, types.fromAnnotation(f.annotation), depth + 1);
 }
 
 fn findClass(e: *Emitter, name: []const u8) ?*const ast.ClassDecl {
@@ -499,6 +584,17 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
         },
         .static_call => |s| {
             if (js_stdlib.unsupportedStaticCall(s.namespace, s.name)) |what| return e.unsupported(e.cur_line, e.cur_col, what, "508");
+            // `JSON.parse<T>(text)` / `parseOpen<T>` (specs 051, 500): the
+            // runtime checks the document against T's shape, so it refuses
+            // what the native parser refuses and names the same field (483).
+            if (std.mem.eql(u8, s.namespace, "JSON") and (std.mem.eql(u8, s.name, "parse") or std.mem.eql(u8, s.name, "parseOpen")) and s.args.len == 1 and s.checked_arg_type != null) {
+                try e.print("JSON.{s}(", .{s.name});
+                try emitExpr(e, s.args[0]);
+                try e.w(", ");
+                try emitJsonShape(e, s.checked_arg_type.?, 0);
+                try e.byte(')');
+                return;
+            }
             try e.w(s.namespace);
             try e.byte('.');
             try e.w(s.name);
@@ -651,4 +747,72 @@ test "a number becomes text through __lang.fmt, and a literal past 2^53 warns on
     try emitExpr(&e, &big);
     try t.expectEqual(@as(usize, 1), warnings.items.len);
     try t.expect(std.mem.indexOf(u8, warnings.items[0].msg, "[W_I64_PRECISION]") != null);
+}
+
+test "an expect matcher prints as the runtime's matcher call (spec 506)" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var diag: @import("lumen_diag.zig").Diag = .{};
+    var program: ast.Program = .{ .stmts = &.{} };
+    var e: Emitter = .{ .arena = arena, .diag = &diag, .program = &program };
+    var a: Expr = .{ .var_ref = .{ .name = "a" } };
+    var b: Expr = .{ .num = 5 };
+    var args = [_]*Expr{ &a, &b };
+    var to_be: Expr = .{ .call = .{ .name = "__expectToBe", .args = &args } };
+    try emitExpr(&e, &to_be);
+    try t.expectEqualStrings("expect(a).toBe(5)", e.out.items);
+    e.out.clearRetainingCapacity();
+    var to_equal: Expr = .{ .call = .{ .name = "__expectToEqual", .args = &args } };
+    try emitExpr(&e, &to_equal);
+    try t.expectEqualStrings("expect(a).toEqual(5)", e.out.items);
+    e.out.clearRetainingCapacity();
+    var str_equal: Expr = .{ .call = .{ .name = "__expectStrEqual", .args = &args } };
+    try emitExpr(&e, &str_equal);
+    try t.expectEqualStrings("expect(a).toBe(5)", e.out.items);
+    e.out.clearRetainingCapacity();
+    var one = [_]*Expr{&a};
+    var plain: Expr = .{ .call = .{ .name = "expect", .args = &one } };
+    try emitExpr(&e, &plain);
+    try t.expectEqualStrings("expect(a)", e.out.items);
+}
+
+test "JSON.parse<T> carries T's shape to the runtime (specs 051, 483, 456)" {
+    const t = std.testing;
+    var arena_state = std.heap.ArenaAllocator.init(t.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var diag: @import("lumen_diag.zig").Diag = .{};
+    var ask_fields = [_]ast.TypeField{
+        .{ .name = "siteKey", .annotation = "string", .checked_type = .string },
+        .{ .name = "tries", .annotation = "int", .checked_type = .i32 },
+        .{ .name = "tags", .annotation = "string[]", .checked_type = .string_array },
+        .{ .name = "note", .annotation = "string?", .checked_type = .{ .optional = &.string } },
+        .{ .name = "class-name", .annotation = "Agent", .checked_type = .{ .class_type = "Agent" } },
+    };
+    var agent_fields = [_]ast.TypeField{
+        .{ .name = "id", .annotation = "string", .checked_type = .string },
+        .{ .name = "#token", .annotation = "string", .checked_type = .string },
+        .{ .name = "count", .annotation = "", .init = null, .checked_type = .i32 },
+    };
+    var stmts = [_]ast.Stmt{
+        .{ .type_decl = .{ .name = "Ask", .fields = &ask_fields, .line = 1, .col = 1 } },
+        .{ .class_decl = .{ .name = "Agent", .fields = &agent_fields, .line = 2, .col = 1 } },
+    };
+    var program: ast.Program = .{ .stmts = &stmts };
+    var e: Emitter = .{ .arena = arena, .diag = &diag, .program = &program };
+    var text: Expr = .{ .var_ref = .{ .name = "text" } };
+    var args = [_]*Expr{&text};
+    var parse: Expr = .{ .static_call = .{ .namespace = "JSON", .name = "parse", .args = &args, .checked_arg_type = .{ .named = "Ask" } } };
+    try emitExpr(&e, &parse);
+    try t.expectEqualStrings("JSON.parse(text, {f: {siteKey: \"string\", tries: \"int\", tags: {a: \"string\"}, note: {o: \"string\"}, \"class-name\": {c: Agent, f: {id: \"string\", count: \"int\"}}}})", e.out.items);
+    e.out.clearRetainingCapacity();
+    var open: Expr = .{ .static_call = .{ .namespace = "JSON", .name = "parseOpen", .args = &args, .checked_arg_type = .{ .named_array = "Agent" } } };
+    try emitExpr(&e, &open);
+    try t.expectEqualStrings("JSON.parseOpen(text, {a: \"any\"})", e.out.items);
+    e.out.clearRetainingCapacity();
+    var untyped: Expr = .{ .static_call = .{ .namespace = "JSON", .name = "stringify", .args = &args } };
+    try emitExpr(&e, &untyped);
+    try t.expectEqualStrings("JSON.stringify(text)", e.out.items);
 }

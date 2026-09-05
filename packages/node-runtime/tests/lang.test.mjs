@@ -104,3 +104,38 @@ test("fmt prints a number as the native runtime does: every digit, no exponent, 
   assert.equal(printArg(2.5e-5), "0.000025");
   assert.deepEqual(printArg([2.5e-5]), [2.5e-5]);
 });
+
+test("JSON.parse<T> checks the document against T's shape and blames the field the native parser names (specs 051, 483, 500)", () => {
+  const ask = { f: { siteKey: "string", secret: "string", enabled: "bool", tries: "int" } };
+  const why = (doc, open = false) => { try { jsonParse(doc, ask, open); return "parsed"; } catch (e) { return e.message; } };
+  assert.equal(why('{"siteKey":"k","enabled":true,"tries":1}'), 'JSON.parse: the field "secret" is required and was not sent');
+  assert.equal(why('{"siteKey":"k","secret":"s","enabled":true,"tries":1,"typo":2}'), 'JSON.parse: the field "typo" is not one this accepts');
+  assert.equal(why('{"siteKey":"k","secret":"s","enabled":true,"tries":1,"typo":2}', true), "parsed");
+  assert.equal(why('{"siteKey":"k","secret":"s","enabled":"yes","tries":1}'), 'JSON.parse: the field "enabled" wants a true or false');
+  assert.equal(why('{"siteKey":"k","secret":"s","enabled":true,"tries":1.5}'), 'JSON.parse: the field "tries" wants a whole number');
+  assert.equal(why('{"siteKey":"k","secret":"s","enabled":true,"tries":1}'), "parsed");
+  assert.equal(why("not json at all"), "JSON.parse: invalid JSON (SyntaxError)");
+  assert.equal(why('{"v":1'), "JSON.parse: invalid JSON (SyntaxError)");
+  assert.equal(why('[1]'), "JSON.parse: invalid JSON (UnexpectedToken)");
+  // Nested records and arrays are checked too; only the top level is blamed by name.
+  const nested = { f: { items: { a: { f: { n: "int" } } }, note: { o: "string" } } };
+  assert.equal(jsonParse('{"items":[{"n":1}]}', nested).note, null);
+  assert.throws(() => jsonParse('{"items":[{"n":"x"}]}', nested), { message: "JSON.parse: invalid JSON (UnexpectedToken)" });
+  assert.throws(() => jsonParse('{"items":[{"n":1,"extra":true}]}', nested), { message: "JSON.parse: invalid JSON (UnknownField)" });
+  assert.equal(jsonParse('{"items":[{"n":1,"extra":true}]}', nested, true).items[0].extra, true);
+  assert.deepEqual(jsonParse('{"items":[], "note": null}', nested), { items: [], note: null });
+  assert.deepEqual(jsonParse('["a"]', { a: "string" }), ["a"]);
+  assert.equal(jsonParse('{"anything": [1, "two"]}', "any").anything[1], "two");
+});
+
+test("JSON.parse<Class> revives an instance without running the constructor (spec 456)", () => {
+  let constructed = 0;
+  class Agent { constructor(id, maxSteps) { constructed += 1; this.id = id; this.maxSteps = maxSteps; } describe() { return this.id + ":" + this.maxSteps; } }
+  const shape = { c: Agent, f: { id: "string", maxSteps: "int" } };
+  const back = jsonParse('{"id":"a1","maxSteps":5}', shape);
+  assert.ok(back instanceof Agent);
+  assert.equal(back.describe(), "a1:5");
+  assert.equal(constructed, 0);
+  const many = jsonParse('[{"id":"a","maxSteps":1}]', { a: shape });
+  assert.equal(many[0].describe(), "a:1");
+});
