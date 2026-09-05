@@ -84,3 +84,19 @@
   Lifting the by-value rule itself (a listener that accumulates into an
   outer `let`) is a language decision for its own slice, not a checker bug;
   `process-shapes.ts` uses a named function meanwhile.
+- [x] T021 The round-1 gate saw all 36 "compiled natively here" corpus cases
+  fail at once while the other 245 tests passed. The suite is green here
+  (281/281, 247 s, even with a whole-corpus sweep loading the box), and the
+  one thing that fails exactly those 36 instantly is `zig` missing from the
+  shell's PATH: `lumen compile` runs `zig` from PATH, and a gate shell that
+  skips `export PATH=$HOME/.zig:$PATH` for the `node --test` command hits
+  it. Two causes fixed, neither in the assertions: (1) `lumen` reported a
+  bare "could not run the native backend", swallowing the spawn error — it
+  now prints the error name and, for `FileNotFound`, a note that the backend
+  is `zig` on PATH; (2) the suite's native compile depended on the caller's
+  PATH silently — `helpers.mjs` `toolchainEnv()` now takes the caller's
+  `zig`, else the one `tools/node-target-env.sh` installs (`$ZIG_DIR`,
+  default `$HOME/.zig`), and the precondition test names what is missing once
+  when there is none. Verified by running the suite with `zig` off PATH
+  (passes via `$HOME/.zig`) and with no toolchain at all (one pointed
+  failure).

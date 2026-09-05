@@ -6,7 +6,10 @@
   package itself, only by the probe).
 - Location: `packages/node-runtime/` (beside `packages/context-index`, which
   is the existing Node-wrapper precedent).
-- Tests: `node --test packages/node-runtime/tests/` — no framework.
+- Tests: `node --test packages/node-runtime/tests/` — no framework. The corpus
+  test compiles the programs no manifest pins with `zig-out/bin/lumen`, which
+  runs `zig` from PATH: the suite uses the shell's `zig`, or failing that the
+  one `tools/node-target-env.sh` installs at `$HOME/.zig`.
 - Reference implementations to read before writing each module: the Zig
   runtime preludes `src/lumen_runtime_os.zig` (process, stdio, crypto),
   `src/lumen_runtime_fs.zig`, `src/lumen_runtime_net.zig`, and the spec that

@@ -13,7 +13,10 @@
 // it with `zig build`), so the check is the same whichever way the
 // expectation is obtained. Native compiles are single-threaded and take
 // ~20 s each, so the unpinned programs run a few at a time, each compiling
-// in its own directory.
+// in its own directory. `lumen compile` runs `zig` from PATH: the suite
+// takes the caller's, or the one tools/node-target-env.sh installed
+// (helpers.mjs `toolchainEnv`), and names what is missing before any
+// compile runs.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -21,7 +24,7 @@ import { execFile } from "node:child_process";
 import { basename, join, resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { GLOBALS, childEnv } from "./helpers.mjs";
+import { GLOBALS, childEnv, toolchainEnv } from "./helpers.mjs";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const SPECS = join(ROOT, "specs");
@@ -35,10 +38,12 @@ const programs = readFileSync(CORPUS, "utf8")
 
 const trimTrailingNewlines = (s) => s.replace(/[\r\n]+$/, "");
 
+const toolchain = toolchainEnv();
+
 /** Runs a command to completion; resolves with its status and streams. */
-function run(cmd, args, { cwd, timeout }) {
+function run(cmd, args, { cwd, timeout, env = childEnv() }) {
   return new Promise((resolveRun) => {
-    execFile(cmd, args, { cwd, encoding: "latin1", timeout, maxBuffer: 64 * 1024 * 1024, env: childEnv() }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, encoding: "latin1", timeout, maxBuffer: 64 * 1024 * 1024, env }, (err, stdout, stderr) => {
       resolveRun({ status: err ? (typeof err.code === "number" ? err.code : -1) : 0, stdout: stdout ?? "", stderr: stderr ?? "", error: err && typeof err.code !== "number" ? err : null });
     });
   });
@@ -71,7 +76,7 @@ async function nativeOutput(rel) {
   const stem = basename(rel, ".ts");
   const dir = mkdtempSync(join(tmpdir(), "lumen-corpus-"));
   try {
-    const compile = await run(LUMEN, ["compile", source], { cwd: dir, timeout: 180000 });
+    const compile = await run(LUMEN, ["compile", source], { cwd: dir, timeout: 180000, env: toolchain.env });
     assert.equal(compile.status, 0, `native compile failed:\n${compile.stderr}`);
     const exe = await run(join(dir, stem), [], { cwd: ROOT, timeout: 60000 });
     assert.equal(exe.status, 0, `native executable failed:\n${exe.stderr}`);
@@ -92,7 +97,10 @@ const unpinned = programs.filter((rel) => !pinned.has(join(SPECS, rel)));
 test("corpus.txt names programs that exist", () => {
   assert.ok(programs.length > 0, "corpus.txt is empty");
   for (const rel of programs) assert.ok(existsSync(join(SPECS, rel)), `${rel} is not in specs/`);
-  if (unpinned.length > 0) assert.ok(existsSync(LUMEN), `${LUMEN} is missing and ${unpinned.length} corpus programs have no manifest expectation: run \`zig build\` first`);
+  if (unpinned.length > 0) {
+    assert.ok(existsSync(LUMEN), `${LUMEN} is missing and ${unpinned.length} corpus programs have no manifest expectation: run \`zig build\` first`);
+    assert.ok(toolchain.zigDir, `zig is neither on PATH nor at $ZIG_DIR/$HOME/.zig, and ${unpinned.length} corpus programs compile natively: run \`sh tools/node-target-env.sh\` and put its PATH line in this shell`);
+  }
 });
 
 describe("corpus, pinned by a conformance manifest", () => {

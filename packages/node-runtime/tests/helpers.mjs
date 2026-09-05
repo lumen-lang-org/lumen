@@ -1,9 +1,9 @@
 // Shared test plumbing: a scratch directory per test and a child `node`
 // that loads the package's globals, for behaviour only observable from a
 // separate process (stdio, exit status, the globals install itself).
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir, homedir } from "node:os";
+import { join, delimiter } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +32,34 @@ export function childEnv(extra = {}) {
   const env = { ...process.env, ...extra };
   delete env.NODE_TEST_CONTEXT;
   return env;
+}
+
+/** The first directory on `env.PATH` holding an executable `name`, or null. */
+export function findOnPath(name, env = process.env) {
+  for (const dir of (env.PATH ?? "").split(delimiter)) {
+    if (dir.length > 0 && existsSync(join(dir, name))) return dir;
+  }
+  return null;
+}
+
+/** The environment a native compile runs in. `lumen compile` invokes `zig`
+ *  from PATH (src/lumen.zig), so the shell running this suite must carry it,
+ *  as it must for `zig build`. A shell that does not — a runner that forgot
+ *  `export PATH=$HOME/.zig:$PATH` — gets the toolchain tools/node-target-env.sh
+ *  installs, at `$ZIG_DIR` (default `$HOME/.zig`), put on the child's PATH;
+ *  `zigDir` is null when neither place has one, and the suite says so once
+ *  rather than failing every native compile with the same bare error. */
+export function toolchainEnv(extra = {}) {
+  const env = childEnv(extra);
+  let zigDir = findOnPath("zig", env);
+  if (!zigDir) {
+    const installed = process.env.ZIG_DIR ?? join(homedir(), ".zig");
+    if (existsSync(join(installed, "zig"))) {
+      zigDir = installed;
+      env.PATH = `${installed}${delimiter}${env.PATH ?? ""}`;
+    }
+  }
+  return { env, zigDir };
 }
 
 /** Runs `source` (a .ts program) under `node --import globals.mjs`. */

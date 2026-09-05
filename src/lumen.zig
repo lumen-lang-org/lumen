@@ -3541,8 +3541,8 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
     // hidden). Build mode: capture stderr so a failure can be mapped back to
     // the .ts source instead of a black-box "failed to build" line.
     if (action == .run_test) {
-        const result = std.process.run(arena, io, .{ .argv = argv.items }) catch {
-            try err.print("error: could not run the native backend\n", .{});
+        const result = std.process.run(arena, io, .{ .argv = argv.items }) catch |e| {
+            try printBackendSpawnError(err, e);
             return 2;
         };
         // Pass the test program's own stdout (console.log output) through.
@@ -3554,8 +3554,8 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         }
         return try renderTestResults(arena, err, written, path, zig_src, gen_path, result.stderr, result.term);
     }
-    const result = std.process.run(arena, io, .{ .argv = argv.items }) catch {
-        try err.print("error: could not run the native backend\n", .{});
+    const result = std.process.run(arena, io, .{ .argv = argv.items }) catch |e| {
+        try printBackendSpawnError(err, e);
         return 2;
     };
     switch (result.term) {
@@ -3580,6 +3580,17 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
             try err.print("error: native build terminated abnormally\n", .{});
             return 1;
         },
+    }
+}
+
+/// The native backend could not be started at all — as opposed to rejecting
+/// the program. The usual cause is `zig` missing from PATH, which the bare
+/// spawn error (`FileNotFound`) does not say by itself; a source build needs
+/// Zig on PATH, a release archive ships its own.
+fn printBackendSpawnError(err: *std.Io.Writer, e: anyerror) !void {
+    try err.print("error: could not run the native backend: {s}\n", .{@errorName(e)});
+    if (e == error.FileNotFound) {
+        try err.print("note: the native backend is `zig` on PATH; a source build needs Zig installed and on PATH, a release archive ships its own\n", .{});
     }
 }
 
