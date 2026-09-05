@@ -96,6 +96,18 @@
       "expect": {
         "stdout": "3\n0\n1285714285\n12 12.5\n6\n-1 1\ntrue 9007199254740991\n1000000000000000000000 1000000000000000000000 v=1000000000000000000000 1000000000000000000000\nnan inf"
       }
+    },
+    {
+      "id": "strings.tests.native",
+      "source": "../examples/valid/byte_tests.ts",
+      "phase": "test-run",
+      "expect": {}
+    },
+    {
+      "id": "strings.tests.node",
+      "source": "../examples/valid/byte_tests.ts",
+      "phase": "node-test-run",
+      "expect": {}
     }
   ]
 }

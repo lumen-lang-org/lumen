@@ -98,8 +98,13 @@ call on every string expression.
 
 - **SC-001**: the whole eligible corpus (504 `corpus.txt`) still passes
   `node-run`; the 505 manifest passes on both targets.
-- **SC-002**: Joule's `terminal/text.test.ts` passes under Node. (Not yet
-  measured: it needs `lumen test --target node`, which is spec 506's.)
+- **SC-002**: Joule's `terminal/text.test.ts` passes under Node.
+  (Measured with `lumen test --target node` (506) against joule-sh/code at
+  59e7acb: `terminal/text.test.ts` 8 of 8, `terminal/markdown.test.ts` 26
+  of 26, `protocol/frames.test.ts` 32 of 32 -- the same sets as native.
+  The frame tests needed `JSON.parse<T>` to refuse an undeclared or a
+  missing field on Node as it does natively; the emitter now hands the
+  runtime T's shape.)
 - **SC-003**: no string helper call is emitted for `+`, `==`, `length`,
   `[i]`, `slice`, `indexOf` (inspect emitted JS for the corpus; a test
   greps for `__lang.` in the output of `examples/valid/hot_path.ts` and

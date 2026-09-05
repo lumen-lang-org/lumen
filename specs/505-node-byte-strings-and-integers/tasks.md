@@ -80,9 +80,13 @@
 - [x] T010 Manifest cases on both phases; register in `build.zig`. (12
   cases, six programs, each `compile-run` and `node-run`; the manifest was
   already registered.)
-- [ ] T011 Joule `text.test.ts`, `markdown.test.ts`, websocket frame tests
-  under `lumen test --target node` (506); record in spec SC-002. (Blocked:
-  `lumen test --target node` is spec 506's and refuses today.)
+- [x] T011 Joule `text.test.ts`, `markdown.test.ts`, websocket frame tests
+  under `lumen test --target node` (506); record in spec SC-002. (The
+  runner is 506's T001-T005, done here because this task needed it. Joule
+  has no websocket frame test file; `protocol/frames.test.ts` is its frame
+  suite. text 8/8, markdown 26/26, frames 32/32, matching native. Pinned
+  by `byte_tests.ts` (`test-run` and `node-test-run`): the column count
+  Joule's `visualWidth` does, `fromCodePoint`, integer division, JSON.)
 - [x] T012 Gate: `zig build test`, `zig build conformance`, `emit-snapshot`
   diff empty, `node-run` for `corpus.txt`. (`zig build conformance`: every
   `node-run` case green, `corpus.txt` included; the 20 red cases are stale
@@ -105,3 +109,18 @@
   without the working directory, so its "directory" was `/` and the
   relative spelling dropped a character. It now roots relative paths at the
   cwd (`std.process.currentPathAlloc`).
+- [x] T015 The front end stripped only the block form `test "…" {` from an
+  imported module (012 FR-007); the function form `test("…", () => {`
+  (028) leaked into every importer's build, natively and on Node. Both
+  spellings are stripped now; 506's `tests_helper.ts` pins it.
+- [x] T016 `JSON.parse<T>`/`parseOpen<T>` on Node accepted any document
+  (504 T014's gap), so Joule's `decodeSessionHello(older) == null` and the
+  malformed-payload test failed. The emitter passes T's shape
+  (`emitJsonShape` in `lumen_emit_js_expr.zig`); `lang.mjs` `jsonParse`
+  checks it, blames the field the native parser names (483), and revives a
+  class instance (456). 483's `named-field.ts` and 456's
+  `class-round-trip.ts` join 504's `corpus.txt`.
+- [x] T017 `lumen test` on a file named `*.test.ts` printed every test as
+  `test.<name>`: the renderer split the runner's line at the first
+  `.test.`, which for `frames.test.ts` is inside the module name. It now
+  splits after the generated file's stem.
