@@ -121,3 +121,8 @@
   now discards `self` there when the class has no public field to write.
   `emit_snapshot.sh` confirms this is the corpus's only front-end-output
   change since the pre-504 baseline; the rest of the corpus is untouched.
+- [x] T023c `lumen compile --target node main.ts` with a bare file name
+  wrote `modules/ain.mjs`: `nodeModulePaths` resolved the path without the
+  working directory (`std.fs.path.resolve` no longer prefixes it), so the
+  file's "directory" was `/` and the relative spelling lost its first byte.
+  Found and fixed under spec 505 (its T014).

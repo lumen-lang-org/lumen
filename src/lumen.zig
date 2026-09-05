@@ -2149,7 +2149,12 @@ fn findNodeRuntime(arena: std.mem.Allocator, io: std.Io, explicit: ?[]const u8) 
 /// directory every local module shares, so `src/main.ts` importing
 /// `../lib/x.ts` gives `src/main.mjs` and `lib/x.mjs`. Files are spelled as
 /// the line map spells them, the entry as the CLI named it.
-fn nodeModulePaths(arena: std.mem.Allocator, entry: []const u8, expanded: ExpandedSource) ![]const compiler.ModulePath {
+fn nodeModulePaths(arena: std.mem.Allocator, io: std.Io, entry: []const u8, expanded: ExpandedSource) ![]const compiler.ModulePath {
+    // `std.fs.path.resolve` folds `.` and `..` but does not know the working
+    // directory, so a relative spelling is rooted here first: without that a
+    // bare `main.ts` resolved to `main.ts`, whose "directory" is `/`, and the
+    // output was `modules/ain.mjs`.
+    const cwd = try std.process.currentPathAlloc(io, arena);
     var files: std.ArrayListUnmanaged([]const u8) = .empty;
     var seen: std.StringHashMapUnmanaged(void) = .empty;
     try files.append(arena, entry);
@@ -2168,7 +2173,7 @@ fn nodeModulePaths(arena: std.mem.Allocator, entry: []const u8, expanded: Expand
             urls[i] = u.url;
         };
         if (urls[i] == null and std.mem.startsWith(u8, file, "https://")) urls[i] = file;
-        abs[i] = if (urls[i] == null) try std.fs.path.resolve(arena, &.{file}) else null;
+        abs[i] = if (urls[i] == null) try std.fs.path.resolve(arena, &.{ cwd, file }) else null;
     }
     // The longest directory prefix the local files share.
     var common: ?[]const u8 = null;
@@ -3294,7 +3299,7 @@ fn compileFile(arena: std.mem.Allocator, io: std.Io, path: []const u8, mode: Com
         .line_map = expanded.line_map,
         .test_mode = action == .run_test,
         .entry_file = path,
-        .module_paths = if (out == .node) try nodeModulePaths(arena, path, expanded) else &.{},
+        .module_paths = if (out == .node) try nodeModulePaths(arena, io, path, expanded) else &.{},
         .module_edges = expanded.edges,
     };
 
