@@ -110,7 +110,11 @@
 ## Phase 5: Close
 
 - [ ] T020 `zig build test`, `zig build conformance`, `emit-snapshot` diff
-  empty, `node-run` green for `corpus.txt`.
+  empty, `node-run` green for `corpus.txt`. (`zig build test` green and the
+  `emit-snapshot` diff between the pre-T014 compiler (5a255ba) and bef0f05
+  empty over all 229 programs; the 504 and 456 manifests pass under the
+  runner. `zig build conformance`, which runs `node-run` for every
+  `corpus.txt` entry, is the orchestrator's sweep: ticked when it is green.)
 - [x] T021 Website: a "Run on Node" section in `website/learn.html`;
   `stamp.py` (no asset changed, so nothing to restamp).
 - [x] T022 `sh tools/codemap.sh`; commit. (Regenerated after T014 moved
