@@ -164,3 +164,31 @@ Files touched: `src/terminal/style.ts`, `src/terminal/renderer.ts`,
 
 Not recorded this round (`finalCorpus: null` — no end-of-run whole-corpus
 sweep result was supplied).
+
+## Independently verified (addendum)
+
+The sections above are the autonomous run's own self-report and are kept
+as written. Checked directly against the repo afterward, three of its
+"not done" flags were bookkeeping artifacts, not real gaps:
+
+- **503, 504, 506, 507 are all genuinely complete.** `zig build test`
+  passes clean right now. Each spec's own `.corpus-*.log` sweep has zero
+  failures beyond `corpus_baseline.txt`:
+  - 503's log (the oldest, predating 507) shows one extra failure,
+    `ffi.node: node compile failed` — stale. Re-run against the current
+    binary, `ffi.node` passes.
+  - 504's and 506's logs match the baseline exactly.
+  - 507's log has one *fewer* failure than baseline
+    (`inherit.valid.inheritance` was fixed as a side effect, not a
+    regression).
+  - 504's T020 is ticked on this evidence (see its tasks.md note).
+- **506's "done: false" with no blocker** was exactly this kind of
+  artifact — tasks.md is 9/9, gate and corpus both green. Treat 506 as done.
+- **507's one real remaining item, T006** (Joule's `tty`/`platform` JS
+  shim twins, spec 507's SC-002), and its stated blocker, stand: writing
+  those `.mjs` files is Joule's own spec 004 T002, in `joule-sh/code`, not
+  this repo. That's a genuine scope question, not an artifact.
+- **Consequence for the Joule round**: its decision to skip T002/T003
+  ("the Node emitter isn't done") was downstream of 504's false
+  `done: false` — the emitter is in fact real and verified. T002/T003 were
+  not attempted on outdated information, not because they are blocked.

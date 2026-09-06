@@ -109,7 +109,7 @@
 
 ## Phase 5: Close
 
-- [ ] T020 `zig build test`, `zig build conformance`, `emit-snapshot` diff
+- [x] T020 `zig build test`, `zig build conformance`, `emit-snapshot` diff
   empty, `node-run` green for `corpus.txt`. (`zig build test` green and the
   `emit-snapshot` diff between the pre-T014 compiler (5a255ba) and bef0f05
   empty over all 229 programs; the 504 and 456 manifests pass under the
@@ -122,6 +122,12 @@
   it is green. Known: 19 native cases of specs 001/013/014/019/020/455 fail
   identically at the merge-base 6ac4b77 (`lumen check` prints the same
   bytes there and here), so they are not this spec's.)
+
+  Verified: the orchestrator's `zig build conformance` sweep (`.corpus-504.log`,
+  55 manifests) found exactly the 20 pre-existing `corpus_baseline.txt`
+  failures minus `ffi.node` (fixed once spec 507 landed) — no failure this
+  spec's work introduced. `zig build test` passes clean. Ticking on that
+  evidence.
 - [x] T021 Website: a "Run on Node" section in `website/learn.html`;
   `stamp.py` (no asset changed, so nothing to restamp).
 - [x] T022 `sh tools/codemap.sh`; commit. (Regenerated after T014 moved
