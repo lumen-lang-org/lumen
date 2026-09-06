@@ -11,6 +11,7 @@ import nfs from "node:fs";
 import nos from "node:os";
 import { bytes, text } from "./lang.mjs";
 import { ReadableStream, WritableStream } from "./streams.mjs";
+import { syncSleep } from "./broker/sync_bridge.mjs";
 
 // The version marker `process.version()` reports natively
 // (`LUMEN_VERSION` in src/lumen_runtime_os.zig): Lumen's, not Node's.
@@ -67,7 +68,12 @@ function signalName(name) {
 export const process = {
   cwd: () => bytes(real.cwd()),
   chdir: (path) => { try { real.chdir(text(path)); } catch {} },
-  sleep: (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(ms)); },
+  // Blocks via the spec 508 broker (a worker-hosted timer plus
+  // Atomics.wait), the same mechanism every other blocking surface uses,
+  // rather than a bespoke Atomics.wait-with-timeout of its own -- see spec
+  // 508 spec.md's Decision. The broker re-arms on undershoot (spike found
+  // one `setTimeout` call alone can land under the requested duration).
+  sleep: (ms) => { if (ms > 0) syncSleep(Number(ms)); },
   exit: (code) => real.exit(Number(code)),
   env: (key) => { const v = real.env[text(key)]; return v === undefined ? null : bytes(v); },
   platform: () => (PLATFORMS.has(real.platform) ? real.platform : "unknown"),

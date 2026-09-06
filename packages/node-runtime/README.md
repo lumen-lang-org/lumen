@@ -63,12 +63,25 @@ spec's `conformance/manifest.json` pins for the native binary, compared the
 way `tools/lumen_conformance.zig` compares, and compiles natively only for a
 program no manifest pins.
 
-## Not yet: blocking I/O
+## The I/O broker and blocking I/O (spec 508)
+
+`lib/broker/` is the promoted spike: one worker (`broker.mjs`) that owns
+real sockets and timers, started lazily by `broker/singleton.mjs` the first
+time any blocking call needs it, and shared by every blocking call the
+program makes after that. `broker/sync_bridge.mjs` is the synchronous API
+the rest of the package calls into (`syncSleep`, `syncConnect`, `syncRead`,
+`syncWrite`, `syncClose`); `broker/protocol.mjs` is the fixed-layout binary
+wire format between the calling thread and the worker (no `JSON.stringify`
+on the hot path). `process.sleep` (spec 475) is wired to it.
 
 `net.connect`, `net.createServer`, `http.request`/`get`/`stream`/
-`createServer`, `child_process.spawn` and `Worker.run` block or thread
-natively. They throw an `Error` naming spec 508, which adds the I/O
-broker, so a program that reaches them fails by name rather than hanging.
+`createServer`, `child_process.spawn` and `Worker.run` still throw an
+`Error` naming spec 508 (its tasks.md T005-T009 wire each of these to the
+broker or, for `Worker.run`, to a plain `worker_threads` Worker); a program
+that reaches them fails by name rather than hanging. `net.createServer`/
+`http.createServer` will end at `E_TARGET_UNSUPPORTED` even once 508 is
+otherwise done -- Node has no thread-per-connection handler model, per
+spec 508's Decision.
 
 ## Tests
 

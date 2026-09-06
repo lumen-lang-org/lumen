@@ -5,24 +5,24 @@
 
 ## Phase 1: The broker, promoted from spike to runtime
 
-- [ ] T001 Move the spike's protocol into `packages/node-runtime/lib/broker/`
+- [x] T001 Move the spike's protocol into `packages/node-runtime/lib/broker/`
   as a real module (`protocol.mjs`, `broker.mjs`, `sync_bridge.mjs`), not a
   throwaway script: exported functions, no top-level side effects beyond
   what `lib/net.mjs`/`lib/http.mjs`/etc. call into.
-- [ ] T002 Fix the spike's two found gaps for real: `process.sleep` re-arms
+- [x] T002 Fix the spike's two found gaps for real: `process.sleep` re-arms
   a follow-up timer if `setTimeout` undershoots the requested duration
   (spike found a 0.34ms undershoot on one of three runs); replace
   `JSON.stringify`/`parse` argument encoding with a small fixed-layout
   binary encoding per op (the spike measured 1.3–2.8ms/call overhead,
   worth cutting before it's load-bearing for `http.stream`'s per-chunk
   reads).
-- [ ] T003 One control block and one broker worker per program (not per
+- [x] T003 One control block and one broker worker per program (not per
   call site): `lib/broker/singleton.mjs` lazily starts the worker on first
   use, shared by every blocking call the program makes.
 
 ## Phase 2: The blocking surfaces, per the spec's Decision
 
-- [ ] T004 `process.sleep(ms)`: broker op, `sync_bridge` wrapper.
+- [x] T004 `process.sleep(ms)`: broker op, `sync_bridge` wrapper.
 - [ ] T005 `net.connect`/`Socket.read()`/`Socket.write()`/`Socket.close()`
   (054): broker owns the real `net.Socket`; mirror the spike's connect/read
   exactly, including the same-synchronous-turn listener rule the spike
