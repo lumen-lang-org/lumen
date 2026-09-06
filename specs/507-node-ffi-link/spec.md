@@ -1,7 +1,6 @@
 # Spec 507: FFI on the Node target — `// @link-node`
 
-**Status**: Implemented (SC-001; SC-002 deferred, needs Joule — see
-tasks.md T006) | **Parent**: 501, slice 6 | **Depends on**: 504
+**Status**: Implemented (SC-001, SC-002) | **Parent**: 501, slice 6 | **Depends on**: 504
 
 ## Goal
 
@@ -42,8 +41,15 @@ declarations into `import { tty_isatty, tty_cols } from "./tty_shim.mjs"`
   (node) prints the same output on both targets.
 - **SC-002**: Joule's `vendor/tty/tty.ts` and `vendor/platform/platform.ts`
   compile on the Node target with JS twins of their shims (written in Joule
-  spec 004); their `.test.ts` files pass except the tty read-with-timeout
-  tests, which need 508 and are listed there.
+  spec 004, T002) — done, including the tty read-with-timeout tests. Those
+  do not need 508 after all: Node exposes no `poll()`, but the same
+  non-blocking-fd technique any of its own I/O primitives use (a paused
+  `tty.ReadStream`/`net.Socket` over the fd, then `fs.readSync` retried on
+  `EAGAIN` under a deadline) gives a real timeout without a worker or
+  `Atomics.wait` bridge — that machinery is for genuinely async sources
+  (sockets, HTTP), not a blocking fd read. `tty.ts`'s 19 embedded tests and
+  `platform.ts`'s 14 both pass under `lumen test --target node`, matching
+  native exactly.
 
 ## Not planned
 

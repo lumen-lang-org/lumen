@@ -37,8 +37,12 @@
 
 ## Follow-up
 
-- [ ] T006 SC-002 (Joule's `vendor/tty`/`vendor/platform` JS shims compiling
-  and testing under the Node target) needs the Joule repository and is not
-  verified here; this round only implements and verifies the compiler
-  feature (SC-001) and the fix that motivated it (`ffi.node` failing the
-  full conformance sweep). Pick this up with Joule attached.
+- [x] T006 SC-002 (Joule's `vendor/tty`/`vendor/platform` JS shims compiling
+  and testing under the Node target). Done in joule-sh/code (spec 004 T002,
+  commit `40fb6a7`): real `tty_shim.mjs`/`platform_shim.mjs`, not stubs,
+  verified against `lumen test --target node` — 19/19 and 14/14, matching
+  native exactly, including the timeout-read tests this task's own note
+  once expected would need spec 508 (they don't; see spec.md SC-002).
+  `lumen compile --target node src/code.ts` now clears every FFI
+  declaration in both files and stops only at 508's own
+  `E_TARGET_UNSUPPORTED` on `http.request`.
