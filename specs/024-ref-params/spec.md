@@ -43,10 +43,13 @@ machinery so it is never monomorphized as a user generic.
 ## Semantics (V1)
 
 - `Ref<T>` is permitted for **value types**: records/interfaces, scalars
-  (`int`/`i32`, `i64`, `number`/`f64`, `bool`), unions, enums, and tuples.
+  (`int`/`i32`, `i64`, `number`/`f64`, `bool`), unions, enums, tuples, and
+  (**amended by spec 453**: arrays and strings are value types too, so a
+  callee could not otherwise communicate a mutation back to the caller at
+  all — this doc was never updated to match until spec 510's follow-up
+  doc-drift sweep caught it) **arrays and strings**.
 - `Ref<T>` is **rejected** for types that are already reference-like:
   - **classes** (already passed by reference) — diagnostic `E_REF_TARGET`;
-  - **arrays** and **strings** (already slices) — diagnostic `E_REF_TARGET`;
   - maps, sets, and promises (already heap pointers) — diagnostic `E_REF_TARGET`.
 - Inside the body, a `Ref<T>` parameter type-checks exactly as `T`: field access,
   arithmetic, and assignment behave as if the parameter had type `T`. Only the
@@ -63,14 +66,16 @@ machinery so it is never monomorphized as a user generic.
 
 ## Diagnostics
 
-- `E_REF_TARGET` — `Ref<T>` used over a non-value (class/array/string/etc.) type,
-  on a constructor parameter, or as a rest parameter.
+- `E_REF_TARGET` — `Ref<T>` used over a reference-like (class/map/set/promise)
+  type, on a constructor parameter, or as a rest parameter. **Amended by
+  spec 453**: arrays and strings no longer trigger this — see above.
 - `E_REF_ARG` — a `Ref<T>` argument is not an addressable, mutable lvalue.
 - `E_FFI_TYPE` — `Ref<T>` used on an `extern function` parameter.
 
 ## Out of Scope (V1)
 
-- `Ref<T>` over class, array, string, map, set, or promise types.
+- `Ref<T>` over class, map, set, or promise types. (Arrays and strings were
+  in scope here originally; spec 453 brought them into V1 — see above.)
 - Returning a `Ref<T>`, storing a `Ref<T>` in a field or local, or `Ref<Ref<T>>`.
 - Constructor or extern by-reference parameters.
 

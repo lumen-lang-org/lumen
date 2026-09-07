@@ -292,8 +292,13 @@ being precise enough for native output.
 - **E_UNSUPPORTED_PROTOTYPE**: Produced when source reads or writes prototype
   mutation surfaces.
 - **E_UNSUPPORTED_COMMONJS**: Produced when source uses `require`.
-- **E_DYNAMIC_PROPERTY_WRITE**: Produced when source writes a property not
-  declared by the target object type.
+- **E_DYNAMIC_PROPERTY_WRITE**: Produced when source writes a dot-notation
+  property (`obj.field = ...`) on a non-class record type, declared field
+  or not — not specifically "undeclared" writes, this entry's original
+  meaning. **Amended by spec 342**: bracket/index-notation writes
+  (`obj["field"] = ...`) were moved off this code entirely, onto a
+  separate, deliberately code-less diagnostic; this doc was never updated
+  to match until spec 510's follow-up doc-drift sweep caught it.
 - **E_TYPE_MISMATCH**: Produced when assigned value type is incompatible with
   the declared or inferred variable type.
 - **E_CONST_ASSIGNMENT**: Produced when source attempts to assign a new value to
@@ -322,12 +327,18 @@ being precise enough for native output.
   appears outside the top-level source scope.
 - **E_UNSUPPORTED_STD**: Produced when source calls a stdlib namespace member
   that is not part of the V1 supported surface.
-- **E_THROW_TYPE**: Produced when source throws a non-Error value.
+- **E_THROW_TYPE**: Produced when source throws a value that is neither an
+  `Error` nor a `string`. **Amended by spec 249**: a bare string throw
+  (this entry's original "non-Error value" wording implied it was
+  rejected too) is now accepted; this doc was never updated to match
+  until spec 510's follow-up doc-drift sweep caught it.
 - **E_IMPORT_CYCLE**: Produced when local import expansion detects a cycle.
 - **E_DUPLICATE_IMPORT**: Produced when a source file imports the same
   specifier more than once.
-- **E_UNSUPPORTED_CLASS**: Produced when source uses a class declaration before
-  V1 static class/object layout semantics are designed.
+- **E_UNSUPPORTED_CLASS**: Retired (spec 010 designed and shipped V1's static
+  class/object layout semantics; this code no longer exists in the
+  checker). This doc was never updated to match until spec 510's
+  follow-up doc-drift sweep caught it — see `specs/010-classes/spec.md`.
 
 ### Existing JavaScript Infrastructure
 

@@ -29,8 +29,11 @@ than reading its message.
 
 ## Requirements
 
-- **FR-001**: `throw e;` is accepted only when `e` has error type; otherwise the
-  checker reports `E_THROW_TYPE`.
+- **FR-001**: `throw e;` is accepted when `e` has error type or is a plain
+  `string`; otherwise the checker reports `E_THROW_TYPE`. **Amended by
+  spec 249** (see SC-002) — this entry originally required error type
+  only and was never reconciled with that change until spec 510's
+  follow-up doc-drift sweep caught it.
 - **FR-002**: `Error("msg")` produces an error value; its single argument must be
   a `string` (else `E_TYPE_MISMATCH`) and exactly one argument is required (else
   `E_ARG_COUNT`).
@@ -45,7 +48,8 @@ than reading its message.
 - **FR-006**: `e.message` yields the error's text as a `string`.
 
 ### Diagnostics
-Uses `E_THROW_TYPE` (non-error thrown) and reuses `E_TYPE_MISMATCH` /
+Uses `E_THROW_TYPE` (a thrown value that is neither an error nor a string —
+see FR-001's spec 249 amendment) and reuses `E_TYPE_MISMATCH` /
 `E_ARG_COUNT` for malformed `Error(...)` calls.
 
 ## Success Criteria

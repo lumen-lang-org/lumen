@@ -115,14 +115,44 @@ remaining process step.
 
 ## Process
 
-- [x] T014/T015 Full targeted re-verification: `specs/001-typescript-to-
+- [x] T014 Full targeted re-verification: `specs/001-typescript-to-
   zig-native`, `013-array-methods`, `014-string-methods`,
   `019-error-handling`, `020-map-set-tuples`, `455-decorators` all pass
   after T001-T013 (see the commit this task list was closed in for the
   exact sweep result). A full, all-manifest `zig build conformance` sweep
-  (not just the six touched) is the final gate before considering this
-  spec done — run it, and if anything surfaces, fix it before closing.
-  The `E_*`-doc grep T015 also asks for (checking every remaining
-  `specs/*/spec.md` for other code references that might have drifted the
-  same way Group B did) has NOT been done yet — a real, separate follow-up,
-  not done as part of this pass.
+  (not just the six touched) ran clean afterward too: 0 failures across
+  every spec manifest in the repo.
+- [x] T015 The `E_*`-doc grep (checking every remaining `specs/*/spec.md`
+  for other code references that might have drifted the same way Group B
+  did) is now done, delegated to a background investigation agent:
+  grepped `E_[A-Z_]+` across all ~100 `specs/*/spec.md` files (360
+  distinct file:code pairs), triaged breadth-first prioritizing
+  low-numbered specs (most likely to predate a later amendment, same
+  pattern as Group B), and depth-checked candidates by reading the
+  emitting `src/*.zig` code and compiling a scratch fixture against
+  `zig-out/bin/lumen`. Confirmed 5 real drift cases, all fixed:
+  - `specs/001-typescript-to-zig-native/spec.md`'s `E_THROW_TYPE` entry
+    (still said "non-Error value"; spec 249 also accepts a bare string).
+  - `specs/001-typescript-to-zig-native/spec.md`'s `E_DYNAMIC_PROPERTY_
+    WRITE` entry (said "not declared by the target type"; actual current
+    behavior fires on any dot-write to a non-class record, and spec 342
+    moved bracket/index writes off this code onto a separate, code-less
+    diagnostic — this exact staleness was already in spec.md's own
+    Group A/B table but the doc line itself was never corrected).
+  - `specs/001-typescript-to-zig-native/spec.md`'s `E_UNSUPPORTED_CLASS`
+    entry (documented as live; spec 010 retired it — the string doesn't
+    exist in `src/` at all anymore, and `specs/010-classes/spec.md`
+    already correctly says so).
+  - `specs/024-ref-params/spec.md` (three spots: Semantics, Diagnostics,
+    Out of Scope): said arrays/strings are rejected `Ref<T>` targets;
+    spec 453 accepted them (only classes/maps/sets/promises are still
+    rejected).
+  - `specs/019-error-handling/spec.md`'s FR-001 and Diagnostics section:
+    same spec-249 staleness as SC-002 in the same file — the commit that
+    fixed SC-002 (spec 510's own T007) missed these two sibling
+    mentions in the same doc.
+  Not exhaustively re-checked: the remaining ~350 file:code pairs in
+  mid/high-numbered specs (029 onward) — investigated and found clean on
+  a sample (specs 010, 012, 018/357, 019 FR-002, 020, 003); the
+  low-numbered-spec prioritization is where every real hit landed, same
+  as Group B.

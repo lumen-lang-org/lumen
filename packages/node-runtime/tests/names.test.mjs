@@ -69,18 +69,20 @@ function constructible() {
 }
 
 // `ResponseWriter` only exists inside an `http.createServer` handler, and
-// `http.createServer` is refused permanently on the node target (spec 508's
-// Decision: no per-request handler model that shares module state) -- the
-// call that would produce one must fail by name, not silently hand back a
-// shape with missing methods.
-const DEFERRED_TO_508 = {
+// `http.createServer` is still refused on the node target -- spec 511 gave
+// `net.createServer` a real async-handler implementation but left
+// `http.createServer` as its own follow-up (tasks.md T012: buffered vs.
+// streaming handler forms need their own design pass) -- the call that
+// would produce a `ResponseWriter` must fail by name, not silently hand
+// back a shape with missing methods.
+const DEFERRED_TO_511 = {
   ResponseWriter: () => L.http.createServer(0, () => {}),
 };
 
 for (const [recv, list] of Object.entries(names.methods)) {
   test(`methods of ${recv}`, () => {
-    if (recv in DEFERRED_TO_508) {
-      assert.throws(DEFERRED_TO_508[recv], /spec 508/, `${recv} (${list.join(", ")}) is deferred to spec 508 and must say so`);
+    if (recv in DEFERRED_TO_511) {
+      assert.throws(DEFERRED_TO_511[recv], /spec 511/, `${recv} (${list.join(", ")}) is deferred to spec 511 and must say so`);
       return;
     }
     const { receivers, cleanup } = constructible();
