@@ -7,14 +7,36 @@ this is what's left for `--share` specifically).
 
 ## Phase 1: Broker protocol — concurrent per-handle I/O
 
-- [ ] T001 Spike first, promote like 508 did: prove `Atomics.waitAsync`
-  against a per-handle control block resolves N independent pending reads
-  without blocking the calling thread's event loop or serializing them
-  against each other (a timer armed before two concurrent reads must fire
-  while both are still pending). Re-derive the event-loop keep-alive fix
-  spec 508's own spike needed for `Atomics.waitAsync` (an inert
-  `setInterval`) rather than assuming it transfers unchanged to a
-  different thread/direction.
+- [x] T001 Spiked (`packages/node-runtime/spike/511-concurrent-handles/`):
+  `Atomics.waitAsync` against a per-handle control block resolves N
+  independent pending reads without blocking the calling thread's event
+  loop or serializing them against each other. `main.mjs` proves all three
+  properties at once with two handles (A: 500ms, B: 50ms): (1) a
+  main-thread timer armed before both calls fires while both are still
+  pending -- `Atomics.waitAsync` genuinely doesn't block; (2) B resolves
+  strictly before A -- the two handles run concurrently, not FIFO-
+  serialized by submission order; (3) each response carries its own
+  handle's tag -- no cross-talk between control blocks. All three: PASS.
+  Confirmed even spec 508's own existing broker needs this: its
+  `listenLoop()` (`spike/broker.mjs`, promoted as-is into
+  `lib/broker/broker.mjs`) only ever has one request in flight per control
+  block by construction -- it must fully answer request N before it can
+  even look at request N+1 -- regardless of how async its own internal
+  socket handling already is.
+
+  Re-derived, not assumed, per the task's own instruction: spec 508's
+  `setInterval` keep-alive fix for `Atomics.waitAsync` is needed again
+  here, but only on the **broker worker** side (`broker.mjs`'s
+  `serviceHandle` loops) -- confirmed by a separate check
+  (`keepalive_check.mjs`) that the **calling** (main-thread) side needs no
+  such fix: an `await`ed `Atomics.waitAsync` inside an `async function`
+  naturally keeps Node's event loop alive on its own (there's a live
+  Promise chain the runtime is already tracking), unlike a worker's bare
+  `listenLoop()`/`serviceHandle()` with no outer caller referencing it.
+  This resolves plan.md's "re-derive rather than assume" note: the fix
+  transfers to the broker side unchanged, but does not exist on the
+  calling side at all, and `singleton.mjs`'s future `callHandle` (T004)
+  needs no analogous keep-alive of its own.
 - [ ] T002 `protocol.mjs`: wire format for allocating/freeing a per-handle
   control block (plan.md decision 2) and for the accept-notification op
   `net.createServer`'s broker-side listener uses to hand a new connection's
