@@ -123,15 +123,15 @@ pub fn emitBody(e: *Emitter, stmts: []const ast.Stmt) CompileError!void {
             .using_decl => |*u| {
                 if (u.defer_body == null) {
                     try e.pad();
-                    try e.print("const {s} = ", .{u.name});
+                    try e.print("const {s} = ", .{e.shadowSafeName(u.name, u.emit_name)});
                     try emitExpr(e, u.init);
                     try e.w(";\n");
                 }
-                try emitTryFinally(e, stmts[i + 1 ..], u.defer_body, u.dispose_call, u.name);
+                try emitTryFinally(e, stmts[i + 1 ..], u.defer_body, u.dispose_call, u.name, u.emit_name);
                 return;
             },
             .defer_stmt => |*d| {
-                try emitTryFinally(e, stmts[i + 1 ..], d.body, null, null);
+                try emitTryFinally(e, stmts[i + 1 ..], d.body, null, null, null);
                 return;
             },
             else => try emitStmt(e, s),
@@ -139,7 +139,7 @@ pub fn emitBody(e: *Emitter, stmts: []const ast.Stmt) CompileError!void {
     }
 }
 
-fn emitTryFinally(e: *Emitter, rest: []const ast.Stmt, cleanup_body: ?[]const ast.Stmt, cleanup_call: ?*const ast.Expr, name: ?[]const u8) CompileError!void {
+fn emitTryFinally(e: *Emitter, rest: []const ast.Stmt, cleanup_body: ?[]const ast.Stmt, cleanup_call: ?*const ast.Expr, name: ?[]const u8, emit_name: ?[]const u8) CompileError!void {
     try e.line("try {");
     e.indent += 1;
     try emitBody(e, rest);
@@ -154,7 +154,7 @@ fn emitTryFinally(e: *Emitter, rest: []const ast.Stmt, cleanup_body: ?[]const as
         try e.w(";\n");
     } else if (name) |n| {
         try e.pad();
-        try e.print("{s}.dispose();\n", .{n});
+        try e.print("{s}.dispose();\n", .{e.shadowSafeName(n, emit_name)});
     }
     e.indent -= 1;
     try e.line("}");
@@ -175,7 +175,7 @@ fn emitLabel(e: *Emitter, label: ?[]const u8) CompileError!void {
 
 fn emitVarDeclInline(e: *Emitter, d: *const ast.VarDecl, with_keyword: bool) CompileError!void {
     if (with_keyword) try e.w(if (d.mutable) "let " else "const ");
-    try e.w(d.name);
+    try e.w(e.shadowSafeName(d.name, d.emit_name));
     if (d.no_init) return;
     try e.w(" = ");
     try emitExpr(e, d.init);
@@ -188,13 +188,14 @@ fn isIntDivAssign(op: []const u8, checked_type: ?types.Type) bool {
 }
 
 fn emitAssignInline(e: *Emitter, a: *const ast.Assign) CompileError!void {
+    const name = e.shadowSafeName(a.name, a.emit_name);
     if (isIntDivAssign(a.op, a.checked_type)) {
-        try e.print("{s} = __lang.divInt({s}, ", .{ a.name, a.name });
+        try e.print("{s} = __lang.divInt({s}, ", .{ name, name });
         try emitExpr(e, a.value);
         try e.byte(')');
         return;
     }
-    try e.print("{s} {s} ", .{ a.name, a.op });
+    try e.print("{s} {s} ", .{ name, a.op });
     try emitExpr(e, a.value);
 }
 
@@ -211,7 +212,7 @@ fn emitDestructPattern(e: *Emitter, d: *const ast.DestructureDecl) CompileError!
                 }
             }
         }
-        try e.w(b.name);
+        try e.w(e.shadowSafeName(b.name, b.emit_name));
         if (b.default) |dflt| {
             try e.w(" = ");
             try emitExpr(e, dflt);
@@ -348,11 +349,11 @@ pub fn emitStmt(e: *Emitter, s: *const ast.Stmt) CompileError!void {
         .using_decl => |*u| {
             if (u.defer_body == null) {
                 try e.pad();
-                try e.print("const {s} = ", .{u.name});
+                try e.print("const {s} = ", .{e.shadowSafeName(u.name, u.emit_name)});
                 try emitExpr(e, u.init);
                 try e.w(";\n");
             }
-            try emitTryFinally(e, &.{}, u.defer_body, u.dispose_call, u.name);
+            try emitTryFinally(e, &.{}, u.defer_body, u.dispose_call, u.name, u.emit_name);
         },
         .destructure_decl => |*d| {
             try e.pad();
@@ -545,7 +546,7 @@ pub fn emitStmt(e: *Emitter, s: *const ast.Stmt) CompileError!void {
             try emitBlock(e, t.try_body);
             if (t.has_catch) {
                 if (t.catch_name) |n| {
-                    try e.print(" catch ({s})", .{n});
+                    try e.print(" catch ({s})", .{e.shadowSafeName(n, t.catch_emit_name)});
                 } else {
                     try e.w(" catch");
                 }
@@ -569,7 +570,7 @@ pub fn emitStmt(e: *Emitter, s: *const ast.Stmt) CompileError!void {
             if (c.label) |l| try e.print(" {s}", .{l});
             try e.w(";\n");
         },
-        .defer_stmt => |*d| try emitTryFinally(e, &.{}, d.body, null, null),
+        .defer_stmt => |*d| try emitTryFinally(e, &.{}, d.body, null, null, null),
         .expr_stmt => |*x| {
             try e.pad();
             // A statement that starts with `{` is a block; wrap the literal.

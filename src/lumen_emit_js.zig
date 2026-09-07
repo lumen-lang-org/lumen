@@ -72,6 +72,59 @@ pub const Emitter = struct {
     /// expression (a `Worker.run` call site) can compute a relative import
     /// specifier to another module's compiled file.
     cur_module_out: []const u8 = "",
+    /// Every name this module's own generated file binds at module scope --
+    /// its own top-level declarations plus whatever it imports (spec 509).
+    /// A `let`/`const`/destructure/catch binding that reuses one of these
+    /// names is a legal shadow to the checker (Zig has no temporal dead
+    /// zone), but JavaScript's `let`/`const` do: a reference resolving to
+    /// the module-scope binding, printed with the same spelling as a local
+    /// that shadows it later in the same scope, throws
+    /// `ReferenceError: Cannot access '<name>' before initialization`
+    /// instead of reaching the outer binding. Recomputed per module in
+    /// `emitProgram`.
+    shadowed_names: std.StringHashMapUnmanaged(void) = .empty,
+    /// For every name this module declares as a DIRECT top-level `let`/
+    /// `const`/destructure binding (not a function/class/enum, which never
+    /// carry an `emit_name`, and not anything nested in a body): that
+    /// declaration's own `emit_name`. A top-level `let total = 0;` gets a
+    /// real `emit_name` from the checker like any other local (spec 461's
+    /// mechanism is not selective about nesting), and so does every
+    /// reference to it, however deeply nested (`for (...) { total += 1; }`)
+    /// -- they all resolve to the same one binding and carry the identical
+    /// `emit_name`. Recognizing "this occurrence's `emit_name` IS this
+    /// module's own physical declaration of the name" is what keeps such a
+    /// non-shadowing reference printing the plain, readable name instead of
+    /// being caught by `shadowed_names`' broader "this name is bound
+    /// somewhere at module scope" test. Recomputed per module in
+    /// `emitProgram`.
+    top_level_var_emit_names: std.StringHashMapUnmanaged([]const u8) = .empty,
+
+    /// The identifier to print for a local binding/reference: `name`,
+    /// unless this occurrence resolves to a binding that collides with
+    /// something else this module binds at module scope (spec 509) -- a
+    /// nested `let`/`const`/destructure/catch/param that reuses a name this
+    /// module also imports, declares as a function/class, or declares as a
+    /// SEPARATE top-level `let`/`const`. That is a legal shadow to the
+    /// checker (Zig has no temporal dead zone), but JavaScript's `let`/
+    /// `const` do: a reference resolving to the module-scope binding,
+    /// printed with the same spelling as a local that shadows it later in
+    /// the same scope, throws `ReferenceError: Cannot access '<name>'
+    /// before initialization` instead of reaching the outer binding. The
+    /// checker's own already-unique `emit_name` (minted unconditionally for
+    /// every `let`/`const`/destructure/catch/param binding, spec 461)
+    /// breaks the collision. A reference to the module-scope binding
+    /// itself -- a function/class/import (`emit_name == null`) or this
+    /// module's own direct top-level declaration of the name (`emit_name ==
+    /// top_level_var_emit_names.get(name)`) -- always prints `name`
+    /// verbatim.
+    pub fn shadowSafeName(self: *const Emitter, name: []const u8, emit_name: ?[]const u8) []const u8 {
+        const en = emit_name orelse return name;
+        if (self.top_level_var_emit_names.get(name)) |top_en| {
+            if (std.mem.eql(u8, top_en, en)) return name;
+        }
+        if (self.shadowed_names.get(name) != null) return en;
+        return name;
+    }
 
     /// The `// @link-node` pragma the file `file` wrote, if any.
     pub fn linkNodeFor(self: *const Emitter, file: []const u8) ?diag_mod.LinkNodeModule {
@@ -607,6 +660,37 @@ pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: 
     }
     const entry_module = try moduleFor(&e, &modules, &by_file, module_paths, entry);
 
+    // Every DIRECT top-level `let`/`const`/destructure binding anywhere in
+    // the flat program, keyed to its own `emit_name` -- not per generated
+    // JS module, since a reference to one can land in ANY module that
+    // imports it, and every such reference (declaration site, a same-module
+    // use, or an imported one) shares the identical `emit_name` the checker
+    // minted for that one physical binding (spec 461's mechanism is not
+    // selective about nesting, so a top-level `let total = 0;` gets a real
+    // `emit_name` exactly like a local does). Recognizing "this occurrence's
+    // `emit_name` IS some module's own physical declaration of the name" is
+    // what keeps such a non-shadowing reference printing the plain,
+    // readable name instead of being caught by `shadowed_names`' broader
+    // "this name is bound somewhere at this module's scope" test -- which
+    // fires for an import exactly as it does for a nested shadow (spec 509).
+    var top_level_var_emit_names: std.StringHashMapUnmanaged([]const u8) = .empty;
+    for (program.stmts) |*s| switch (s.*) {
+        .var_decl => |d| if (d.emit_name) |en| {
+            top_level_var_emit_names.put(arena, d.name, en) catch return error.OutOfMemory;
+        },
+        .var_decl_group => |g| for (g) |d| if (d.emit_name) |en| {
+            top_level_var_emit_names.put(arena, d.name, en) catch return error.OutOfMemory;
+        },
+        .destructure_decl => |d| for (d.bindings) |b| if (b.emit_name) |en| {
+            top_level_var_emit_names.put(arena, b.name, en) catch return error.OutOfMemory;
+        },
+        .using_decl => |u| if (u.emit_name) |en| {
+            top_level_var_emit_names.put(arena, u.name, en) catch return error.OutOfMemory;
+        },
+        else => {},
+    };
+    e.top_level_var_emit_names = top_level_var_emit_names;
+
     // References, then who owns each: a foreign owner becomes an import.
     for (modules.items) |m| {
         for (m.stmts.items) |s| try refsInStmt(&e, &m.refs, s);
@@ -643,6 +727,29 @@ pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: 
         e.hoisted = .empty;
         e.cur_module_out = m.out;
         e.indent = 0;
+        // Every name `m`'s own generated file binds at module scope: its own
+        // top-level declarations, plus every name it references that some
+        // other module declares (an import) -- exactly what `emitImport`
+        // below decides to write into an `import { ... }` line, computed
+        // ahead of it so a shadowing local knows to rename itself (spec 509).
+        e.shadowed_names = .empty;
+        {
+            var it = m.decls.keyIterator();
+            while (it.next()) |k| e.shadowed_names.put(arena, k.*, {}) catch return error.OutOfMemory;
+        }
+        {
+            var it = m.refs.keyIterator();
+            while (it.next()) |name| {
+                if (m.decls.get(name.*) != null) continue;
+                for (modules.items) |other| {
+                    if (other == m) continue;
+                    if (other.decls.get(name.*) != null) {
+                        e.shadowed_names.put(arena, name.*, {}) catch return error.OutOfMemory;
+                        break;
+                    }
+                }
+            }
+        }
         try e.print("// Generated by lumen --target node from {s}. Edit the .ts source, not this file.\n", .{try displayFile(arena, m.file)});
         // Imports: the source edges first (bare when no name is needed, so the
         // module's top-level code runs and in the inlined order), then any
@@ -680,6 +787,7 @@ pub fn emitProgram(program: *const ast.Program, arena: std.mem.Allocator, diag: 
             for (extern_names.items, 0..) |name, i| {
                 if (i > 0) try e.w(", ");
                 try e.w(name);
+                e.shadowed_names.put(arena, name, {}) catch return error.OutOfMemory;
             }
             try e.print(" }} from \"{s}\";\n", .{spec});
         }

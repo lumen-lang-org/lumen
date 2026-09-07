@@ -83,9 +83,9 @@ emitElemEq:26, emitArrayMethod:75, emitStringMethod:455, emitTemplateText:762
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:338, emitSuperCopies:404, collectSuperInStmt:408, collectSuperInExpr:428, ifaceMethodThrows:482, emitIfaceDecl:495, emitClassVtables:513
 
-## src/lumen_emit_js.zig (833 lines)
+## src/lumen_emit_js.zig (941 lines)
 The JavaScript backend (spec 504): the checked AST -> ECMAScript module text
-CompileError:28, Emitter:32, emitStrLit:183, emitTemplateText:197, emitRegexSource:214, isIdentStart:224, isIdentChar:228, isPlainIdent:233, emitPropertyKey:240, emitFloat:250, isGenericFunction:259, EmittedModule:276, Output:278, relativeSpecifier:519, emitProgram:577
+CompileError:28, Emitter:32, emitStrLit:236, emitTemplateText:250, emitRegexSource:267, isIdentStart:277, isIdentChar:281, isPlainIdent:286, emitPropertyKey:293, emitFloat:303, isGenericFunction:312, EmittedModule:329, Output:331, relativeSpecifier:572, emitProgram:630
 
 ## src/lumen_emit_js_class.zig (198 lines)
 Class and enum codegen for the node target.
@@ -99,9 +99,9 @@ emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:395, emitExpr:399
 The standard library on the node target: which calls print as written and
 stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:103, iteratorToArray:113
 
-## src/lumen_emit_js_stmt.zig (678 lines)
+## src/lumen_emit_js_stmt.zig (679 lines)
 Statement codegen for the node target: the `Stmt`-union counterpart of
-exprHasAwait:26, bodyHasAwait:70, arrowIsAsync:109, emitBody:120, emitFunction:242, emitTopLevel:264, isSpecialization:289, stmtPos:305, emitStmt:312
+exprHasAwait:26, bodyHasAwait:70, arrowIsAsync:109, emitBody:120, emitFunction:243, emitTopLevel:265, isSpecialization:290, stmtPos:306, emitStmt:313
 
 ## src/lumen_emit_static.zig (1191 lines)
 Codegen for `.static_call` expressions -- `Math.*`, `String.*`,

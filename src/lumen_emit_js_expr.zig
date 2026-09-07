@@ -244,7 +244,7 @@ pub fn emitParams(e: *Emitter, params: []const ast.FunctionParam) CompileError!v
     for (params, 0..) |p, i| {
         if (i > 0) try e.w(", ");
         if (p.is_rest) try e.w("...");
-        try e.w(p.name);
+        try e.w(e.shadowSafeName(p.name, p.emit_name));
         if (p.default) |d| {
             try e.w(" = ");
             try emitExpr(e, d);
@@ -435,9 +435,10 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             try e.w("...");
             try emitAt(e, inner, 0);
         },
-        // The name as written: shadowing is legal in JavaScript, so the
-        // checker's `emit_name` renames (spec 461) are not needed here.
-        .var_ref => |r| try e.w(r.name),
+        // The name as written, unless it collides with something else this
+        // module binds at module scope -- see `Emitter.shadowSafeName`
+        // (spec 509).
+        .var_ref => |r| try e.w(e.shadowSafeName(r.name, r.emit_name)),
         .neg => |inner| {
             try e.byte('-');
             // `- -x` must not fuse into `--x`.

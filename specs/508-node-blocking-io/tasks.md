@@ -157,18 +157,18 @@
   src/code.ts` compiles Joule's real, full 290-file entry point with zero
   errors (only pre-existing unused-variable warnings), and `node
   code.node/code.mjs --version` runs and prints the real version string.
-  Past `--version`, `node code.node/code.mjs` crashes inside
+  Past `--version`, `node code.node/code.mjs` used to crash inside
   `runDaemonJoule` — not an unsupported-construct error, a real bug this
   round found and filed as spec 509 (`import { x as y }` dropped by the
   node emitter; `src/terminal/attach.ts`'s aliased `workspaceRoot` import
-  collides with a same-named local once the alias is gone). `make node`/
+  collides with a same-named local once the alias is gone). **Spec 509 is
+  now fixed** (see its own tasks.md): `node code.node/code.mjs` (no TTY)
+  runs past that exact line and reaches the expected "joule needs a real
+  terminal" message instead of the `ReferenceError`. `make node`/
   `make node-test`/`node-skip.txt` itself is still Joule's own work
-  (joule-sh/code, spec 004 T003) — not attempted here since it needs 509
-  fixed first to get past the daemon path, and this round's remit is 508's
-  own tasks, not Joule's.
-  itself (confirmed: no `code.ts`, no `joule` source tree anywhere in this
-  checkout). Needs a human to either attach that repo or run this task from
-  a session that has it.
+  (joule-sh/code, spec 004 T003) — not attempted here since this round's
+  remit is 508's own tasks, not Joule's, but the blocker that made it
+  premature is gone.
 - [ ] T013 SC-001: `code.ts` compiled `--target node` drives a stub model
   end to end (`scripts/e2e_full_stack.mjs` against the node build).
   **Not achievable as literally stated, and not by anything left in 508's
