@@ -128,7 +128,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                         for (caps.items) |c| {
                             if (std.mem.eql(u8, c.emit_name, found_binding.emit_name)) present = true;
                         }
-                        if (!present) caps.append(self.arena, .{ .emit_name = found_binding.emit_name, .ty = found_binding.ty }) catch return null;
+                        if (!present) caps.append(self.arena, .{ .emit_name = found_binding.emit_name, .ty = found_binding.ty, .name = ref.name }) catch return null;
                     }
                 }
             }
@@ -1136,7 +1136,7 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
                 for (caps.items) |c| {
                     if (c.is_this) present = true;
                 }
-                if (!present) caps.append(self.arena, .{ .emit_name = "self", .ty = .{ .class_type = cls }, .is_this = true }) catch return null;
+                if (!present) caps.append(self.arena, .{ .emit_name = "self", .ty = .{ .class_type = cls }, .is_this = true, .name = "self" }) catch return null;
             }
             break :blk .{ .class_type = cls };
         },

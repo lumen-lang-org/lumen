@@ -1,6 +1,8 @@
 {
   "feature": "508-node-blocking-io",
   "cases": [
+    { "id": "508.worker-run.node", "source": "../examples/valid/worker_run.ts", "phase": "node-run", "expect": { "stdout": "plain 499500\ncaptured 307\nconcurrent 499500,499500" } },
+    { "id": "508.worker-run.native", "source": "../examples/valid/worker_run.ts", "phase": "compile-run", "expect": { "stdout": "plain 499500\ncaptured 307\nconcurrent 499500,499500" } },
     { "id": "508.sleep.node", "source": "../examples/valid/sleep-at-least.ts", "phase": "node-run", "expect": { "stdout": "ok" } },
     { "id": "508.sleep.native", "source": "../examples/valid/sleep-at-least.ts", "phase": "compile-run", "expect": { "stdout": "ok" } },
     { "id": "508.spawn-readline-roundtrip.node", "source": "../examples/valid/spawn-readline-roundtrip.ts", "phase": "node-run", "expect": { "stdout": "ok" } },

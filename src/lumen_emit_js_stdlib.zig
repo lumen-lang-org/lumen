@@ -93,21 +93,17 @@ pub fn nullOnMissing(m: anytype) bool {
 /// The static calls the runtime package still refuses (spec 508). Most of
 /// spec 503 T012's original stub list is now wired to the I/O broker
 /// (`net.connect`, `http.request`/`get`/`stream`, `child_process.spawn`:
-/// spec 508 T005-T007) and prints as written. Two calls stay refused
-/// permanently, not just until wired up: `net.createServer`/
+/// spec 508 T005-T007) and prints as written; `Worker.run` is wired too
+/// (T009 — see its own handling in `lumen_emit_js_expr.zig`). Two calls
+/// stay refused permanently, not just until wired up: `net.createServer`/
 /// `http.createServer` need a per-connection OS thread whose handler
 /// shares module state, which Node's isolate-per-thread model cannot give
 /// without an `async` handler form the language does not have yet (spec
-/// 508's Decision, point 3; that is a future, separate spec). `Worker.run`
-/// is still a stub (spec 508 T009 is not done): a real thread on Node needs
-/// its closure's captured bindings shipped across the worker boundary by
-/// name, not as a live JS function object, which needs emitter support
-/// this pass does not have.
+/// 508's Decision, point 3; that is a future, separate spec).
 pub fn unsupportedStaticCall(ns: []const u8, name: []const u8) ?[]const u8 {
     const eq = std.mem.eql;
     if (eq(u8, ns, "net") and eq(u8, name, "createServer")) return "`net.createServer`";
     if (eq(u8, ns, "http") and eq(u8, name, "createServer")) return "`http.createServer`";
-    if (eq(u8, ns, "Worker") and eq(u8, name, "run")) return "`Worker.run`";
     return null;
 }
 
@@ -142,7 +138,7 @@ test "the refusals name calls the checker accepts, and only the still-unwired on
     defer parsed.deinit();
     const namespaces = parsed.value.object.get("namespaces").?.object;
     const refused = [_][2][]const u8{
-        .{ "net", "createServer" }, .{ "http", "createServer" }, .{ "Worker", "run" },
+        .{ "net", "createServer" }, .{ "http", "createServer" },
     };
     for (refused) |r| {
         try t.expect(unsupportedStaticCall(r[0], r[1]) != null);

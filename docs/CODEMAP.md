@@ -8,9 +8,9 @@ Format: one section per file: role (from its //! header), then
 Lumen compiler CLI: TypeScript syntax -> generated Zig -> native binary.
 isBuiltinMarker:1019, main:3908
 
-## src/lumen_ast.zig (708 lines)
+## src/lumen_ast.zig (717 lines)
 The Abstract Syntax Tree -- the data structure shared by the parser, the
-FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumValue:65, EnumMember:67, EnumDecl:73, TypeDecl:81, FunctionParam:113, ExternDecl:149, ClassDecl:158, MemberAssign:180, Accessor:197, FunctionDecl:199, VarDecl:233, UsingDecl:259, DestructBinding:275, DestructureDecl:285, Assign:296, ConsoleLog:314, WhileStmt:324, DoWhileStmt:332, ForStmt:340, ForOfStmt:354, ForInStmt:377, IfStmt:389, SwitchCase:397, SwitchStmt:404, ExprStmt:417, ReturnStmt:423, ThrowStmt:430, TryStmt:436, ControlStmt:449, DeferStmt:457, TestDecl:463, SuperCtor:472, StaticCall:479, Stmt:497, BlockStmt:530, Program:536, Expr:636, FieldBuiltin:675, Capture:685, ArrowExpr:689, TemplatePart:704
+FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumValue:65, EnumMember:67, EnumDecl:73, TypeDecl:81, FunctionParam:113, ExternDecl:149, ClassDecl:158, MemberAssign:180, Accessor:197, FunctionDecl:199, VarDecl:233, UsingDecl:259, DestructBinding:275, DestructureDecl:285, Assign:296, ConsoleLog:314, WhileStmt:324, DoWhileStmt:332, ForStmt:340, ForOfStmt:354, ForInStmt:377, IfStmt:389, SwitchCase:397, SwitchStmt:404, ExprStmt:417, ReturnStmt:423, ThrowStmt:430, TryStmt:436, ControlStmt:449, DeferStmt:457, TestDecl:463, SuperCtor:472, StaticCall:479, Stmt:497, BlockStmt:530, Program:536, Expr:636, FieldBuiltin:675, Capture:685, ArrowExpr:698, TemplatePart:713
 
 ## src/lumen_check.zig (1916 lines)
 The type checker -- stage 3, between parsing and codegen.
@@ -83,21 +83,21 @@ emitElemEq:26, emitArrayMethod:75, emitStringMethod:455, emitTemplateText:762
 Class codegen: lowers a `ClassDecl` to a Zig struct with fields, a `new`
 collectChain:30, zeroValue:49, emitClass:63, emitClassMethod:338, emitSuperCopies:404, collectSuperInStmt:408, collectSuperInExpr:428, ifaceMethodThrows:482, emitIfaceDecl:495, emitClassVtables:513
 
-## src/lumen_emit_js.zig (782 lines)
+## src/lumen_emit_js.zig (833 lines)
 The JavaScript backend (spec 504): the checked AST -> ECMAScript module text
-CompileError:28, Emitter:32, emitStrLit:160, emitTemplateText:174, emitRegexSource:191, isIdentStart:201, isIdentChar:205, isPlainIdent:210, emitPropertyKey:217, emitFloat:227, isGenericFunction:236, EmittedModule:253, Output:255, emitProgram:544
+CompileError:28, Emitter:32, emitStrLit:183, emitTemplateText:197, emitRegexSource:214, isIdentStart:224, isIdentChar:228, isPlainIdent:233, emitPropertyKey:240, emitFloat:250, isGenericFunction:259, EmittedModule:276, Output:278, relativeSpecifier:519, emitProgram:577
 
 ## src/lumen_emit_js_class.zig (198 lines)
 Class and enum codegen for the node target.
 emitEnum:37, emitClass:96
 
-## src/lumen_emit_js_expr.zig (823 lines)
+## src/lumen_emit_js_expr.zig (916 lines)
 Expression codegen for the node target: the `Expr`-union counterpart of
-emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:305, emitExpr:309
+emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:395, emitExpr:399
 
-## src/lumen_emit_js_stdlib.zig (189 lines)
+## src/lumen_emit_js_stdlib.zig (185 lines)
 The standard library on the node target: which calls print as written and
-stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:106, iteratorToArray:117
+stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:103, iteratorToArray:113
 
 ## src/lumen_emit_js_stmt.zig (678 lines)
 Statement codegen for the node target: the `Stmt`-union counterpart of

@@ -682,7 +682,16 @@ pub const FieldBuiltin = enum {
 
 /// A variable captured by a closure: stored by its outer emit-name in a heap
 /// environment struct.
-pub const Capture = struct { emit_name: []const u8, ty: types.Type, is_this: bool = false };
+pub const Capture = struct {
+    emit_name: []const u8,
+    ty: types.Type,
+    is_this: bool = false,
+    /// The plain source identifier (`ref.name`, not the native backend's
+    /// mangled `emit_name`): what the JS target's `Worker.run` synthesis
+    /// (spec 508 T009) needs, since a JS `var_ref` always emits its own
+    /// `.name` verbatim and never consults `emit_name` at all.
+    name: []const u8 = "",
+};
 
 /// Arrow function expression `(x: T) => expr` (V1: typed params, expression
 /// body; may capture enclosing locals by value into a heap environment).

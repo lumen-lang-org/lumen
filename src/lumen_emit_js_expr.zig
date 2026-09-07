@@ -255,6 +255,96 @@ pub fn emitParams(e: *Emitter, params: []const ast.FunctionParam) CompileError!v
     try e.byte(')');
 }
 
+/// A clear compile-time diagnostic naming what `Worker.run`'s node target
+/// actually accepts (spec 508 T009): unlike `e.unsupported`, this is not "not
+/// implemented yet" -- it names two working forms and says which one to use.
+fn workerRunShape(e: *Emitter) CompileError {
+    e.diag.* = .{
+        .line = e.cur_line,
+        .col = e.cur_col,
+        .msg = std.fmt.allocPrint(e.arena, "Worker.run's argument must be a plain top-level function or an arrow capturing only its outer scalar bindings (spec 059) [E_TARGET_UNSUPPORTED]", .{}) catch return error.OutOfMemory,
+    };
+    return error.ParseError;
+}
+
+/// `Worker.run(fn)` on the node target (spec 508 T009). Node has no way to
+/// hand a live closure to a fresh thread -- `new Worker()` starts a new
+/// module graph, not a call into this one -- so the call becomes a
+/// descriptor naming a module and an exported function to `import()` there:
+/// `Worker.run({ moduleUrl, fnName, args })`. `lib/worker.mjs` reads it.
+///
+/// `fn` is either a reference to an existing top-level function (its own
+/// module is forced to export it, in `emitProgram`, since nothing else may),
+/// or a scalar-capturing arrow, which has no module of its own -- its body
+/// is hoisted into a synthesized top-level function in the *current* module
+/// (`e.hoisted`, flushed after this module's ordinary statements) and its
+/// captures become that function's explicit parameters.
+fn emitWorkerRun(e: *Emitter, s: *const ast.StaticCall) CompileError!void {
+    const arg = s.args[0];
+    if (arg.* == .var_ref) {
+        const name = arg.var_ref.name;
+        const target_out = e.worker_target_modules.get(name) orelse return workerRunShape(e);
+        const spec = try js.relativeSpecifier(e.arena, e.cur_module_out, target_out);
+        try e.w("Worker.run({ moduleUrl: new URL(");
+        try js.emitStrLit(e, spec);
+        try e.w(", import.meta.url).href, fnName: ");
+        try js.emitStrLit(e, name);
+        try e.w(", args: [] })");
+        return;
+    }
+    if (arg.* == .arrow) {
+        const a = arg.arrow;
+        // 059's own restriction: scalar captures only. A `this` capture
+        // (an instance, not a scalar) is caught here rather than left to
+        // fail obscurely once passed across the worker boundary.
+        for (a.captures) |c| {
+            if (c.is_this) return workerRunShape(e);
+            switch (c.ty) {
+                .i32, .i64, .f64, .bool => {},
+                else => return workerRunShape(e),
+            }
+        }
+        const fn_name = std.fmt.allocPrint(e.arena, "__worker_{d}", .{e.worker_synth_seq}) catch return error.OutOfMemory;
+        e.worker_synth_seq += 1;
+        const params = e.arena.alloc(ast.FunctionParam, a.captures.len) catch return error.OutOfMemory;
+        for (a.captures, 0..) |c, i| params[i] = .{ .name = c.name, .annotation = "" };
+
+        const saved_out = e.out;
+        const saved_indent = e.indent;
+        e.out = e.hoisted;
+        e.indent = 0;
+        try e.print("export function {s}", .{fn_name});
+        try emitParams(e, params);
+        try e.w(" {\n");
+        e.indent += 1;
+        if (a.body_block) |body| {
+            try js_stmt.emitBody(e, body);
+        } else if (a.body_expr) |body_expr| {
+            var stmts = [_]ast.Stmt{.{ .return_stmt = .{ .value = body_expr, .line = e.cur_line, .col = e.cur_col } }};
+            try js_stmt.emitBody(e, &stmts);
+        }
+        e.indent -= 1;
+        try e.pad();
+        try e.w("}\n");
+        e.hoisted = e.out;
+        e.out = saved_out;
+        e.indent = saved_indent;
+
+        try e.w("Worker.run({ moduleUrl: new URL(");
+        try js.emitStrLit(e, try js.relativeSpecifier(e.arena, e.cur_module_out, e.cur_module_out));
+        try e.w(", import.meta.url).href, fnName: ");
+        try js.emitStrLit(e, fn_name);
+        try e.w(", args: [");
+        for (a.captures, 0..) |c, i| {
+            if (i > 0) try e.w(", ");
+            try e.w(c.name);
+        }
+        try e.w("] })");
+        return;
+    }
+    return workerRunShape(e);
+}
+
 fn emitArrow(e: *Emitter, a: *const ast.ArrowExpr) CompileError!void {
     if (js_stmt.arrowIsAsync(a)) try e.w("async ");
     try emitParams(e, a.params);
@@ -589,6 +679,9 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
         },
         .static_call => |s| {
             if (js_stdlib.unsupportedStaticCall(s.namespace, s.name)) |what| return e.unsupported(e.cur_line, e.cur_col, what, "508");
+            if (std.mem.eql(u8, s.namespace, "Worker") and std.mem.eql(u8, s.name, "run")) {
+                return emitWorkerRun(e, &s);
+            }
             // `JSON.parse<T>(text)` / `parseOpen<T>` (specs 051, 500): the
             // runtime checks the document against T's shape, so it refuses
             // what the native parser refuses and names the same field (483).

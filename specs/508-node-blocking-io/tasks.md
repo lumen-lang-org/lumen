@@ -77,27 +77,62 @@
 
 ## Phase 3: Worker.run and the server rejection
 
-- [ ] T009 `Worker.run(fn)` (059): a `worker_threads` Worker running the
+- [x] T009 `Worker.run(fn)` (059): a `worker_threads` Worker running the
   emitted module, `fn` selected by name, scalar-only result via message
-  passing — no broker involved, this one already fits Node's own model
-  (spec's Decision point 2). **Not done.** Genuinely harder than it looks:
-  a JS closure cannot cross a `worker_threads` boundary as a live value (no
-  structured clone for functions), and re-importing the compiled program's
-  own module in the new worker to get at a named function would also re-run
-  every one of the program's own top-level statements a second time (the
-  emitter has no "only if this is the entry module" guard) — so this needs
-  real emitter support, mirrored on the native closure-capture mechanism
-  already used for the native target's `__workerRun` (`arrow.captures` in
-  `src/lumen_ast.zig`/`lumen_check_expr.zig`): synthesize a named top-level
-  function per `Worker.run(...)` call site on the node target, with the
-  arrow's captured bindings as its parameters, and ship the captures as
-  plain data (not code) to a small bootstrap worker script that dynamically
-  imports the compiled module and calls that function by name. Left for a
-  follow-up round; `lib/worker.mjs` still throws naming this spec.
+  passing — no broker involved (spec's Decision point 2). Done, exactly on
+  the design the earlier deferral note above sketched: `Worker.run`'s call
+  site (`emitWorkerRun`, `lumen_emit_js_expr.zig`) becomes a descriptor —
+  `Worker.run({ moduleUrl, fnName, args })` — instead of the raw function
+  value, since a JS closure cannot cross a `worker_threads` boundary as a
+  live value. Two accepted shapes, matching 059's own restriction, checked
+  before emitting:
+  - **A plain top-level function** (`Worker.run(someFn)`): its own module
+    is forced to export it (`emitProgram`'s new `worker_run_targets`/
+    `worker_target_modules` pass — `refsInExpr`'s `.static_call` case
+    records the name as a side effect of the reference walk every call's
+    args already get, so this needed no new traversal), even when nothing
+    else in the program ever imports it.
+  - **An arrow capturing only scalar outer bindings**: hoisted into a
+    synthesized, exported top-level function in the *same* module (`
+    e.hoisted`, flushed once after that module's ordinary statements — JS
+    `function` declarations hoist within their scope regardless of source
+    position), its captures as explicit parameters. A `this` capture or a
+    non-scalar one is rejected at compile time
+    (`E_TARGET_UNSUPPORTED`, naming the two accepted shapes) rather than
+    failing obscurely once shipped across the boundary.
+
+  Reused `arrow.captures` as the earlier note expected, but `Capture` only
+  carried `emit_name` — the *native* backend's mangled closure-storage
+  name, meaningless to the JS target, which always emits a `var_ref`'s own
+  plain source name. Added `Capture.name` (`lumen_ast.zig`, populated at
+  both existing append sites in `lumen_check_expr.zig`) rather than derive
+  it by string-parsing `emit_name`. Confirmed this was the actual failure
+  mode, not a hypothetical one: the first working build emitted
+  `args: [__lumen_0_base, ...]`, an identifier that does not exist in the
+  surrounding JS scope, caught by actually running the compiled output, not
+  by reading the diff.
+
+  The re-run-every-top-level-statement concern in the earlier note is real
+  and stays real — the worker thread's `import(moduleUrl)` does re-execute
+  that module's top-level code once — but is a documented consequence of
+  059's own module-state restriction (its scalar-only capture rule already
+  assumes a Worker.run body doesn't depend on shared module state), not a
+  new problem this task introduces; noted in `lib/worker_bootstrap.mjs`'s
+  own comment rather than solved by adding a module-instantiation guard
+  nothing else needs yet.
+
+  `lib/worker.mjs` now spawns a real `worker_threads.Worker` per call
+  against `lib/worker_bootstrap.mjs` (imports `../globals.mjs` first, since
+  a fresh thread has nothing on its own `globalThis` yet, then the target
+  module, then calls the named export and posts the result back).
+  Conformance: `specs/508-node-blocking-io/examples/valid/worker_run.ts`
+  (plain function, scalar-capturing arrow, two concurrent calls) prints
+  identically on both targets — `508.worker-run.node`/`.native`.
 - [x] T010 `net.createServer`/`http.createServer`: `E_TARGET_UNSUPPORTED`
   naming this spec, per the Decision's point 3. Done:
   `unsupportedStaticCall` (src/lumen_emit_js_stdlib.zig) now refuses only
-  `net.createServer`/`http.createServer` (plus `Worker.run`, T009) instead
+  `net.createServer`/`http.createServer` (`Worker.run` was on this list
+  until T009 wired it up for real) instead
   of every name in those namespaces; `lib/net.mjs`/`lib/http.mjs` throw the
   same message by name for a hand-called JS test. Diagnostics conformance
   cases: `508.unsupported.net-create-server`,
