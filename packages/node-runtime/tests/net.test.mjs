@@ -95,6 +95,30 @@ test("net.createServer: two connections make progress concurrently, one does not
   assert.equal(prompt.out, "second");
 });
 
+test("net.createServer: a second listener still delivers connections after shutdownBridge() recycled the broker worker", async () => {
+  // A real bug, found by running the whole node-runtime suite together
+  // (not this file alone): `singleton.mjs`'s `ensureMessageListener` keyed
+  // "have I attached my one 'message' listener yet" on a module-level flag
+  // rather than on which `Worker` instance it attached to. Several other
+  // test files call `shutdownBridge()` in their own `after()` hook, which
+  // replaces the broker's `Worker` on the next blocking call -- but left
+  // that flag set, so the NEXT `net.createServer` in the suite (this one,
+  // running after an earlier file's shutdown) silently never got a
+  // listener on the new worker at all: every connection it accepted had
+  // nowhere to route its accept notification, hanging the handler forever.
+  // `shutdownBridge()` here reproduces exactly that recycle, mid-file.
+  shutdownBridge();
+  net.connect("127.0.0.1", 1); // any blocking call recreates the broker worker
+  net.createServer(19514, async (socket) => {
+    const msg = await socket.read();
+    await socket.write(msg);
+    await socket.close();
+  });
+  const { child, out } = await connectRawEcho(19514, "third");
+  child.kill();
+  assert.equal(out, "third");
+});
+
 /** Spawns a real `nc`-like raw TCP peer (a tiny inline Node script, no
  *  external `nc` dependency) that connects to `port`, writes `msg`, then
  *  reads and returns whatever comes back -- a real OS-level connection,

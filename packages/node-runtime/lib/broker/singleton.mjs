@@ -118,10 +118,25 @@ export function call(op, argBytes, timeoutMs) {
 
 /** Terminates the broker worker, if one was ever started. Real programs let
  *  the (unref'd) worker exit with the process; this is for tests that start
- *  and stop several brokers in one process. */
+ *  and stop several brokers in one process.
+ *
+ *  Also resets `messageListenerAttached` -- found for real, not
+ *  hypothetically, by a full multi-file `node --test` run hanging forever
+ *  on a `net.createServer` call that came after an earlier test file's own
+ *  `shutdownBridge()`: `ensureMessageListener` only ever attaches its
+ *  "message" listener to whichever worker was live the FIRST time any
+ *  `net.createServer`/`http.createServer` call reached it, keyed by this
+ *  module-level flag rather than by worker identity. A later
+ *  `shutdownBroker()` swaps in a brand new `Worker` (`broker()`'s
+ *  `instance ??= start()`) but left the flag set, so `ensureMessageListener`
+ *  saw "already attached" and skipped the new worker entirely -- every
+ *  connection it ever accepted then had nowhere to route its `postMessage`,
+ *  hanging the accept callback forever. Resetting the flag here makes the
+ *  next `onAccept` re-attach to whichever worker is actually current. */
 export function shutdownBroker() {
   if (instance) {
     instance.worker.terminate();
     instance = null;
+    messageListenerAttached = false;
   }
 }

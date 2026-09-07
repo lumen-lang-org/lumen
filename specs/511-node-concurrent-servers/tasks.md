@@ -81,6 +81,25 @@ this is what's left for `--share` specifically).
   connections" would fall idle and exit the moment its own top-level
   script finished, taking the listener down with it. Confirmed by running
   the T013 conformance case before this fix: it printed nothing and hung.
+
+  **Follow-up fix, found later**: `ensureMessageListener`'s "have I
+  attached my one `message` listener yet" check was a module-level
+  `messageListenerAttached` boolean, not scoped to which `Worker` it was
+  attached to. `shutdownBroker()` (used by several test files' own
+  `after()` hooks to recycle the broker between tests) replaces
+  `instance` with a fresh `Worker` on the next blocking call, but left
+  that flag set — so the next `net.createServer` call after a recycle
+  never got a listener attached to the NEW worker at all, and every
+  connection it accepted had nowhere to route its accept notification,
+  hanging the handler forever. Invisible running `net.test.mjs` alone
+  (nothing recycles the broker mid-file); found only by running the
+  whole `node --test packages/node-runtime/tests/` suite together, where
+  earlier files' own `shutdownBridge()` calls trigger the recycle before
+  `net.test.mjs`'s own createServer tests run. Fixed by resetting
+  `messageListenerAttached = false` inside `shutdownBroker()`; regression
+  test added to `net.test.mjs` ("a second listener still delivers
+  connections after shutdownBridge() recycled the broker worker"),
+  confirmed to hang without the fix and pass with it.
 - [x] T005 New `packages/node-runtime/lib/broker/async_bridge.mjs`:
   `asyncListen`/`onAccept`/`asyncRead`/`asyncWrite`/`asyncClose`, the
   public surface `lib/net.mjs` calls into (mirroring `sync_bridge.mjs`'s
