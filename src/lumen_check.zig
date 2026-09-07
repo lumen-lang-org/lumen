@@ -446,9 +446,9 @@ pub const Checker = struct {
             }
         }
         const msg = if (best_d <= limit)
-            std.fmt.allocPrint(self.arena, "`{s}` has no method '{s}' — did you mean '{s}'?", .{ recv, name, best.? }) catch "unknown method"
+            std.fmt.allocPrint(self.arena, "`{s}` has no method '{s}' — did you mean '{s}'? [E_TYPE_MISMATCH]", .{ recv, name, best.? }) catch "unknown method"
         else
-            std.fmt.allocPrint(self.arena, "`{s}` has no method '{s}'", .{ recv, name }) catch "unknown method";
+            std.fmt.allocPrint(self.arena, "`{s}` has no method '{s}' [E_TYPE_MISMATCH]", .{ recv, name }) catch "unknown method";
         return self.fail(line, col, msg);
     }
 
@@ -1420,7 +1420,7 @@ pub const Checker = struct {
             .string, .string_literal_union => "`s != \"\"` or `s.length > 0`",
             else => if (types.isNumeric(cond_type)) "`x != 0`" else if (types.isArray(cond_type)) "`a.length > 0`" else "an explicit comparison",
         };
-        const msg = std.fmt.allocPrint(self.arena, "{s} condition must be `boolean`, got `{s}` — truthiness is not supported; write {s}", .{ construct, tn, hint }) catch
+        const msg = std.fmt.allocPrint(self.arena, "{s} condition must be `boolean`, got `{s}` — truthiness is not supported; write {s} [E_TYPE_MISMATCH]", .{ construct, tn, hint }) catch
             return self.fail(line, col, "E_TYPE_MISMATCH");
         return self.fail(line, col, msg);
     }

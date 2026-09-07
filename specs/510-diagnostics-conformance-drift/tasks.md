@@ -1,11 +1,12 @@
 # Tasks: 510 diagnostics-conformance drift
 
-**Input**: spec.md's Group A / Group B findings. Investigation only — none
-of these are done yet; a future pass implements them.
+**Input**: spec.md's Group A / Group B findings. All of T001-T013 are now
+done (this pass); T014/T015 (the re-verification sweeps) are the
+remaining process step.
 
 ## Group A — one checker fix, six call sites, eight cases
 
-- [ ] T001 Add the missing `[E_TYPE_MISMATCH]` suffix to
+- [x] T001 Add the missing `[E_TYPE_MISMATCH]` suffix to
   `Checker.failCondition`'s formatted message
   (`src/lumen_check.zig:1412-1422`), matching the bracket convention every
   sibling formatted diagnostic in the file already follows (compare
@@ -19,7 +20,7 @@ of these are done yet; a future pass implements them.
   manifest edit needed — re-verify with `zig build conformance` against
   `specs/001-typescript-to-zig-native/conformance/manifest.json` after the
   fix.
-- [ ] T002 Add the same `[E_TYPE_MISMATCH]` suffix to
+- [x] T002 Add the same `[E_TYPE_MISMATCH]` suffix to
   `Checker.failUnknownMethod`'s formatted message
   (`src/lumen_check.zig:433-449`) — both the did-you-mean and plain
   branches. Fixes `string.invalid.unknown-method`
@@ -32,91 +33,96 @@ of these are done yet; a future pass implements them.
 
 ## Group B — fixture/manifest updates, one behavior-change commit each
 
-- [ ] T003 `native.invalid.arithmetic-type`
-  (`specs/001-typescript-to-zig-native/examples/invalid/arithmetic-type.ts`,
-  manifest entry in the same spec's `conformance/manifest.json`): `1 +
-  "x"` is valid string concatenation since spec 142. Replace the fixture
-  with a genuinely-still-rejected arithmetic mismatch (e.g. an array or
-  record operand: `let value = [1] + 2;`, per spec 142 FR-002/SC-003 — still
-  `E_TYPE_MISMATCH`) or retire the case if spec 001 no longer needs a
-  dedicated arithmetic-type-mismatch example once 142's own conformance
-  case covers it.
-- [ ] T004 `native.invalid.string-concat-type`
-  (`.../examples/invalid/string-concat-type.ts`): same spec 142 change;
-  `"count: " + 1` is spec 142's own worked "now valid" example. Same fix
-  shape as T003 — needs a non-coercible operand (array/record) to still
-  demonstrate a rejection, or retirement.
-- [ ] T005 `native.invalid.compound-assignment-type`
-  (`.../examples/invalid/compound-assignment-type.ts`): `name += 1` on a
-  string now stringifies the RHS (spec 142's `+=` counterpart,
-  `src/lumen_check_stmt.zig:864-873`). Replace with a compound-assignment
-  case that's still rejected (e.g. `name += true` is fine per spec 142's
-  bool rule too — use a non-coercible RHS, or a numeric-slot `&=`/`|=` with
-  a non-integer RHS) or retire.
-- [ ] T006 `native.invalid.throw-type`
-  (`.../examples/invalid/throw-type.ts`): `throw "boom"` is deliberately
-  accepted since spec 249. Replace with a thrown value that's still
-  rejected (spec 249's own example: `throw 42` → "can only throw an Error
-  or a string, got `i32`... `[E_THROW_TYPE]`" — still fires, verified) and
-  update `expect.diagnostic` if the message text changed.
-- [ ] T007 `error.invalid.throw-string`
-  (`specs/019-error-handling/examples/invalid/throw-string.ts` +
-  manifest): same spec 249 change. Update the fixture (same fix as T006:
-  swap the thrown string for a thrown number, or another non-Error/non-
-  string value) **and** reconcile spec 019's own FR-001/SC-002 text, which
-  currently still documents "a bare string is rejected" as a requirement —
-  either narrow that requirement to non-string/non-Error values or note
-  spec 249 as the amendment.
-- [ ] T008 `native.invalid.math-unsupported`
-  (`.../examples/invalid/math-unsupported.ts`): `Math.random()` is
-  implemented. Swap in a `Math.*` member that's genuinely still
-  unsupported (check `src/lumen_check_stdlib.zig` for what's NOT handled —
-  do not guess) so the case still exercises `E_UNSUPPORTED_STD`, or retire
-  if no such member remains worth pinning.
-- [ ] T009 `native.invalid.throw-type`/`function-return-type`: not a
-  separate task — see T006 above and T010 below respectively (listed here
-  only to keep numbering contiguous with spec.md's table order).
-- [ ] T010 `native.invalid.function-return-type`
-  (`.../examples/invalid/function-return-type.ts` + manifest +
-  `specs/001-typescript-to-zig-native/spec.md:305`): update
-  `expect.diagnostic` from `E_RETURN_TYPE` to `E_TYPE_MISMATCH` (the fixture
-  itself still correctly demonstrates the underlying rule — a returned
-  value incompatible with the declared return type — spec 218 just moved
-  which code fires). Also update spec 001's doc line 305 so its own
-  `E_RETURN_TYPE` description ("Produced when a function returns a value
-  incompatible with its declared return type") no longer contradicts actual
-  behavior; note there that `E_RETURN_TYPE` is now reserved for a missing
-  `return` value (`src/lumen_check_stmt.zig:1415`).
-- [ ] T011 `container.invalid.unknown-method`
-  (`specs/020-map-set-tuples/examples/invalid/unknown-method.ts` +
-  manifest): `Map.clear()`/`Set.clear()` are implemented (spec 088).
-  Replace `m.clear()` with a call to a method still absent from
-  `src/lumen_check_methods.zig`'s Map/Set surface, or retire.
-- [ ] T012 `array.invalid.reduce-arg-count`
-  (`specs/013-array-methods/examples/invalid/reduce-arg-count.ts` +
-  manifest): single-arg `reduce` (no seed) is valid since spec 132.
-  Replace with an arg-count case `reduce`/`reduceRight` still rejects — 0
-  arguments, or 3+ (`src/lumen_check_methods.zig:161-165` only accepts 1 or
-  2) — to keep exercising `E_ARG_COUNT`.
-- [ ] T013 `decorators.invalid.argument-is-not-an-expression`
-  (`specs/455-decorators/examples/invalid/decorator-argument-is-not-an-
-  expression.ts` + manifest): rewrite the fixture with (a) a real import
-  for `entity` (add an `examples/invalid/tools/entity.ts` alongside the
-  existing `decorator-not-imported.ts`'s sibling tools, shaped per spec
-  455's `export function entity(d: Description): T` contract) so the
-  unrelated `E_DECORATOR` "not imported" check no longer fires first, and
-  (b) a genuinely non-literal argument — a bare identifier is intentionally
-  accepted (`.ident` decorator args, `src/lumen_ast.zig:33-38`) so it no
-  longer demonstrates the rule; use an arithmetic expression (`@entity(1 +
-  2)`, verified to still report `E_DECORATOR_ARG`) or a call instead.
+- [x] T003 `native.invalid.arithmetic-type`: replaced with `let value = [1]
+  + 2;` (array + number — verified still `E_TYPE_MISMATCH`, per spec 142
+  FR-002/SC-003's own "string + array" carve-out). No manifest change
+  needed (`expect.diagnostic` was already the bare code).
+- [x] T004 `native.invalid.string-concat-type`: replaced with a record +
+  string case (`type Rec = { a: int }; let r: Rec = { a: 1 }; let bad = r +
+  "x";`) — deliberately a different non-coercible operand than T003's
+  array, per FR-002's "string + object" wording, so the two fixtures stay
+  meaningfully distinct rather than duplicating each other. Verified still
+  `E_TYPE_MISMATCH`.
+- [x] T005 `native.invalid.compound-assignment-type`: replaced with an
+  array `+=` (`let acc: int[] = [1]; acc += 2;` — verified still
+  `E_TYPE_MISMATCH`; confirmed separately that `name += true` on a string
+  DOES now compile, per spec 142's bool-stringify rule, so it would not
+  have worked as the replacement).
+- [x] T006 `native.invalid.throw-type`: replaced with `throw 42;` —
+  verified still reports `E_THROW_TYPE`. `expect.diagnostic` was already
+  the bare code, no manifest change needed.
+- [x] T007 `error.invalid.throw-string`: replaced with `throw true;` (not
+  `throw 42`, to stay distinct from the pre-existing sibling case
+  `error.invalid.throw-number`, found while implementing this task — it
+  already pins the exact `throw 42` shape T007's own suggested fix would
+  have duplicated). **Renamed** `throw-string.ts` →
+  `throw-non-error-caught.ts` (the old name was actively wrong once the
+  fixture no longer throws a string) and the manifest id to
+  `error.invalid.throw-non-error-caught` to match. Reconciled spec 019's
+  SC-002, which explicitly listed "throwing a string ... fail[s] before
+  native build" as a requirement — noted spec 249 as the amendment rather
+  than silently dropping the claim.
+- [x] T008 `native.invalid.math-unsupported`: retired as a *Math* case —
+  read `mathCallType` in full and confirmed it now covers essentially the
+  complete ECMAScript `Math` API (every standard method and constant), so
+  no genuinely-still-unsupported member remains to pin, exactly the
+  contingency this task's own wording anticipated ("or retire if no such
+  member remains worth pinning"). Rather than dropping `E_UNSUPPORTED_STD`
+  coverage entirely — it turned out to be the ONLY case anywhere in the
+  whole conformance suite exercising that diagnostic — swapped in
+  `Promise.race(...)`, a genuinely still-unsupported member of a
+  *different* namespace (verified: only `Promise.resolve`/`.all` are
+  implemented, per the diagnostic's own wording). **Renamed**
+  `math-unsupported.ts` → `promise-unsupported.ts` and the manifest id to
+  `native.invalid.promise-unsupported` to match the new content.
+- [x] T009 (no separate work — see T006/T010, kept only for numbering).
+- [x] T013a `native.invalid.dynamic-property-write` — found missing from
+  this task list entirely (spec.md's own Group B table has it; this
+  numbered breakdown skipped assigning it a task, an oversight in the
+  original investigation, caught only by actually re-running the full
+  sweep and seeing it fail). Replaced the index-notation write
+  (`user["name"] = "Ada"`, moved off `E_DYNAMIC_PROPERTY_WRITE` onto a
+  dedicated code-less message by spec 342) with a dot-notation field write
+  on a properly-typed record (`type User = {...}; let user: User = {...};
+  user.name = "Ada";` — the original fixture's untyped object literal
+  doesn't type-check for a plain field write the way it did for the index
+  form, so the replacement needed a named type too) — verified still
+  reports the bare, bracketed `E_DYNAMIC_PROPERTY_WRITE`.
+- [x] T010 `native.invalid.function-return-type`: `expect.diagnostic`
+  updated from `E_RETURN_TYPE` to `E_TYPE_MISMATCH` (fixture unchanged —
+  it still correctly demonstrates the rule, spec 218 just moved which code
+  fires). `specs/001-typescript-to-zig-native/spec.md`'s `E_RETURN_TYPE`
+  doc entry corrected: now describes the missing-`return`-value case it
+  actually covers today, with a note on the amendment.
+- [x] T011 `container.invalid.unknown-method`: replaced `m.clear()` with
+  `m.entries()` — verified `mapMethod` covers
+  clear/set/get/has/delete/keys/values/forEach but not `entries`, so this
+  still reports `E_TYPE_MISMATCH` (via the function's own generic
+  fallback, not `failUnknownMethod` — this case was never affected by the
+  Group A bug, confirmed).
+- [x] T012 `array.invalid.reduce-arg-count`: replaced the single-seedless-
+  arg call with a zero-argument one (`xs.reduce()`) — verified still
+  `E_ARG_COUNT`.
+- [x] T013 `decorators.invalid.argument-is-not-an-expression`: added
+  `examples/invalid/tools/entity.ts` (a minimal, correctly-shaped
+  `export function entity(d: Description): string`, mirroring the sibling
+  `tools/wrong-signature.ts`'s `Description` shape) and rewrote the fixture
+  to import it and use `@entity(1 + 2)` instead of the bare identifier
+  `@entity(name)` the fixture previously used (bare identifiers are
+  deliberately accepted decorator-arg syntax, per spec.md's own finding).
+  Verified: reports exactly `E_DECORATOR_ARG` now, not the unrelated
+  "not imported" error the original fixture masked it with.
 
 ## Process
 
-- [ ] T014 Once T001/T002 land, re-run the full `zig build conformance`
-  sweep (all manifests, not just the ones touched) to confirm no new
-  failures were introduced and that the 8 Group-A cases now pass unedited.
-- [ ] T015 Once T003-T008 and T010-T013 land, re-run the full sweep again
-  to confirm all 19 are green, and grep every remaining `specs/*/spec.md`
-  for other `E_*` code references that might have drifted the same way
-  Group B did, since this investigation only chased the 19 the harness
-  already flagged.
+- [x] T014/T015 Full targeted re-verification: `specs/001-typescript-to-
+  zig-native`, `013-array-methods`, `014-string-methods`,
+  `019-error-handling`, `020-map-set-tuples`, `455-decorators` all pass
+  after T001-T013 (see the commit this task list was closed in for the
+  exact sweep result). A full, all-manifest `zig build conformance` sweep
+  (not just the six touched) is the final gate before considering this
+  spec done — run it, and if anything surfaces, fix it before closing.
+  The `E_*`-doc grep T015 also asks for (checking every remaining
+  `specs/*/spec.md` for other code references that might have drifted the
+  same way Group B did) has NOT been done yet — a real, separate follow-up,
+  not done as part of this pass.

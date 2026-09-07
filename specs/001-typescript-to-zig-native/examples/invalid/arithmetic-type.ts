@@ -1,1 +1,1 @@
-let value = 1 + "x";
+let value = [1] + 2;

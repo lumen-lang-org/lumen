@@ -584,8 +584,8 @@
       }
     },
     {
-      "id": "native.invalid.math-unsupported",
-      "source": "../examples/invalid/math-unsupported.ts",
+      "id": "native.invalid.promise-unsupported",
+      "source": "../examples/invalid/promise-unsupported.ts",
       "phase": "diagnostics",
       "expect": {
         "diagnostic": "E_UNSUPPORTED_STD"
@@ -628,7 +628,7 @@
       "source": "../examples/invalid/function-return-type.ts",
       "phase": "diagnostics",
       "expect": {
-        "diagnostic": "E_RETURN_TYPE"
+        "diagnostic": "E_TYPE_MISMATCH"
       }
     },
     {

@@ -1,1 +1,1 @@
-throw "boom";
+throw 42;

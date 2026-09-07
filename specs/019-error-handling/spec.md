@@ -53,8 +53,13 @@ Uses `E_THROW_TYPE` (non-error thrown) and reuses `E_TYPE_MISMATCH` /
 - **SC-001**: Programs using throw/catch/finally compile and the produced native
   binary prints results in the correct order (finally last; nested handlers and
   rethrow ordered correctly).
-- **SC-002**: Throwing a string, throwing a number, and constructing `Error`
-  with a non-string argument each fail before native build.
+- **SC-002**: Throwing a number, throwing a boolean (or any other non-Error,
+  non-string value), and constructing `Error` with a non-string argument
+  each fail before native build. **Amended by spec 249**: throwing a bare
+  string is now deliberately accepted ("an Error carries a string message
+  at runtime, so the lowering is identical") — this was originally listed
+  as a rejected case here, before spec 249 shipped and was never
+  reconciled with this doc.
 - **SC-003**: `zig build conformance` passes with the feature 019 manifest.
 
 ## Notes

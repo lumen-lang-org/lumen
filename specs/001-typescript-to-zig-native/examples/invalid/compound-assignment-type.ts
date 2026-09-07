@@ -1,3 +1,2 @@
-let name = "agent";
-
-name += 1;
+let acc: int[] = [1];
+acc += 2;

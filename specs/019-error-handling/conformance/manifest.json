@@ -20,8 +20,8 @@
       "expect": { "stdout": "checking\nin range\nchecked\nchecking\ntoo small\nchecked\nchecking\ntoo big\nchecked" }
     },
     {
-      "id": "error.invalid.throw-string",
-      "source": "../examples/invalid/throw-string.ts",
+      "id": "error.invalid.throw-non-error-caught",
+      "source": "../examples/invalid/throw-non-error-caught.ts",
       "phase": "diagnostics",
       "expect": { "diagnostic": "E_THROW_TYPE" }
     },

@@ -302,8 +302,12 @@ being precise enough for native output.
   declared in the same lexical scope.
 - **E_ARG_COUNT**: Produced when a function call provides the wrong number of
   arguments.
-- **E_RETURN_TYPE**: Produced when a function returns a value incompatible with
-  its declared return type.
+- **E_RETURN_TYPE**: Produced when `return;` (no value) appears where the
+  function's declared return type requires one. **Amended by spec 218**:
+  a *value* incompatible with the declared return type — this entry's
+  original meaning — now reports the consolidated `E_TYPE_MISMATCH`
+  instead (`failTypeMismatch`, used by every `ensureAssignable` mismatch
+  path including returns); this doc was never updated to match.
 - **E_RETURN_OUTSIDE_FUNCTION**: Produced when `return` appears outside a
   function body.
 - **E_VOID_VALUE**: Produced when source attempts to use a `void` expression as
