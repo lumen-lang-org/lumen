@@ -52,6 +52,13 @@ function constructible() {
     Hmac: L.crypto.createHmac("sha256", key),
     ReadableStream: L.fs.createReadStream(file),
     WritableStream: L.fs.createWriteStream(join(dir, "w.txt")),
+    // Wired to the spec 508 broker now (T005-T007): a dead handle (nothing
+    // is listening/spawned) still has every method as a real function,
+    // which is all this test checks -- net.test.mjs/http.test.mjs/
+    // child_process.test.mjs cover the actual blocking behavior.
+    Socket: L.net.connect("127.0.0.1", 1),
+    ChildProcess: L.child_process.spawn("/no/such/binary", []),
+    HttpStream: L.http.stream("http://127.0.0.1:1/", "GET", "", new Map()),
   };
   const cleanup = () => {
     receivers.ReadableStream.close();
@@ -61,13 +68,12 @@ function constructible() {
   return { receivers, cleanup };
 }
 
-// Receivers that only the spec 508 broker can produce: the call that would
-// create one must fail by name until then, not silently hand back a shape
-// with missing methods.
+// `ResponseWriter` only exists inside an `http.createServer` handler, and
+// `http.createServer` is refused permanently on the node target (spec 508's
+// Decision: no per-request handler model that shares module state) -- the
+// call that would produce one must fail by name, not silently hand back a
+// shape with missing methods.
 const DEFERRED_TO_508 = {
-  Socket: () => L.net.connect("127.0.0.1", 1),
-  ChildProcess: () => L.child_process.spawn("true", []),
-  HttpStream: () => L.http.stream("http://127.0.0.1/", "GET", "", new Map()),
   ResponseWriter: () => L.http.createServer(0, () => {}),
 };
 

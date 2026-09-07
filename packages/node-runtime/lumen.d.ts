@@ -191,23 +191,50 @@ declare namespace crypto {
   function createHmac(algorithm: string, key: Buffer): Hmac;
 }
 
+interface ChildProcess {
+  write(data: string): void;
+  writeLine(data: string): void;
+  readLine(): string;
+  close(): void;
+}
+
 declare namespace child_process {
   function spawnSync(command: string, args: string[]): { stdout: string; stderr: string; status: int };
-  /** Needs the I/O broker of spec 508. */
-  function spawn(command: string, args: string[]): never;
+  /** Blocks for `readLine()`; never throws, even on a failed spawn (spec 508). */
+  function spawn(command: string, args: string[]): ChildProcess;
+}
+
+interface Socket {
+  read(): string;
+  write(chunk: string): void;
+  close(): void;
 }
 
 declare namespace net {
-  /** Needs the I/O broker of spec 508. */
-  function connect(host: string, port: int): never;
-  function createServer(port: int, handler: (socket: unknown) => void): never;
+  /** Blocks for the connection; never throws, even on a failed connect (spec 508). */
+  function connect(host: string, port: int): Socket;
+  /** Permanently unsupported on the node target (spec 508's Decision). */
+  function createServer(port: int, handler: (socket: Socket) => void): never;
+}
+
+interface HttpStream {
+  status(): int;
+  header(name: string): string;
+  readLine(): string;
+  write(chunk: string): void;
+  read(): string;
+  done(): bool;
+  close(): void;
 }
 
 declare namespace http {
-  /** Needs the I/O broker of spec 508. */
-  function request(url: string, method: string, body: string, headers: Map<string, string>): never;
-  function get(url: string): never;
-  function stream(url: string, method: string, body: string, headers: Map<string, string>): never;
+  /** Blocks for the full response; never throws (spec 508). Response
+   *  headers are always an empty `Map` -- not surfaced by either target. */
+  function request(url: string, method: string, body: string, headers: Map<string, string>): { status: int; body: string; ok: bool; headers: Map<string, string> };
+  function get(url: string): { status: int; body: string; ok: bool; headers: Map<string, string> };
+  /** A live read handle; blocks per `readLine()`/`read()` call (spec 508). */
+  function stream(url: string, method: string, body: string, headers: Map<string, string>): HttpStream;
+  /** Permanently unsupported on the node target (spec 508's Decision). */
   function createServer(port: int, handler: unknown): never;
   function METHODS(): string[];
   function STATUS_CODES(): Map<int, string>;

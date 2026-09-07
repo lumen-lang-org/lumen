@@ -95,9 +95,9 @@ emitEnum:37, emitClass:96
 Expression codegen for the node target: the `Expr`-union counterpart of
 emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:305, emitExpr:309
 
-## src/lumen_emit_js_stdlib.zig (177 lines)
+## src/lumen_emit_js_stdlib.zig (189 lines)
 The standard library on the node target: which calls print as written and
-stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:96, iteratorToArray:108
+stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:106, iteratorToArray:117
 
 ## src/lumen_emit_js_stmt.zig (678 lines)
 Statement codegen for the node target: the `Stmt`-union counterpart of

@@ -90,14 +90,23 @@ pub fn nullOnMissing(m: anytype) bool {
     return false;
 }
 
-/// The static calls the runtime package only stubs (spec 503 T012): they
-/// block or thread natively and need spec 508's I/O broker. Reported at
-/// compile time rather than thrown at run time (FR-005).
+/// The static calls the runtime package still refuses (spec 508). Most of
+/// spec 503 T012's original stub list is now wired to the I/O broker
+/// (`net.connect`, `http.request`/`get`/`stream`, `child_process.spawn`:
+/// spec 508 T005-T007) and prints as written. Two calls stay refused
+/// permanently, not just until wired up: `net.createServer`/
+/// `http.createServer` need a per-connection OS thread whose handler
+/// shares module state, which Node's isolate-per-thread model cannot give
+/// without an `async` handler form the language does not have yet (spec
+/// 508's Decision, point 3; that is a future, separate spec). `Worker.run`
+/// is still a stub (spec 508 T009 is not done): a real thread on Node needs
+/// its closure's captured bindings shipped across the worker boundary by
+/// name, not as a live JS function object, which needs emitter support
+/// this pass does not have.
 pub fn unsupportedStaticCall(ns: []const u8, name: []const u8) ?[]const u8 {
     const eq = std.mem.eql;
-    if (eq(u8, ns, "net")) return "`net.*`";
-    if (eq(u8, ns, "http") and (eq(u8, name, "request") or eq(u8, name, "get") or eq(u8, name, "stream") or eq(u8, name, "createServer"))) return "`http.request`/`get`/`stream`/`createServer`";
-    if (eq(u8, ns, "child_process") and eq(u8, name, "spawn")) return "`child_process.spawn`";
+    if (eq(u8, ns, "net") and eq(u8, name, "createServer")) return "`net.createServer`";
+    if (eq(u8, ns, "http") and eq(u8, name, "createServer")) return "`http.createServer`";
     if (eq(u8, ns, "Worker") and eq(u8, name, "run")) return "`Worker.run`";
     return null;
 }
@@ -122,20 +131,18 @@ test "only the methods whose miss is undefined get the null" {
     try t.expect(!nullOnMissing(own_find.method_call));
 }
 
-test "the refusals name calls the checker accepts, and all of `net` (503 names.json)" {
+test "the refusals name calls the checker accepts, and only the still-unwired ones (names.json)" {
     // `names.json` is what `tools/stdlib_names.py` extracted from the checker:
     // every namespace call a program can make. A refusal for a name the
-    // checker does not accept would be dead; a `net` call it accepts and
-    // this table lets through would reach the runtime's stub instead of the
+    // checker does not accept would be dead; a call it accepts and this
+    // table lets through would reach the runtime's stub instead of the
     // compile-time diagnostic FR-005 promises.
     const t = std.testing;
     var parsed = try std.json.parseFromSlice(std.json.Value, t.allocator, @embedFile("names.json"), .{});
     defer parsed.deinit();
     const namespaces = parsed.value.object.get("namespaces").?.object;
     const refused = [_][2][]const u8{
-        .{ "net", "connect" },         .{ "net", "createServer" }, .{ "http", "request" },
-        .{ "http", "get" },            .{ "http", "stream" },      .{ "http", "createServer" },
-        .{ "child_process", "spawn" }, .{ "Worker", "run" },
+        .{ "net", "createServer" }, .{ "http", "createServer" }, .{ "Worker", "run" },
     };
     for (refused) |r| {
         try t.expect(unsupportedStaticCall(r[0], r[1]) != null);
@@ -145,8 +152,13 @@ test "the refusals name calls the checker accepts, and all of `net` (503 names.j
         };
         try t.expect(known);
     }
-    for (namespaces.get("net").?.array.items) |n| try t.expect(unsupportedStaticCall("net", n.string) != null);
-    // The rest of `http` and `child_process` is real in the runtime package.
+    // spec 508 T005-T007: wired to the I/O broker, real in the runtime
+    // package now, no longer refused at compile time.
+    try t.expect(unsupportedStaticCall("net", "connect") == null);
+    try t.expect(unsupportedStaticCall("http", "request") == null);
+    try t.expect(unsupportedStaticCall("http", "get") == null);
+    try t.expect(unsupportedStaticCall("http", "stream") == null);
+    try t.expect(unsupportedStaticCall("child_process", "spawn") == null);
     try t.expect(unsupportedStaticCall("http", "METHODS") == null);
     try t.expect(unsupportedStaticCall("child_process", "spawnSync") == null);
 }

@@ -4,6 +4,10 @@
 // every blocking call the program makes afterward.
 import { Worker } from "node:worker_threads";
 import * as P from "./protocol.mjs";
+// The real Node `Buffer`, not the ambient global -- see protocol.mjs's own
+// comment: `globals.mjs` replaces `globalThis.Buffer` with `LumenBuffer`
+// (spec 056) on this (the calling) thread for every Lumen program.
+import { Buffer } from "node:buffer";
 
 let instance = null;
 

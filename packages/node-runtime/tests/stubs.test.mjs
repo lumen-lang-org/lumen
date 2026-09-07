@@ -1,5 +1,9 @@
-// The blocking set (spec 508): a program that reaches it fails loudly and by
-// name. The constant tables of `http` are real.
+// The two calls spec 508 refuses permanently (no per-connection handler
+// model that shares module state, per its Decision) plus `Worker.run`
+// (spec 508 T009 is not done): a program that reaches any of these fails
+// loudly and by name. Everything else `net`/`http`/`child_process` accepts
+// is wired to the I/O broker -- see net.test.mjs, http.test.mjs,
+// child_process.test.mjs. The constant tables of `http` are real.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import nhttp from "node:http";
@@ -7,13 +11,9 @@ import * as net from "../lib/net.mjs";
 import * as http from "../lib/http.mjs";
 import { Worker } from "../lib/worker.mjs";
 
-test("net.connect/createServer, http.request/get/stream/createServer, Worker.run name spec 508", () => {
-  assert.throws(() => net.connect("127.0.0.1", 80), /net\.connect needs the I\/O broker, spec 508/);
-  assert.throws(() => net.createServer(0, () => {}), /net\.createServer needs the I\/O broker, spec 508/);
-  assert.throws(() => http.request("http://x", "GET", "", new Map()), /http\.request needs the I\/O broker, spec 508/);
-  assert.throws(() => http.get("http://x"), /http\.get needs the I\/O broker, spec 508/);
-  assert.throws(() => http.stream("http://x", "GET", "", new Map()), /http\.stream needs the I\/O broker, spec 508/);
-  assert.throws(() => http.createServer(0, () => {}), /http\.createServer needs the I\/O broker, spec 508/);
+test("net.createServer/http.createServer (permanently, spec 508's Decision) and Worker.run (spec 508 T009, not done) name spec 508", () => {
+  assert.throws(() => net.createServer(0, () => {}), /net\.createServer is not supported on the node target \(spec 508/);
+  assert.throws(() => http.createServer(0, () => {}), /http\.createServer is not supported on the node target \(spec 508/);
   assert.throws(() => Worker.run(() => 1), /Worker\.run needs the worker bridge, spec 508/);
 });
 

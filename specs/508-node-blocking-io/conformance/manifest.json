@@ -1,0 +1,13 @@
+{
+  "feature": "508-node-blocking-io",
+  "cases": [
+    { "id": "508.sleep.node", "source": "../examples/valid/sleep-at-least.ts", "phase": "node-run", "expect": { "stdout": "ok" } },
+    { "id": "508.sleep.native", "source": "../examples/valid/sleep-at-least.ts", "phase": "compile-run", "expect": { "stdout": "ok" } },
+    { "id": "508.spawn-readline-roundtrip.node", "source": "../examples/valid/spawn-readline-roundtrip.ts", "phase": "node-run", "expect": { "stdout": "ok" } },
+    { "id": "508.spawn-readline-roundtrip.native", "source": "../examples/valid/spawn-readline-roundtrip.ts", "phase": "compile-run", "expect": { "stdout": "ok" } },
+    { "id": "508.unsupported.net-create-server", "source": "../examples/invalid/net-create-server.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "net-create-server.ts:4:1: error: `net.createServer` is not supported by the node target yet (spec 508) [E_TARGET_UNSUPPORTED]" } },
+    { "id": "508.unsupported.net-create-server.native", "source": "../examples/invalid/net-create-server.ts", "phase": "static", "expect": {} },
+    { "id": "508.unsupported.http-create-server", "source": "../examples/invalid/http-create-server.ts", "phase": "node-diagnostics", "expect": { "diagnostic": "http-create-server.ts:6:1: error: `http.createServer` is not supported by the node target yet (spec 508) [E_TARGET_UNSUPPORTED]" } },
+    { "id": "508.unsupported.http-create-server.native", "source": "../examples/invalid/http-create-server.ts", "phase": "static", "expect": {} }
+  ]
+}

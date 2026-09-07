@@ -72,16 +72,27 @@ program makes after that. `broker/sync_bridge.mjs` is the synchronous API
 the rest of the package calls into (`syncSleep`, `syncConnect`, `syncRead`,
 `syncWrite`, `syncClose`); `broker/protocol.mjs` is the fixed-layout binary
 wire format between the calling thread and the worker (no `JSON.stringify`
-on the hot path). `process.sleep` (spec 475) is wired to it.
+on the hot path). `process.sleep` (spec 475), `net.connect`/`Socket`
+(spec 054), `http.request`/`get`/`stream` (specs 042, 452) and
+`child_process.spawn`/`ChildProcess` (spec 450) are all wired to it -- one
+handle table in the broker (keyed by an opaque handle, tagged by kind)
+backs sockets, HTTP streams and child processes alike, since
+`OP_READ`/`OP_READLINE`/`OP_WRITE`/`OP_CLOSE` are generic across all three.
 
-`net.connect`, `net.createServer`, `http.request`/`get`/`stream`/
-`createServer`, `child_process.spawn` and `Worker.run` still throw an
-`Error` naming spec 508 (its tasks.md T005-T009 wire each of these to the
-broker or, for `Worker.run`, to a plain `worker_threads` Worker); a program
-that reaches them fails by name rather than hanging. `net.createServer`/
-`http.createServer` will end at `E_TARGET_UNSUPPORTED` even once 508 is
-otherwise done -- Node has no thread-per-connection handler model, per
-spec 508's Decision.
+`net.connect`/`Socket`, `http.request`/`get`/`stream`/`HttpStream` and
+`child_process.spawn`/`ChildProcess` are wired to the broker (spec 508
+T005-T007): every blocking method call crosses the bridge, and a failed
+connect/request/spawn never throws -- it degrades to a dead handle whose
+methods are the same "always empty / no-op" fallback the native
+`LumenSocket`/`LumenHttpStream`/`LumenChildProcess` give a null stream,
+exactly mirroring `src/lumen_runtime_net.zig`/`lumen_runtime_os.zig`.
+`Worker.run` still throws an `Error` naming spec 508 (T009 is not done: a
+real thread on Node needs its closure's captured bindings shipped across
+the worker boundary by name, which needs emitter support this pass does
+not have). `net.createServer`/`http.createServer` end at
+`E_TARGET_UNSUPPORTED` at compile time, permanently -- Node has no
+thread-per-connection handler model whose handler can share module state
+without giving up concurrency, per spec 508's Decision.
 
 ## Tests
 
@@ -98,6 +109,7 @@ so run `zig build` first; everything else finishes in about a minute.
 Spec 508's prototype for the blocking-I/O broker (a worker doing real
 socket/timer I/O via `Atomics.waitAsync` while the main thread blocks via
 `Atomics.wait`). Kept as a record of what it found — not a package entry
-point, and not wired into `globals.mjs`. `net.connect`/`http.request`/
-`Worker.run` above still throw naming spec 508 until its own tasks.md
-(T001–T003) promotes this into a real `lib/broker/` module.
+point, and not wired into `globals.mjs`; `lib/broker/` (T001-T003) is the
+real, promoted version every blocking surface above actually uses.
+`Worker.run` still throws naming spec 508 until its own tasks.md's T009
+gives it a real `worker_threads` Worker.
