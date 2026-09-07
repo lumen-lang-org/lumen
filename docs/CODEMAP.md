@@ -311,3 +311,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 498-runtime-event-loop-backend 499-must-use 500-json-parse-open 501-node-runtime 
 502-string-literal-newline 503-node-runtime-package 504-node-target-emitter 
 505-node-byte-strings-and-integers 506-node-test-runner 507-node-ffi-link 508-node-blocking-io 
+509-node-import-alias 

@@ -151,19 +151,35 @@
   `http.createServer` report `E_TARGET_UNSUPPORTED` (SC-003,
   `508.unsupported.*`, both targets, node-diagnostics + native static). All
   8 cases pass.
-- [ ] T012 Joule spec 004 T003 (`make node`, `make node-test`): with T004–T008
-  landed, `code.ts` should clear `providers/openai.ts`'s `http.stream` and
-  compile in full. Run it; record what's still unsupported (`node-skip.txt`).
-  **Blocked in this environment**: this task needs a checkout of the Joule
-  product repository (`code.ts`, `providers/openai.ts`, its own Makefile
-  targets), which is a separate repository not attached to this session —
-  there is nothing under this repo's `specs/`/`packages/` that is Joule
+- [ ] T012 Joule spec 004 T003 (`make node`, `make node-test`): with T004–T009
+  landed, `code.ts` clears every `E_TARGET_UNSUPPORTED`. Confirmed directly
+  (joule-sh/code was attached this session): `lumen compile --target node
+  src/code.ts` compiles Joule's real, full 290-file entry point with zero
+  errors (only pre-existing unused-variable warnings), and `node
+  code.node/code.mjs --version` runs and prints the real version string.
+  Past `--version`, `node code.node/code.mjs` crashes inside
+  `runDaemonJoule` — not an unsupported-construct error, a real bug this
+  round found and filed as spec 509 (`import { x as y }` dropped by the
+  node emitter; `src/terminal/attach.ts`'s aliased `workspaceRoot` import
+  collides with a same-named local once the alias is gone). `make node`/
+  `make node-test`/`node-skip.txt` itself is still Joule's own work
+  (joule-sh/code, spec 004 T003) — not attempted here since it needs 509
+  fixed first to get past the daemon path, and this round's remit is 508's
+  own tasks, not Joule's.
   itself (confirmed: no `code.ts`, no `joule` source tree anywhere in this
   checkout). Needs a human to either attach that repo or run this task from
   a session that has it.
 - [ ] T013 SC-001: `code.ts` compiled `--target node` drives a stub model
   end to end (`scripts/e2e_full_stack.mjs` against the node build).
-  **Blocked in this environment** for the same reason as T012 — `code.ts`
-  and `scripts/e2e_full_stack.mjs` are Joule's, not this repo's.
+  **Not achievable as literally stated, and not by anything left in 508's
+  own scope**: read `scripts/e2e_full_stack.mjs` directly — it drives
+  `bin/joule --share`, exercising the relay/daemon path, which needs
+  `net.createServer` for the relay's own listener. That is spec 508's own
+  Decision point 3, refused on this target permanently until a future,
+  separate spec gives the language a non-blocking server handler form.
+  This is not a gap this round left behind; it is the same boundary 508
+  drew from the start. A narrower "drives a stub model" proof — the CLI's
+  own non-daemon terminal path, without `--share` — is blocked today only
+  by spec 509 (found this round), not by anything unresolved in 508.
 - [ ] T014 Gate: `zig build test`, `zig build conformance`,
   `node --test packages/node-runtime/tests/`; `sh tools/codemap.sh`; commit.

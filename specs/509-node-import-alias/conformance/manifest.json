@@ -1,0 +1,6 @@
+{
+  "feature": "509-node-import-alias",
+  "cases": [
+    { "id": "509.alias.native", "source": "../examples/valid/import_alias.ts", "phase": "compile-run", "expect": { "stdout": "root\nroot" } }
+  ]
+}
