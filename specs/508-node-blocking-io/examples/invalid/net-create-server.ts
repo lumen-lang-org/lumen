@@ -1,6 +1,7 @@
-// SC-003: net.createServer is refused on the node target, permanently --
-// not just until wired up (spec 508's Decision, point 3: no per-connection
-// handler model that shares module state without giving up concurrency).
+// net.createServer's SYNC handler form is refused on the node target (spec
+// 511): the only accepted form there is `async`, real support since 511 --
+// this pins that boundary, not a blanket "createServer is refused" claim
+// anymore (see examples/valid/net_create_server.ts for the working form).
 net.createServer(8080, (socket: Socket) => {
   socket.write(socket.read());
 });

@@ -188,6 +188,104 @@ function opSocketRead(st) {
 }
 
 // ---------------------------------------------------------------------------
+// net.createServer / http.createServer (spec 511): a real listener plus a
+// per-connection async service loop.
+//
+// Unlike every other op above, an accepted connection isn't a response to a
+// request the calling thread made -- the broker has to PUSH it, since the
+// calling thread never asked "is there a new connection yet?". That rules
+// out the request/response control block entirely for the notification
+// itself (`postMessage` instead, structured-clone, so a SharedArrayBuffer
+// reference crosses for free); `OP_LISTEN` itself is a plain one-shot
+// request over the shared control block, same shape as `OP_CONNECT`.
+//
+// Once accepted, the connection is registered in the SAME `handles` map
+// `opConnect` uses (`kind: "socket"`, the identical shape), so `handleOp`'s
+// existing OP_READ/OP_WRITE/OP_CLOSE dispatch needs no changes at all to
+// serve it -- only WHERE those ops are read from changes: each accepted
+// connection gets its OWN control/data SharedArrayBuffer pair (spec 511's
+// T001 spike) and its own `serviceHandle` loop, so N concurrent connections
+// never serialize behind one shared control block the way every other op
+// above still does (fine for those -- one Lumen thread only ever has one
+// outstanding blocking call at a time; a server genuinely needs many
+// connections' reads pending at once).
+const listeners = new Map(); // listenerId -> node net.Server
+let nextListenerId = 1;
+
+/** One handle's own request/response loop, scoped to its own control/data
+ *  pair -- the concurrent counterpart to `listenLoop` below, which only
+ *  ever has ONE such loop for the whole broker (the shared, process-wide
+ *  control block). Ends when the handle is closed (`handles` no longer has
+ *  it) or its control block reports an error reading `STATE`. */
+async function serviceHandle(handle, controlSAB, dataSAB) {
+  const hControl = new Int32Array(controlSAB);
+  const hData = new Uint8Array(dataSAB);
+  while (handles.has(handle)) {
+    const w = Atomics.waitAsync(hControl, P.STATE, P.IDLE);
+    if (w.async) await w.value;
+    if (Atomics.load(hControl, P.STATE) !== P.REQUEST_POSTED) continue;
+    const op = Atomics.load(hControl, P.OP);
+    const argLen = Atomics.load(hControl, P.ARG_LEN);
+    const argBytes = hData.slice(0, argLen);
+    const { status, bytes } = await handleOp(op, argBytes);
+    const len = bytes ? bytes.length : 0;
+    if (bytes) hData.set(bytes, 0);
+    Atomics.store(hControl, P.RESP_STATUS, status);
+    Atomics.store(hControl, P.RESP_LEN, len);
+    Atomics.store(hControl, P.STATE, P.RESPONSE_READY);
+    Atomics.notify(hControl, P.STATE);
+    if (op === P.OP_CLOSE) break; // handles.delete already ran inside handleOp
+  }
+}
+
+function opListen(argBytes) {
+  const port = P.decodeListenArgs(argBytes);
+  const listenerId = nextListenerId++;
+  return new Promise((resolvePromise) => {
+    // A listen failure (EADDRINUSE, most commonly -- including a program
+    // that calls `Worker.run` on a function living in the SAME source file
+    // as its own `net.createServer` call: the worker thread re-executes
+    // that file's top-level code, spec 508 T009's own documented
+    // consequence, so `net.createServer` runs a second time on a port
+    // already bound by the first) must actually resolve this promise, not
+    // hang it forever the way a listener with no error handling at all
+    // would once `server.listen`'s own success callback never fires.
+    let settled = false;
+    const resolve = (v) => {
+      if (settled) return;
+      settled = true;
+      resolvePromise(v);
+    };
+    const server = net.createServer((sock) => {
+      const h = nextHandle++;
+      // Same shape opConnect uses, and the same same-synchronous-call
+      // listener-attachment rule (spec 508 spike finding): a fast peer can
+      // deliver data and EOF before a promise continuation runs.
+      const st = { kind: "socket", sock, buf: [], ended: false, pendingErr: null, wake: null, connectErr: null, connected: true };
+      handles.set(h, st);
+      const wake = () => wakeWaiter(st);
+      sock.on("data", (chunk) => { st.buf.push(chunk); wake(); });
+      sock.on("end", () => { st.ended = true; wake(); });
+      sock.on("error", (e) => { st.pendingErr = e; wake(); });
+      const controlSAB = new SharedArrayBuffer(P.CONTROL_WORDS * 4);
+      const dataSAB = new SharedArrayBuffer(P.DATA_BYTES);
+      serviceHandle(h, controlSAB, dataSAB);
+      parentPort.postMessage({ lumenAccept: true, listenerId, handle: h, controlSAB, dataSAB });
+    });
+    // Same fallback convention as a failed connect/spawn/http-stream-open:
+    // a dead handle, never a thrown error or a hang (`lib/net.mjs`'s
+    // `createServer` exits the process on this the same blunt way native's
+    // own failed `addr.listen` does -- there's no sensible "always empty"
+    // degrade for a server that never bound its port at all).
+    server.on("error", () => resolve({ status: -1, bytes: null }));
+    server.listen(port, () => {
+      listeners.set(listenerId, server);
+      resolve({ status: 0, bytes: P.encodeConnectResult(listenerId) });
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // http.request / http.get (spec 042): one buffered round trip, no handle.
 
 function nodeHttpModule(url) {
@@ -381,6 +479,7 @@ async function handleOp(op, argBytes) {
     return { status: 0, bytes: null };
   }
   if (op === P.OP_CONNECT) return opConnect(argBytes);
+  if (op === P.OP_LISTEN) return opListen(argBytes);
   if (op === P.OP_SPAWN) return opSpawn(argBytes);
   if (op === P.OP_HTTP_STREAM_OPEN) return opHttpStreamOpen(argBytes);
   if (op === P.OP_HTTP_REQUEST) {

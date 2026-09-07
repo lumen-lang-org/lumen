@@ -37,83 +37,178 @@ this is what's left for `--share` specifically).
   transfers to the broker side unchanged, but does not exist on the
   calling side at all, and `singleton.mjs`'s future `callHandle` (T004)
   needs no analogous keep-alive of its own.
-- [ ] T002 `protocol.mjs`: wire format for allocating/freeing a per-handle
-  control block (plan.md decision 2) and for the accept-notification op
-  `net.createServer`'s broker-side listener uses to hand a new connection's
-  handle back to whichever thread is awaiting it (plan.md decision 3).
-- [ ] T003 `broker.mjs`: real `net.createServer`/`http.createServer`
-  registration and accept loop (today refused before ever reaching the
-  broker); a live per-connection handle table alongside the existing
-  socket/http-stream/child-process ones (T005-T007 of spec 508); allocate
-  a fresh per-handle control block at accept time, free at close.
-- [ ] T004 `singleton.mjs`: `callHandle(handle, op, argBytes)` — the
-  `Atomics.waitAsync`-based, non-blocking counterpart to `call()`, scoped
-  to one handle's own control block. Does not touch or replace `call()`
-  and the existing process-wide control block (still used by
-  `process.sleep`, a bare `net.connect`, `child_process.spawn`, etc.).
-- [ ] T005 New `async_bridge.mjs` (or similarly named module, sibling to
-  `sync_bridge.mjs`): `asyncRead`/`asyncWrite`/`asyncClose`/etc. returning
-  real `Promise`s, built on `callHandle`. `sync_bridge.mjs` itself is
-  unchanged — this is additive, for use only from inside a server handler.
-- [ ] T006 `node --test`: broker-level tests proving T001's concurrency
-  property survives the real module boundaries (not just the spike),
-  matching the depth of `packages/node-runtime/tests/broker.test.mjs`'s
-  existing coverage.
+- [x] T002 `protocol.mjs`: added `OP_LISTEN` (args: a port `u32`, reusing
+  `encodeHandleArgs`'s exact shape under its own name
+  `encodeListenArgs`/`decodeListenArgs`; result: a listener id, reusing
+  `encodeConnectResult`). No new wire format needed for the accept
+  notification itself (see T003) — `postMessage`'s structured clone carries
+  a plain object plus the `SharedArrayBuffer` references directly, no
+  binary encoding required, unlike every request/response op.
+- [x] T003 `broker.mjs`: `opListen` — a real `net.createServer`, one real
+  listener per call. Each accepted connection is registered in the SAME
+  `handles` map `opConnect` already uses (`kind: "socket"`, identical
+  shape), so `handleOp`'s existing OP_READ/OP_WRITE/OP_CLOSE dispatch
+  needed NO changes at all to serve it. What's new: `serviceHandle(handle,
+  controlSAB, dataSAB)`, a per-handle counterpart to the existing
+  `listenLoop()` — one such loop per accepted connection, each on its own
+  control/data pair, all running concurrently on the broker's one thread
+  (proven safe by T001's spike). A listen failure (e.g. `EADDRINUSE`) now
+  resolves the op with a dead-handle result instead of hanging forever —
+  found for real, not hypothetically: `Worker.run` re-executes its whole
+  target module's top-level code on the spawned thread (spec 508 T009's
+  own documented consequence), so an early test that put `net.createServer`
+  and its `Worker.run`-dispatched client in the SAME file called
+  `net.createServer` a second time on the worker thread, hit `EADDRINUSE`
+  on the already-bound port, and hung the whole conformance case until the
+  runner's own timeout — the ORIGINAL `server.on("error", () => {})` did
+  nothing, so nothing ever resolved that promise. Fixed here; the
+  conformance example itself also now deliberately keeps its listener and
+  its `Worker.run` target in separate files (see `examples/valid/`, T013)
+  as the correct pattern going forward, not merely a workaround for the
+  bug.
+- [x] T004 `singleton.mjs`: `callHandle(controlSAB, dataSAB, op, argBytes)`
+  — the `Atomics.waitAsync`-based, non-blocking counterpart to `call()`,
+  scoped to one handle's own control block, exactly per T001's spike.
+  Does not touch `call()` or the process-wide control block (still used by
+  `process.sleep`, a bare `net.connect`, `child_process.spawn`, `OP_LISTEN`
+  itself). Also added `onAccept(listenerId, onConn)`, routing
+  `postMessage`d accept notifications by listener id, and — a real finding,
+  not a hypothetical — `onAccept` now `ref()`s the broker worker
+  (`start()` `unref()`s it by default): a listener has no bounded wait of
+  its own the way every other blocking call's synchronous `Atomics.wait`
+  does, so without this a program (or a `Worker.run(listenerFn)` thread,
+  Joule's own actual pattern) whose only remaining work is "wait for
+  connections" would fall idle and exit the moment its own top-level
+  script finished, taking the listener down with it. Confirmed by running
+  the T013 conformance case before this fix: it printed nothing and hung.
+- [x] T005 New `packages/node-runtime/lib/broker/async_bridge.mjs`:
+  `asyncListen`/`onAccept`/`asyncRead`/`asyncWrite`/`asyncClose`, the
+  public surface `lib/net.mjs` calls into (mirroring `sync_bridge.mjs`'s
+  own role for the synchronous surfaces — nothing outside this file and
+  `sync_bridge.mjs` should reach for `singleton.mjs`/`protocol.mjs`
+  directly). `sync_bridge.mjs` itself is untouched.
+- [x] T006 `node --test`: `tests/net.test.mjs` gained two real tests --
+  "a real client round-trips through a real async handler" (basic
+  correctness) and "two connections make progress concurrently, one does
+  not stall the other" (the actual property this spec exists for: a
+  connection that `await`s a read forever must not block a second,
+  differently-ported connection on the same listener from being served
+  promptly — the second test's whole design is proving that, not just
+  smoke-testing that `createServer` doesn't throw). Both pass in single-
+  digit milliseconds. `tests/stubs.test.mjs`'s and `tests/net.test.mjs`'s
+  own PRE-EXISTING `net.createServer(...)` throw-assertions (written when
+  the call was still universally refused) had to be found and fixed too —
+  caught by actually running the full `node --test` suite, not by reading
+  the diff: with the throw removed, the old assertions' calls started a
+  REAL listener that `after()` never shut down, hanging the whole test
+  process (the same `ref()`d-worker mechanism T004 added, working exactly
+  as designed — just not yet accounted for in those two pre-existing
+  tests).
 
 ## Phase 2: Language surface — the async handler shape
 
-- [ ] T007 `lumen_check_stdlib.zig`: accept an `async (socket: Socket) =>
-  Promise<void>` handler shape for `net.createServer` (mirror for
-  `http.createServer`'s buffered/streaming forms) alongside the existing
-  sync one — decide during implementation whether the checker enforces the
-  target-appropriate shape itself (needs the target threaded through, which
-  it doesn't have today) or accepts both and lets each emitter refuse what
-  it can't lower (plan.md T002's open call, matching how every other
-  node-only restriction already works via `E_TARGET_UNSUPPORTED` at emit
-  time).
-- [ ] T008 `lumen_emit_js_stdlib.zig`: remove `net.createServer`/
-  `http.createServer` from `unsupportedStaticCall` (same move spec 508
-  T009 made for `Worker.run`). A *sync* handler on node stays refused —
-  new clear diagnostic naming the accepted async shape (mirror
-  `workerRunShape`'s pattern: name what's accepted, not just what's
-  missing).
-- [ ] T009 `lumen_emit_js.zig` / `lumen_emit_js_expr.zig`: codegen for the
-  async-handler call site. Expected to be simpler than `Worker.run`'s
-  descriptor rewrite (spec 508 T009) since the handler stays ordinary
-  emitted JS on the same thread — likely close to a direct passthrough
-  into `lib/net.mjs`'s new `createServer`.
-- [ ] T010 Native emitter (`lumen_emit_static.zig`): confirm the sync-only
-  path is genuinely untouched (plan.md decision 1 — native stays sync-only
-  for this spec) and that a program using the new async handler shape
-  fails cleanly on native with a real diagnostic if T007 accepts the shape
-  unconditionally at check time, rather than silently miscompiling.
+- [x] T007 `lumen_check_stdlib.zig`: accepts `(socket: Socket) => void`
+  (sync) or a named `async function` shaped `(socket: AsyncSocket) =>
+  Promise<void>` (`netServerHandlerIsAsync`, checked once against the
+  handler's own inferred type — no `ensureAssignable`-sync-then-retry-
+  async double-diagnostic risk). Resolved the "does the checker know the
+  target" question: it doesn't, and still doesn't — both shapes are
+  accepted unconditionally at check time, and each backend's emitter
+  refuses what it can't lower (T009's `netServerSyncRefused`, T010's
+  native gap), the same pattern as every other node-only construct.
+  **A real finding changed the design from the plan**: `AsyncSocket` had
+  to become a genuinely distinct `types.Type` (`async_socket_type`,
+  `lumen_types.zig`) from `Socket`, not "Socket used inside an async
+  function" — tried the simpler context-sensitive idea first, rejected it
+  before writing any code: a plain `net.connect()` `Socket` is ALWAYS
+  sync-backed at runtime regardless of which function calls it, on both
+  targets, so making its TYPE (and therefore whether `.read()` requires
+  `await`) depend on "is the enclosing function async" would have silently
+  changed the type of existing, unrelated `Socket` usage inside any async
+  function anywhere in the codebase. `asyncSocketMethod`
+  (`lumen_check_methods.zig`, dispatched via a new `types.isAsyncSocket`)
+  mirrors `socketMethod` exactly except every return type is
+  `Promise`-wrapped.
+- [x] T008 `lumen_emit_js_stdlib.zig`: `net.createServer` removed from
+  `unsupportedStaticCall` entirely (handled instead in
+  `lumen_emit_js_expr.zig`, before that function is ever consulted for it
+  — mirrors `Worker.run`'s own special-casing). A *sync* handler on node
+  still refuses, via a new `netServerSyncRefused` (mirrors
+  `workerRunShape`'s "name the accepted shape" pattern) naming the
+  `async`/`AsyncSocket` form. `http.createServer` stays in
+  `unsupportedStaticCall`, its refusal reason updated from "508's Decision"
+  to "511 hasn't covered it yet" (T012) — including the shared diagnostic
+  call site's hardcoded spec tag (508 → 511), since `http.createServer` is
+  the only name left reaching it.
+- [x] T009 `lumen_emit_js_expr.zig`: the async-handler call site needed NO
+  special codegen at all, simpler than expected and simpler than
+  `Worker.run`'s descriptor rewrite — `net.createServer(port, handler)`'s
+  existing generic passthrough emission (`namespace.name(args)`, already
+  used for every plain stdlib call) already produces exactly the right JS,
+  since the handler is an ordinary named function reference staying on the
+  same thread, not a value that needs to cross a new one.
+- [~] T010 Native emitter (`lumen_emit_static.zig`): confirmed empirically,
+  not left to a silent miscompile — `lumen_types.zig`'s `zigName` for
+  `async_socket_type` names a Zig type that deliberately doesn't exist
+  (`*LumenAsyncSocket_NOT_IMPLEMENTED_NATIVELY_spec511`), so compiling the
+  T013 conformance example natively fails at `zig build-exe` with "use of
+  undeclared identifier", surfaced through Lumen's existing "the native
+  backend rejected this statement's generated code" wrapper — a real
+  failure, not a hang or wrong output, but NOT YET a clean Lumen
+  diagnostic either (the wrapper's own wording, "likely a Lumen compiler
+  bug; please report it," is actively misleading for a documented,
+  intentional gap rather than an actual bug). A real target-aware
+  checker-side refusal (raised with a proper line/col and message,
+  matching `E_TARGET_UNSUPPORTED`'s own UX) is the honest remaining task
+  here — left undone, not silently downgraded to "good enough": doing it
+  right needs the checker to know the compile target, which it does not
+  today, and threading that through is real, separate plumbing work
+  (plan.md's own open question 1), not a two-line fix.
 
 ## Phase 3: `lib/net.mjs`/`lib/http.mjs`
 
-- [ ] T011 `net.createServer`: real implementation routed through the
-  broker (plan.md decision 3) — accepted connections dispatched as `await
-  handler(socket)`, running concurrently across connections via ordinary
-  event-loop concurrency, no `worker_threads.Worker` per connection.
-- [ ] T012 `http.createServer`: same shape for both the buffered
-  (`(req) => HttpResponse`) and streaming (`(req, res) => void`) handler
-  forms spec 042/452 already established for the native/sync semantics —
-  decide whether both need the async treatment or only the streaming one
-  realistically holds a connection open long enough to matter.
+- [x] T011 `net.createServer`: real implementation
+  (`packages/node-runtime/lib/net.mjs`) — `asyncListen` + `onAccept`
+  (T005), each accepted connection wrapped in a new `AsyncSocket` class
+  (mirrors `Socket`, `await`-able instead of blocking, backed by its own
+  control block) and dispatched as `Promise.resolve(handler(socket))`,
+  deliberately NOT `await`ed by the accept callback itself — awaiting it
+  there would serialize every connection behind whichever one is currently
+  running, exactly the bug this whole spec exists to fix (documented
+  in-line, since it is easy to "fix" back into a bug by adding an
+  `await` that looks like an obviously-safe cleanup). A failed listen
+  exits the process the same blunt way native's own failed `addr.listen`
+  does (`std.process.exit(1)`, `src/lumen_runtime_net.zig`) — no sensible
+  degrade-to-dead-handle fallback exists for a server that never bound its
+  port.
+- [ ] T012 `http.createServer`: not done in this pass — still refused,
+  unconditionally, regardless of handler shape. A real, separate follow-up
+  (buffered vs. streaming handler forms need their own design pass, not a
+  copy-paste of `net.createServer`'s).
 
 ## Phase 4: Conformance
 
-- [ ] T013 SC-001's litmus-test case: client A connects and holds the
-  connection open without sending anything further; client B connects,
-  sends a request, and gets a timely response despite A's connection
-  sitting idle on the same listener. This is the case that actually proves
-  the feature — a version that only ever gets exercised by one connection
-  at a time is not done, however clean the rest of the suite looks.
-- [ ] T014 Update `specs/508-node-blocking-io/conformance/manifest.json`'s
+- [x] T013 `specs/511-node-concurrent-servers/examples/valid/
+  net_create_server.ts` (+ `net_create_server_client.ts`, split
+  deliberately — see T003's own note on why) and
+  `conformance/manifest.json`'s `511.net-create-server.node`: a real
+  listener, a real client connection over loopback, an echo round trip —
+  registered in `build.zig` (`conformance_cmd_511`). The STRONGER
+  concurrency proof SC-001 describes (client A idle, client B still
+  served promptly) lives in `packages/node-runtime/tests/net.test.mjs`
+  instead (T006) — a plain-JS runtime test can express and time-bound
+  "does connection B get served while A never sends anything" far more
+  directly than a `lumen compile`+run conformance case can; the
+  `.ts`-level case here proves the LANGUAGE surface (checker + emitter +
+  runtime all agree on the async handler shape end to end), not the
+  concurrency guarantee specifically. Both together cover SC-001.
+- [x] T014 Updated `specs/508-node-blocking-io/conformance/manifest.json`'s
   `508.unsupported.net-create-server`/`.http-create-server` and
   `specs/504-node-target-emitter/conformance/manifest.json`'s
-  `node.unsupported.net-server` (SC-003): pin the new boundary (sync
-  handler refused by name; async handler compiles and runs) instead of the
-  old blanket refusal these currently check.
+  `node.unsupported.net-server` (SC-003), including their source fixtures'
+  own comments (which had explicitly claimed a permanent, unconditional
+  refusal — now false) and line numbers (the comment-length edits moved
+  the call site).
 
 ## Phase 5: Joule adoption (joule-sh/code, spec 004 — not this repo)
 

@@ -819,6 +819,60 @@ pub fn socketMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type
     return null;
 }
 
+/// Validate a method call on an `AsyncSocket` receiver -- `net.createServer`'s
+/// async handler argument (spec 511), node only. Mirrors `socketMethod`
+/// exactly except every return type is wrapped in `Promise<T>`: this is a
+/// genuinely different type from `Socket`'s, not the same type answering
+/// differently depending on whether the caller happens to be async -- a
+/// plain `net.connect()` `Socket` stays sync-backed (its `read()`/`write()`/
+/// `close()` block via the spec 508 broker) even when called from inside an
+/// unrelated async function, on both targets; only a value actually typed
+/// `AsyncSocket` -- which only `net.createServer`'s own accepted async
+/// handler shape (`netServerHandlerIsAsync`, `lumen_check_stdlib.zig`) can
+/// ever produce -- gets the async surface.
+pub fn asyncSocketMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    const promiseOf = struct {
+        fn f(c: *Checker, inner: types.Type) ?types.Type {
+            const p = c.arena.create(types.Type) catch return null;
+            p.* = inner;
+            return .{ .promise_type = p };
+        }
+    }.f;
+
+    if (eq(u8, name, "read")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return promiseOf(self, .string);
+    }
+    if (eq(u8, name, "write")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const chunk_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.string, chunk_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return promiseOf(self, .void);
+    }
+    if (eq(u8, name, "close")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return promiseOf(self, .void);
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
 /// Validate a method call on a `ChildProcess` receiver (spec 450). Mirrors
 /// `socketMethod` exactly: sets `mc.container_type` (the load-bearing step that
 /// lets the generic emit path lower `<recv>.<name>(<args>)`) then validates by

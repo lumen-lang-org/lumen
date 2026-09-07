@@ -51,7 +51,8 @@ pub const Type = union(enum) {
     event_emitter_type: *const Type, // EventEmitter<T>  ->  *LumenEventEmitter_<t> (heap pointer)
     readable_stream_type, // ReadableStream (fs.createReadStream)  ->  *LumenReadableStream (heap pointer)
     writable_stream_type, // WritableStream (fs.createWriteStream)  ->  *LumenWritableStream (heap pointer)
-    socket_type, // Socket (net.connect/net.createServer's handler arg)  ->  *LumenSocket (heap pointer)
+    socket_type, // Socket (net.connect/net.createServer's SYNC handler arg, native only)  ->  *LumenSocket (heap pointer)
+    async_socket_type, // AsyncSocket (net.createServer's ASYNC handler arg, node only -- spec 511): read/write/close return Promise<T>, a genuinely different type from Socket's sync ones, not merely "Socket used inside an async function" -- a plain net.connect() socket stays sync-backed regardless of its caller's own asyncness on both targets.
     process_type, // ChildProcess (child_process.spawn)  ->  *LumenChildProcess (heap pointer)
     http_stream_type, // HttpStream (http.stream)  ->  *LumenHttpStream (heap pointer)
     response_writer_type, // ResponseWriter (http.createServer's streaming handler arg)  ->  *LumenResponseWriter (pointer)
@@ -140,6 +141,7 @@ fn mangle(arena: std.mem.Allocator, t: Type) error{OutOfMemory}![]const u8 {
         .readable_stream_type => "readablestream",
         .writable_stream_type => "writablestream",
         .socket_type => "socket",
+        .async_socket_type => "asyncsocket",
         .process_type => "childprocess",
         .http_stream_type => "httpstream",
         .response_writer_type => "responsewriter",
@@ -311,6 +313,7 @@ pub fn same(a: Type, b: Type) bool {
         .readable_stream_type => b == .readable_stream_type,
         .writable_stream_type => b == .writable_stream_type,
         .socket_type => b == .socket_type,
+        .async_socket_type => b == .async_socket_type,
         .process_type => b == .process_type,
         .http_stream_type => b == .http_stream_type,
         .response_writer_type => b == .response_writer_type,
@@ -385,6 +388,10 @@ pub fn isReadableStream(t: Type) bool {
 
 pub fn isWritableStream(t: Type) bool {
     return t == .writable_stream_type;
+}
+
+pub fn isAsyncSocket(t: Type) bool {
+    return t == .async_socket_type;
 }
 
 pub fn isSocket(t: Type) bool {
@@ -511,6 +518,7 @@ pub fn toAnnotation(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?[]con
         .readable_stream_type => "ReadableStream",
         .writable_stream_type => "WritableStream",
         .socket_type => "Socket",
+        .async_socket_type => "AsyncSocket",
         .process_type => "ChildProcess",
         .http_stream_type => "HttpStream",
         .response_writer_type => "ResponseWriter",
@@ -552,6 +560,10 @@ pub fn fromAnnotation(name: []const u8) Type {
     // parameter annotation -- so `Socket` needs a real spelling->Type mapping
     // here, the reverse of `toAnnotation`'s `.socket_type => "Socket"` arm.
     if (eq(u8, name, "Socket")) return .socket_type;
+    // `AsyncSocket` (spec 511): net.createServer's ASYNC handler parameter,
+    // `(sock: AsyncSocket) => Promise<void>` -- same reasoning as `Socket`
+    // above, a real spelling so it checks as a parameter annotation.
+    if (eq(u8, name, "AsyncSocket")) return .async_socket_type;
     // `ChildProcess` (spec 450): the return type of child_process.spawn. Given a
     // spelling here (mirroring Socket) so `let cp: ChildProcess = ...` checks.
     if (eq(u8, name, "ChildProcess")) return .process_type;
@@ -669,6 +681,7 @@ pub fn tsName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .readable_stream_type => "ReadableStream",
         .writable_stream_type => "WritableStream",
         .socket_type => "Socket",
+        .async_socket_type => "AsyncSocket",
         .process_type => "ChildProcess",
         .http_stream_type => "HttpStream",
         .response_writer_type => "ResponseWriter",
@@ -722,6 +735,14 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .readable_stream_type => "*LumenReadableStream",
         .writable_stream_type => "*LumenWritableStream",
         .socket_type => "*LumenSocket",
+        // No native runtime type exists (spec 511 decision 1: native stays
+        // sync-only; a native `LumenAsyncSocket` is a real, separate, NOT
+        // YET DONE undertaking -- 511 tasks.md T010). Names a Zig type that
+        // does not exist rather than something plausible-looking, so a
+        // native compile of an accidentally-async handler fails loudly at
+        // `zig build-exe` (a real, if unfriendly, error) instead of
+        // silently miscompiling.
+        .async_socket_type => "*LumenAsyncSocket_NOT_IMPLEMENTED_NATIVELY_spec511",
         .process_type => "*LumenChildProcess",
         .http_stream_type => "*LumenHttpStream",
         .response_writer_type => "*LumenResponseWriter",

@@ -6,6 +6,7 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import nnet from "node:net";
 import * as net from "../lib/net.mjs";
 import { shutdownBridge } from "../lib/broker/sync_bridge.mjs";
 
@@ -61,6 +62,51 @@ test("a failed connect never throws: read()/write()/close() on the dead socket a
   assert.doesNotThrow(() => sock.close());
 });
 
-test("net.createServer is refused at run time (also refused at compile time, permanently, by the checker/emitter)", () => {
-  assert.throws(() => net.createServer(), /net\.createServer is not supported on the node target/);
+test("net.createServer: a real client round-trips through a real async handler", async () => {
+  const received = [];
+  net.createServer(19512, async (socket) => {
+    const msg = await socket.read();
+    received.push(msg);
+    await socket.write(msg.toUpperCase());
+    await socket.close();
+  });
+  const { child, out } = await connectRawEcho(19512, "hello");
+  child.kill();
+  assert.equal(out, "HELLO");
+  assert.deepEqual(received, ["hello"]);
 });
+
+test("net.createServer: two connections make progress concurrently, one does not stall the other", async () => {
+  // The property spec 511 exists to prove: a connection that reads BEFORE
+  // writing anything (so its handler sits `await`ing forever) must not
+  // block a second connection on the same listener from being served
+  // promptly. A version of this feature that merely compiles but silently
+  // serializes connections behind one shared control block would hang
+  // this test until its own timeout.
+  net.createServer(19513, async (socket) => {
+    const msg = await socket.read();
+    await socket.write(msg);
+    await socket.close();
+  });
+  const stalled = net.connect("127.0.0.1", 19513); // connects, never writes
+  const prompt = await connectRawEcho(19513, "second");
+  prompt.child.kill();
+  stalled.close();
+  assert.equal(prompt.out, "second");
+});
+
+/** Spawns a real `nc`-like raw TCP peer (a tiny inline Node script, no
+ *  external `nc` dependency) that connects to `port`, writes `msg`, then
+ *  reads and returns whatever comes back -- a real OS-level connection,
+ *  not `net.connect`'s own broker-backed `Socket` (deliberately: this
+ *  proves the SERVER side against an ordinary client, not against another
+ *  broker-mediated connection). */
+function connectRawEcho(port, msg) {
+  return new Promise((resolve, reject) => {
+    const sock = nnet.connect(port, "127.0.0.1", () => sock.write(msg));
+    let buf = "";
+    sock.on("data", (d) => { buf += d.toString(); });
+    sock.on("end", () => resolve({ child: { kill() { sock.destroy(); } }, out: buf }));
+    sock.on("error", reject);
+  });
+}

@@ -8,13 +8,13 @@ Format: one section per file: role (from its //! header), then
 Lumen compiler CLI: TypeScript syntax -> generated Zig -> native binary.
 isBuiltinMarker:1019, main:3908
 
-## src/lumen_ast.zig (717 lines)
+## src/lumen_ast.zig (718 lines)
 The Abstract Syntax Tree -- the data structure shared by the parser, the
-FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumValue:65, EnumMember:67, EnumDecl:73, TypeDecl:81, FunctionParam:113, ExternDecl:149, ClassDecl:158, MemberAssign:180, Accessor:197, FunctionDecl:199, VarDecl:233, UsingDecl:259, DestructBinding:275, DestructureDecl:285, Assign:296, ConsoleLog:314, WhileStmt:324, DoWhileStmt:332, ForStmt:340, ForOfStmt:354, ForInStmt:377, IfStmt:389, SwitchCase:397, SwitchStmt:404, ExprStmt:417, ReturnStmt:423, ThrowStmt:430, TryStmt:436, ControlStmt:449, DeferStmt:457, TestDecl:463, SuperCtor:472, StaticCall:479, Stmt:497, BlockStmt:530, Program:536, Expr:636, FieldBuiltin:675, Capture:685, ArrowExpr:698, TemplatePart:713
+FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumValue:65, EnumMember:67, EnumDecl:73, TypeDecl:81, FunctionParam:113, ExternDecl:149, ClassDecl:158, MemberAssign:180, Accessor:197, FunctionDecl:199, VarDecl:233, UsingDecl:259, DestructBinding:275, DestructureDecl:285, Assign:296, ConsoleLog:314, WhileStmt:324, DoWhileStmt:332, ForStmt:340, ForOfStmt:354, ForInStmt:377, IfStmt:389, SwitchCase:397, SwitchStmt:404, ExprStmt:417, ReturnStmt:423, ThrowStmt:430, TryStmt:436, ControlStmt:449, DeferStmt:457, TestDecl:463, SuperCtor:472, StaticCall:479, Stmt:498, BlockStmt:531, Program:537, Expr:637, FieldBuiltin:676, Capture:686, ArrowExpr:699, TemplatePart:714
 
-## src/lumen_check.zig (1916 lines)
+## src/lumen_check.zig (1917 lines)
 The type checker -- stage 3, between parsing and codegen.
-classImplements:74, hasMustUse:110, Checker:148, refInner:1868, isAddressable:1880, isCSafe:1888, findField:1895, checkProgram:1902
+classImplements:74, hasMustUse:110, Checker:148, refInner:1869, isAddressable:1881, isCSafe:1889, findField:1896, checkProgram:1903
 
 ## src/lumen_check_assign.zig (433 lines)
 Assignability and cast checking: "can a value of type X be used where Y is
@@ -24,9 +24,9 @@ ensureAssignable:19, castAllowed:396, recordConverter:417
 Class member resolution: field/method/accessor lookup across the
 classField:27, resolveField:34, resolveStaticField:46, resolveMethod:60, resolveStaticMethod:72, resolveAccessor:84, isSubclassOf:97, checkVisibility:109, visibilityOk:125
 
-## src/lumen_check_expr.zig (2416 lines)
+## src/lumen_check_expr.zig (2419 lines)
 Expression type-checking -- `exprType` is the heart of the checker: given
-checkCbArg:31, wrapStringify:41, wrapFloat:88, exprType:96, fieldType:2395
+checkCbArg:31, wrapStringify:41, wrapFloat:88, exprType:96, fieldType:2398
 
 ## src/lumen_check_generics.zig (749 lines)
 Generic function/class/type-alias specialization (monomorphization).
@@ -36,13 +36,13 @@ isGenericTemplateStmt:31, appendStmt:41, isIdentChar:50, substAnnotation:57, ann
 `Class.*` — the three things the compiler knows about a class that a
 namespace:32, classMetaCall:37
 
-## src/lumen_check_methods.zig (1348 lines)
+## src/lumen_check_methods.zig (1402 lines)
 Type-checking for stdlib *instance* methods: methods called on a value of
-cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, childProcessMethod:827, httpStreamMethod:874, responseWriterMethod:947, bufferMethod:1000, numberInstanceMethod:1057, string_method_names:1141, stringMethod:1143, hashMethod:1294, hmacMethod:1323
+cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, asyncSocketMethod:833, childProcessMethod:881, httpStreamMethod:928, responseWriterMethod:1001, bufferMethod:1054, numberInstanceMethod:1111, string_method_names:1195, stringMethod:1197, hashMethod:1348, hmacMethod:1377
 
-## src/lumen_check_stdlib.zig (1539 lines)
+## src/lumen_check_stdlib.zig (1570 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
-staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:873, jsonSerializable:955, registerLumenHttpResponse:973, registerLumenHttpRequest:995, promiseCallType:1016, mathCallType:1088, stringCallType:1340, arrayCallType:1406
+staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:904, jsonSerializable:986, registerLumenHttpResponse:1004, registerLumenHttpRequest:1026, promiseCallType:1047, mathCallType:1119, stringCallType:1371, arrayCallType:1437
 
 ## src/lumen_check_stdlib_os.zig (1431 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
@@ -91,13 +91,13 @@ CompileError:28, Emitter:32, emitStrLit:236, emitTemplateText:250, emitRegexSour
 Class and enum codegen for the node target.
 emitEnum:37, emitClass:96
 
-## src/lumen_emit_js_expr.zig (916 lines)
+## src/lumen_emit_js_expr.zig (953 lines)
 Expression codegen for the node target: the `Expr`-union counterpart of
-emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:395, emitExpr:399
+emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:410, emitExpr:414
 
-## src/lumen_emit_js_stdlib.zig (185 lines)
+## src/lumen_emit_js_stdlib.zig (193 lines)
 The standard library on the node target: which calls print as written and
-stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:103, iteratorToArray:113
+stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:108, iteratorToArray:117
 
 ## src/lumen_emit_js_stmt.zig (679 lines)
 Statement codegen for the node target: the `Stmt`-union counterpart of
@@ -147,9 +147,9 @@ emitNetRuntime:14
 Runtime prelude codegen for stdio/process/OS surfaces: process
 emitStdioRuntime:14, emitOsCryptoRuntime:472
 
-## src/lumen_types.zig (734 lines)
+## src/lumen_types.zig (755 lines)
 The type system.
-Type:18, MapType:65, EnumType:67, FuncSig:69, SigEntry:74, g_sig_registry:75, g_sig_arena:76, TupleEntry:81, g_tuple_registry:82, tupleStructName:85, funcStructName:175, inferExprType:204, same:236, isOptional:337, unwrapOptional:342, isNumeric:349, isInteger:356, isStringLike:363, isMap:370, isSet:374, isEventEmitter:378, isReadableStream:382, isWritableStream:386, isSocket:390, isProcess:394, isHttpStream:398, isResponseWriter:402, isBuffer:406, isHash:410, isHmac:414, isArray:418, arrayElem:425, arrayOf:439, arrayOfAlloc:453, toAnnotation:472, fromAnnotation:540, refZigName:579, isRefAllowed:595, isRefScalar:609, tsName:620, zigName:692
+Type:18, MapType:66, EnumType:68, FuncSig:70, SigEntry:75, g_sig_registry:76, g_sig_arena:77, TupleEntry:82, g_tuple_registry:83, tupleStructName:86, funcStructName:177, inferExprType:206, same:238, isOptional:340, unwrapOptional:345, isNumeric:352, isInteger:359, isStringLike:366, isMap:373, isSet:377, isEventEmitter:381, isReadableStream:385, isWritableStream:389, isAsyncSocket:393, isSocket:397, isProcess:401, isHttpStream:405, isResponseWriter:409, isBuffer:413, isHash:417, isHmac:421, isArray:425, arrayElem:432, arrayOf:446, arrayOfAlloc:460, toAnnotation:479, fromAnnotation:548, refZigName:591, isRefAllowed:607, isRefScalar:621, tsName:632, zigName:705
 
 ## src/lumen_version.zig (9 lines)
 The version `lumen --version` reports.
@@ -311,4 +311,4 @@ One folder per shipped slice (`specs/NNN-name/spec.md`):
 498-runtime-event-loop-backend 499-must-use 500-json-parse-open 501-node-runtime 
 502-string-literal-newline 503-node-runtime-package 504-node-target-emitter 
 505-node-byte-strings-and-integers 506-node-test-runner 507-node-ffi-link 508-node-blocking-io 
-509-node-import-alias 
+509-node-import-alias 510-diagnostics-conformance-drift 511-node-concurrent-servers 

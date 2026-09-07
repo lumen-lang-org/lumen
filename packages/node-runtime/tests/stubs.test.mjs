@@ -1,18 +1,17 @@
-// The two calls spec 508 refuses permanently (no per-connection handler
-// model that shares module state, per its Decision): a program that
-// reaches either fails loudly and by name. Everything else `net`/`http`/
-// `child_process` accepts is wired to the I/O broker -- see net.test.mjs,
-// http.test.mjs, child_process.test.mjs; `Worker.run` (T009) has its own
-// worker.test.mjs. The constant tables of `http` are real.
+// `http.createServer` is the one call still refused by name (spec 511
+// tasks.md T012, a documented follow-up -- 511 gave `net.createServer`
+// real async-handler support, see net.test.mjs for its own tests).
+// Everything else `net`/`http`/`child_process` accepts is wired to the I/O
+// broker -- see net.test.mjs, http.test.mjs, child_process.test.mjs;
+// `Worker.run` (T009) has its own worker.test.mjs. The constant tables of
+// `http` are real.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import nhttp from "node:http";
-import * as net from "../lib/net.mjs";
 import * as http from "../lib/http.mjs";
 
-test("net.createServer/http.createServer name spec 508 permanently, per its Decision", () => {
-  assert.throws(() => net.createServer(0, () => {}), /net\.createServer is not supported on the node target \(spec 508/);
-  assert.throws(() => http.createServer(0, () => {}), /http\.createServer is not supported on the node target \(spec 508/);
+test("http.createServer still names itself unsupported (spec 511 tasks.md T012)", () => {
+  assert.throws(() => http.createServer(0, () => {}), /http\.createServer is not supported on the node target yet \(spec 511/);
 });
 
 test("http.METHODS() and STATUS_CODES() are the native runtime's tables (spec 049)", () => {

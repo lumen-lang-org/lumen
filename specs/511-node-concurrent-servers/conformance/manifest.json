@@ -1,0 +1,6 @@
+{
+  "feature": "511-node-concurrent-servers",
+  "cases": [
+    { "id": "511.net-create-server.node", "source": "../examples/valid/net_create_server.ts", "phase": "node-run", "expect": { "stdout": "ok" } }
+  ]
+}

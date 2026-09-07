@@ -492,6 +492,7 @@ pub const StaticCall = struct {
     object_entries: bool = false, // Object.entries(record): emit [key, value] tuples, using object_keys as the field list
     from_length: ?*Expr = null, // Array.from({length: N}, cb): the N expression for an array-like source
     http_streaming: bool = false, // http.createServer with a two-parameter (streaming) handler (spec 452)
+    net_server_async: bool = false, // net.createServer/http.createServer with an `async` handler (spec 511) -- the node target's only accepted form; native (spec 511 decision 1) refuses it
 };
 
 pub const Stmt = union(enum) {

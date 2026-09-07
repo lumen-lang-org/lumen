@@ -1549,6 +1549,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (types.isSocket(obj_type)) {
                 return self.socketMethod(program, mc, obj_type, line, col);
             }
+            if (types.isAsyncSocket(obj_type)) {
+                return self.asyncSocketMethod(program, mc, obj_type, line, col);
+            }
             if (types.isProcess(obj_type)) {
                 return self.childProcessMethod(program, mc, obj_type, line, col);
             }

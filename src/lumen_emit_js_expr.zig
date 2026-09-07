@@ -267,6 +267,21 @@ fn workerRunShape(e: *Emitter) CompileError {
     return error.ParseError;
 }
 
+/// A clear compile-time diagnostic naming what `net.createServer`'s node
+/// target actually accepts (spec 511): a sync handler works natively (real
+/// OS threads, spec 049) but not here -- concurrent connections on one
+/// thread need genuinely non-blocking I/O, which only the `async` form
+/// gets (spec 511's plan.md decision 1: native stays sync-only, node is the
+/// reverse). Same "name the accepted shape" pattern as `workerRunShape`.
+fn netServerSyncRefused(e: *Emitter) CompileError {
+    e.diag.* = .{
+        .line = e.cur_line,
+        .col = e.cur_col,
+        .msg = std.fmt.allocPrint(e.arena, "net.createServer's handler must be `async (socket: Socket) => void` on the node target (spec 511) [E_TARGET_UNSUPPORTED]", .{}) catch return error.OutOfMemory,
+    };
+    return error.ParseError;
+}
+
 /// `Worker.run(fn)` on the node target (spec 508 T009). Node has no way to
 /// hand a live closure to a fresh thread -- `new Worker()` starts a new
 /// module graph, not a call into this one -- so the call becomes a
@@ -679,7 +694,28 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             try emitArgs(e, o.args);
         },
         .static_call => |s| {
-            if (js_stdlib.unsupportedStaticCall(s.namespace, s.name)) |what| return e.unsupported(e.cur_line, e.cur_col, what, "508");
+            // `net.createServer` (spec 511): an `async` handler is the only
+            // accepted form on this target -- checked here, before the
+            // generic `unsupportedStaticCall` refusal below, the same way
+            // `Worker.run` special-cases itself. A sync handler still names
+            // the accepted async shape rather than falling through to a
+            // generic "not supported" message. `http.createServer` stays
+            // fully refused either way -- 511's runtime work covers
+            // `net.createServer` only so far.
+            if (std.mem.eql(u8, s.namespace, "net") and std.mem.eql(u8, s.name, "createServer")) {
+                if (!s.net_server_async) return netServerSyncRefused(e);
+                // Falls through to the generic passthrough emission below:
+                // `net.createServer(port, handler)` already matches
+                // `lib/net.mjs`'s real export verbatim, no special codegen
+                // needed the way `Worker.run`'s descriptor rewrite is.
+            } else if (js_stdlib.unsupportedStaticCall(s.namespace, s.name)) |what| {
+                // Only `http.createServer` reaches here now (spec 511 took
+                // `net.createServer` out of `unsupportedStaticCall`
+                // entirely -- see above); its refusal reason shifted from
+                // 508's Decision to "511's runtime work doesn't cover it
+                // yet" (511 tasks.md T012), so the spec tag follows.
+                return e.unsupported(e.cur_line, e.cur_col, what, "511");
+            }
             if (std.mem.eql(u8, s.namespace, "Worker") and std.mem.eql(u8, s.name, "run")) {
                 return emitWorkerRun(e, &s);
             }

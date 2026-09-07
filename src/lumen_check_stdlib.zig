@@ -851,10 +851,25 @@ pub fn netCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall,
             _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
             return null;
         }
-        const want = self.makeFuncType(&.{.socket_type}, .void) orelse return null;
-        self.ensureAssignable(program, want, call.args[1], line, col) catch {
+        // Two accepted handler shapes (spec 511): `(socket: Socket) => void`
+        // (native's only form, and node's until 511 lands real support) or
+        // a named `async function` taking `AsyncSocket` and returning
+        // `Promise<void>` (node only, decision 1 -- native still refuses
+        // this one, checked at emission since the checker doesn't know the
+        // target here, same pattern as every other node-only construct).
+        // `AsyncSocket` is deliberately a distinct type from `Socket`, not
+        // "Socket used inside an async function" -- see
+        // `asyncSocketMethod`'s own comment. Checked once against the
+        // handler's own inferred type, not `ensureAssignable`-against-sync-
+        // then-retry-against-async: that would risk a spurious diagnostic
+        // from the first attempt leaking through when only the second was
+        // ever going to match.
+        const handler_type = self.exprType(program, call.args[1], line, col) orelse return null;
+        const is_async_handler = netServerHandlerIsAsync(handler_type) orelse {
+            _ = self.fail(line, col, "net.createServer's handler must be `(socket: Socket) => void` or an `async function` taking `AsyncSocket` [E_TYPE_MISMATCH]") catch {};
             return null;
         };
+        call.net_server_async = is_async_handler;
         program.uses_io = true;
         program.needs_net = true;
         program.needs_net_server = true;
@@ -862,6 +877,22 @@ pub fn netCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall,
         return .void;
     }
     _ = self.fail(line, col, "E_UNSUPPORTED_STD") catch {};
+    return null;
+}
+
+/// `net.createServer`'s handler shape (spec 511): `(socket: Socket) => void`
+/// (sync, `false`) or `(socket: AsyncSocket) => Promise<void>` -- an
+/// `async function`'s own callable type (`false`/`true`). Unlike
+/// `Worker.run`'s param-type-agnostic shape check, the parameter type
+/// itself must match the return shape (`Socket` with `void`, `AsyncSocket`
+/// with `Promise<void>`) -- the two are genuinely different types, not
+/// alternate spellings of the same one. Neither shape: `null`.
+fn netServerHandlerIsAsync(t: types.Type) ?bool {
+    if (t != .func_type) return null;
+    const sig = t.func_type;
+    if (sig.params.len != 1) return null;
+    if (types.same(sig.params[0], .socket_type) and sig.ret.* == .void) return false;
+    if (types.same(sig.params[0], .async_socket_type) and sig.ret.* == .promise_type and sig.ret.promise_type.* == .void) return true;
     return null;
 }
 

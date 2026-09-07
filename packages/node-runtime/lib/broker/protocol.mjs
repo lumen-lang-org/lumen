@@ -56,6 +56,12 @@ export const OP_HTTP_HEADER = 11;
 export const OP_HTTP_DONE = 12;
 // child_process.spawn (spec 450): a live handle, opened the same shape as connect.
 export const OP_SPAWN = 13;
+// net.createServer/http.createServer (spec 511): starts a real listener on
+// the broker worker; each accepted connection is pushed to the calling
+// thread via `postMessage`, not through this op/control-block mechanism
+// (see broker.mjs's `opListen`) -- OP_LISTEN itself is a one-shot request
+// over the shared process-wide control block, same as OP_CONNECT.
+export const OP_LISTEN = 14;
 
 // Headroom over the 64KB chunk spec 054 documents, plus each op's own small
 // fixed header (see the encoders below) -- both directions share this one
@@ -96,6 +102,12 @@ export function decodeConnectArgs(bytes) {
   const host = Buffer.from(bytes.buffer, bytes.byteOffset + 6, hostLen).toString("latin1");
   return { host, port };
 }
+
+/** OP_LISTEN args: just the port, a `u32` -- reuses `encodeHandleArgs`'s
+ *  exact wire shape (one `u32`), given its own name since "the argument is
+ *  a port" reads better at the call site than "the argument is a handle". */
+export const encodeListenArgs = encodeHandleArgs;
+export const decodeListenArgs = decodeHandleArgs;
 
 /** A new handle, a `u32`, on success -- OP_CONNECT, OP_HTTP_STREAM_OPEN and
  *  OP_SPAWN all open a long-lived handle the exact same way. */

@@ -11,10 +11,11 @@
 // exactly as they are not natively (see `__httpRequest`'s own comment): the
 // buffered call always answers an empty `headers` map on both targets.
 //
-// `http.createServer` needs a per-request OS thread with handlers sharing
-// module state, which Node's isolate-per-thread model cannot give without
-// giving up shared state (spec 508's Decision, point 3) -- rejected at
-// compile time (`unsupportedStaticCall`), not here.
+// `http.createServer` stays refused (`unsupportedStaticCall`, not here):
+// `net.createServer` got real, non-blocking, per-connection support (spec
+// 511 -- see `net.mjs`'s own comment for the design), but `http`'s buffered
+// and streaming handler forms are their own follow-up (511 tasks.md T012),
+// not built in that pass.
 import nhttp from "node:http";
 import { fromBuffer, toBuffer } from "./lang.mjs";
 import {
@@ -104,7 +105,7 @@ export function stream(url, method, body, headers) {
 }
 
 export function createServer() {
-  throw new Error("http.createServer is not supported on the node target (spec 508: no async handler form yet)");
+  throw new Error("http.createServer is not supported on the node target yet (spec 511 tasks.md T012)");
 }
 
 export function METHODS() {
