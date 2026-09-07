@@ -68,23 +68,24 @@ function constructible() {
   return { receivers, cleanup };
 }
 
-// `ResponseWriter` only exists inside an `http.createServer` handler, and
-// `http.createServer` is still refused on the node target -- spec 511 gave
-// `net.createServer` a real async-handler implementation but left
-// `http.createServer` as its own follow-up (tasks.md T012: buffered vs.
-// streaming handler forms need their own design pass) -- the call that
-// would produce a `ResponseWriter` must fail by name, not silently hand
-// back a shape with missing methods.
-const DEFERRED_TO_511 = {
-  ResponseWriter: () => L.http.createServer(0, () => {}),
-};
+// `ResponseWriter` (the SYNC streaming-handler parameter) is native-only:
+// spec 511 T012 gave `http.createServer` real node-target support, but
+// only its two `async` forms (buffered and, for streaming, a distinct
+// `AsyncResponseWriter` -- see `http.test.mjs`'s own createServer tests);
+// a sync handler stays refused on the node target (spec 452/511), so there
+// is no way to construct a plain `ResponseWriter` here, and none should
+// be -- this loop only reflects classes the node runtime can actually
+// produce. `AsyncSocket`/`AsyncResponseWriter` are deliberately excluded
+// from `names.json` entirely for the same reason `AsyncSocket` always has
+// been (`tools/stdlib_names.py`'s mapping never listed
+// `asyncSocketMethod`/`asyncResponseWriterMethod`): neither is ever
+// constructed by calling something directly, only handed to a handler
+// `net.createServer`/`http.createServer` itself invokes.
+const NATIVE_ONLY_RECEIVERS = new Set(["ResponseWriter"]);
 
 for (const [recv, list] of Object.entries(names.methods)) {
+  if (NATIVE_ONLY_RECEIVERS.has(recv)) continue;
   test(`methods of ${recv}`, () => {
-    if (recv in DEFERRED_TO_511) {
-      assert.throws(DEFERRED_TO_511[recv], /spec 511/, `${recv} (${list.join(", ")}) is deferred to spec 511 and must say so`);
-      return;
-    }
     const { receivers, cleanup } = constructible();
     try {
       const target = receivers[recv];
@@ -96,3 +97,7 @@ for (const [recv, list] of Object.entries(names.methods)) {
     }
   });
 }
+
+test("methods of ResponseWriter: native-only, not reflected here", () => {
+  for (const recv of NATIVE_ONLY_RECEIVERS) assert.ok(recv in names.methods, `${recv} unexpectedly missing from names.json`);
+});

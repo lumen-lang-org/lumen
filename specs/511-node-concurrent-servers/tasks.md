@@ -207,10 +207,77 @@ this is what's left for `--share` specifically).
   does (`std.process.exit(1)`, `src/lumen_runtime_net.zig`) — no sensible
   degrade-to-dead-handle fallback exists for a server that never bound its
   port.
-- [ ] T012 `http.createServer`: not done in this pass — still refused,
-  unconditionally, regardless of handler shape. A real, separate follow-up
-  (buffered vs. streaming handler forms need their own design pass, not a
-  copy-paste of `net.createServer`'s).
+- [x] T012 `http.createServer`: real, non-blocking support for both
+  handler forms, each with an `async` counterpart mirroring
+  `net.createServer`'s own sync/async split — buffered (`async (req:
+  HttpRequest) => Promise<HttpResponse>`) and streaming (a named `async
+  function` taking `(req: HttpRequest, res: AsyncResponseWriter) =>
+  Promise<void>`). A sync handler of either arity stays refused on the
+  node target (native keeps both sync forms unchanged), the checker
+  reusing the exact `target_is_node`/`E_TARGET_UNSUPPORTED` plumbing T010
+  built for `net.createServer`.
+
+  **The design pass this task was waiting on**: `AsyncResponseWriter` is a
+  genuinely distinct `types.Type` (`async_response_writer_type`) from
+  `ResponseWriter`, the same split T007 made for `AsyncSocket`/`Socket` —
+  `asyncResponseWriterMethod` (`lumen_check_methods.zig`) mirrors
+  `responseWriterMethod` with every return wrapped in `Promise<void>`. The
+  checker's `httpServerHandlerIsAsync` (`lumen_check_stdlib.zig`) folds
+  arity (buffered vs. streaming) and sync/async into one shape check for a
+  named function reference; an inline arrow can only ever be the sync
+  form, since arrows can never be `async` in this language subset (same
+  constraint T007 hit) — that path keeps the original `checkCbArg`-based
+  check unchanged. `net_server_async` (the AST field, despite its name)
+  turned out to already be documented as shared between `net.createServer`
+  and `http.createServer` — no new field needed.
+
+  **A real design decision, not a copy of `net.createServer`'s**:
+  `http.createServer`'s node implementation (`lib/http.mjs`) does not use
+  the spec 508 broker at all, unlike `net.createServer`'s. It runs
+  directly on Node's own `http.Server`, on the calling thread's event
+  loop — Node's own HTTP parsing/framing/keep-alive is exactly the free,
+  battle-tested layer a hand-rolled one over a raw broker `Socket` would
+  otherwise have to reimplement, and resolves plan.md's own open question
+  3 in the "accept directly on the calling thread" direction. A plain
+  `server.listen(port)` already keeps the process alive on its own, so
+  none of `net.createServer`'s `ref()`/`unref()` juggling
+  (`singleton.mjs`'s `onAccept`) is needed here either. `createServer`
+  returns the underlying `http.Server` — Lumen's own checked type for the
+  call is `void`, so no compiled program ever sees or uses this, but it
+  let `http.test.mjs`'s own tests `.close()` what they start rather than
+  leaking a live listener into every later test in the same process
+  (found by the tests hanging after all of them individually passed —
+  `net.createServer`'s own tests don't need this because that listener
+  lives on the broker worker thread and goes away with
+  `shutdownBridge()`).
+
+  `tests/http.test.mjs` gained three real tests mirroring T006's for
+  `net.createServer`: a buffered round trip, a streaming round trip, and
+  the actual concurrency proof (a connection with an incomplete request
+  head must not delay a second, complete request past its own response
+  time). `tests/names.test.mjs`'s `ResponseWriter` reflection entry
+  (previously a "the call throws" stand-in for "cannot be produced") is
+  native-only and excluded from the generic per-class loop instead, with
+  its own explanatory test, matching how `AsyncSocket` was already
+  excluded from `names.json`'s method table entirely.
+  `tests/stubs.test.mjs`'s premise (`http.createServer` was "the one call
+  still refused by name") no longer holds; its obsolete throw-assertion
+  was removed, leaving only the `METHODS`/`STATUS_CODES` constant-table
+  test the file also carried.
+
+  New conformance cases: `511.http-create-server.node` (a buffered async
+  handler, real client, real response — `http_create_server.ts` +
+  `http_create_server_client.ts`, split into two files for the same
+  `Worker.run`-re-executes-the-module reason T013's `net_create_server.ts`
+  is) and `511.async-http-handler-native.diagnostics`
+  (`async-http-handler-native.ts`, `E_TARGET_UNSUPPORTED`). Updated
+  `specs/508-node-blocking-io/conformance/manifest.json`'s
+  `508.unsupported.http-create-server` (its fixture's plain sync handler
+  now hits the new "must be async" diagnostic, not the old blanket
+  refusal) and `specs/508-node-blocking-io/spec.md`'s own Decision point 3
+  prose, which still described `http.createServer` as unconditionally
+  refused pending a spec that had, by this point, already landed for
+  `net.createServer`.
 
 ## Phase 4: Conformance
 

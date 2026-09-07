@@ -2,6 +2,8 @@
   "feature": "511-node-concurrent-servers",
   "cases": [
     { "id": "511.net-create-server.node", "source": "../examples/valid/net_create_server.ts", "phase": "node-run", "expect": { "stdout": "ok" } },
-    { "id": "511.async-handler-native.diagnostics", "source": "../examples/invalid/async-handler-native.ts", "phase": "diagnostics", "expect": { "diagnostic": "E_TARGET_UNSUPPORTED" } }
+    { "id": "511.async-handler-native.diagnostics", "source": "../examples/invalid/async-handler-native.ts", "phase": "diagnostics", "expect": { "diagnostic": "E_TARGET_UNSUPPORTED" } },
+    { "id": "511.http-create-server.node", "source": "../examples/valid/http_create_server.ts", "phase": "node-run", "expect": { "stdout": "ok" } },
+    { "id": "511.async-http-handler-native.diagnostics", "source": "../examples/invalid/async-http-handler-native.ts", "phase": "diagnostics", "expect": { "diagnostic": "E_TARGET_UNSUPPORTED" } }
   ]
 }

@@ -11,12 +11,20 @@
 // exactly as they are not natively (see `__httpRequest`'s own comment): the
 // buffered call always answers an empty `headers` map on both targets.
 //
-// `http.createServer` stays refused (`unsupportedStaticCall`, not here):
-// `net.createServer` got real, non-blocking, per-connection support (spec
-// 511 -- see `net.mjs`'s own comment for the design), but `http`'s buffered
-// and streaming handler forms are their own follow-up (511 tasks.md T012),
-// not built in that pass.
+// `http.createServer` (spec 511 T012): both the buffered and streaming
+// handler forms get a real, non-blocking implementation, each with an
+// `async` counterpart mirroring `net.createServer`'s own sync/async split
+// (spec 511 decision 1: native stays sync-only, node is async-only).
+// Unlike `net.createServer` (T003/T011), this never touches the spec 508
+// broker at all: it runs directly on Node's own `http.Server`, on the
+// calling thread's event loop. Node's own HTTP parsing/framing/keep-alive
+// is exactly the free, battle-tested layer a hand-rolled one over a raw
+// broker `Socket` would otherwise have to reimplement, and a plain
+// `server.listen(port)` already keeps the process alive on its own --
+// no `ref()`/`unref()` juggling of the kind `net.createServer`'s
+// broker-worker-thread listener needs (`singleton.mjs`'s `onAccept`).
 import nhttp from "node:http";
+import { Buffer } from "node:buffer";
 import { fromBuffer, toBuffer } from "./lang.mjs";
 import {
   DEAD_HANDLE,
@@ -104,8 +112,106 @@ export function stream(url, method, body, headers) {
   return new HttpStream(handle);
 }
 
-export function createServer() {
-  throw new Error("http.createServer is not supported on the node target yet (spec 511 tasks.md T012)");
+/** The streaming handler's second argument (spec 511 T012): every
+ *  operation is `await`-able, mirroring `net.mjs`'s own `Socket` ->
+ *  `AsyncSocket` split -- `checker`-guaranteed real type, not "ResponseWriter
+ *  used inside an async function". Wraps Node's `http.ServerResponse`
+ *  directly: `write`/`writeHead` are synchronous there already (Node
+ *  buffers internally), so wrapping them in `async` costs nothing and
+ *  keeps the surface uniform with `Socket.write()`'s own `await`. */
+class AsyncResponseWriter {
+  #res;
+  constructor(res) {
+    this.#res = res;
+  }
+  async writeHead(status, headers) {
+    this.#res.writeHead(status, Object.fromEntries(headers));
+  }
+  async write(chunk) {
+    this.#res.write(toBuffer(chunk));
+  }
+  async end() {
+    this.#res.end();
+  }
+}
+
+/** Buffers a request body to completion (native's own accept loop reads a
+ *  request fully before invoking a handler too -- neither handler form
+ *  streams the incoming body, only the outgoing response). */
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+/** Node's raw `IncomingMessage` -> the `__LumenHttpRequest` record shape
+ *  (spec 459): header names arrive already lowercased from Node, matching
+ *  `registerLumenHttpRequest`'s own documented contract; a header repeated
+ *  on the wire arrives as an array from Node and is joined with ", "
+ *  (except `cookie`, which Node itself already joins with "; "), the same
+ *  folding `Map<string,string>` forces everywhere else in this package. */
+function toLumenRequest(req, bodyBuf) {
+  const headers = new Map();
+  for (const [k, v] of Object.entries(req.headers)) {
+    headers.set(k, Array.isArray(v) ? v.join(", ") : String(v ?? ""));
+  }
+  return { method: req.method, path: req.url, body: fromBuffer(bodyBuf), headers };
+}
+
+/** `http.createServer(port, handler)` (spec 452, 511 T012): `handler`'s own
+ *  arity selects buffered (`(req) => HttpResponse`) vs. streaming
+ *  (`(req, res) => void`), exactly like the checker's own
+ *  `httpServerHandlerIsAsync` -- the checker guarantees whichever shape
+ *  reaches here is a named `async function` returning the right thing, so
+ *  this never re-validates it, the same trust `net.mjs`'s own
+ *  `createServer` places in its own checker-guaranteed shape.
+ *
+ *  Each request handler runs independently, not serialized behind one
+ *  shared per-listener state, the same concurrency `net.createServer`
+ *  exists for (spec 511's whole point) -- Node's own `http.Server` already
+ *  gives this for free, one request at a time per connection but many
+ *  connections (and, with keep-alive, many requests) truly concurrently on
+ *  this one thread's event loop. A handler that throws fails only its own
+ *  request (a 500, if nothing was sent yet) rather than crashing the
+ *  listener -- mirrors `net.createServer`'s own per-connection
+ *  `.catch(() => {})`. */
+export function createServer(port, handler) {
+  const streaming = handler.length === 2;
+  const server = nhttp.createServer((req, res) => {
+    readBody(req)
+      .then(async (bodyBuf) => {
+        const lumenReq = toLumenRequest(req, bodyBuf);
+        if (streaming) {
+          await handler(lumenReq, new AsyncResponseWriter(res));
+        } else {
+          const resp = await handler(lumenReq);
+          res.writeHead(resp.status, Object.fromEntries(resp.headers));
+          res.end(toBuffer(resp.body));
+        }
+      })
+      .catch(() => {
+        try {
+          if (!res.headersSent) res.writeHead(500);
+          res.end();
+        } catch {
+          // The connection is already gone; nothing left to answer.
+        }
+      });
+  });
+  server.listen(port);
+  // Lumen's own checked type for this call is `void` (matching native's
+  // `noreturn` accept loop -- a real program never stops a server it
+  // starts), so no compiled code will ever see or use this return value.
+  // Returned anyway, JS-side only, so tests can `.close()` what they
+  // start instead of leaking a live listener into every later test in the
+  // same process -- unlike `net.createServer` (spec 511 T003/T011), whose
+  // listener lives on the broker worker thread and goes away with
+  // `shutdownBridge()`, this one runs directly on the calling thread, so
+  // there is no shared cleanup hook to piggyback on here.
+  return server;
 }
 
 export function METHODS() {

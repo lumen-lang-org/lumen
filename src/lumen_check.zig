@@ -160,6 +160,7 @@ pub const Checker = struct {
     pub const childProcessMethod = check_methods.childProcessMethod;
     pub const httpStreamMethod = check_methods.httpStreamMethod;
     pub const responseWriterMethod = check_methods.responseWriterMethod;
+    pub const asyncResponseWriterMethod = check_methods.asyncResponseWriterMethod;
     pub const bufferMethod = check_methods.bufferMethod;
     pub const bufferCallType = check_stdlib.bufferCallType;
     pub const hashMethod = check_methods.hashMethod;

@@ -742,29 +742,52 @@ pub fn httpCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall
         // (buffered, the original form) or two parameters returning void
         // (streaming, writing through a ResponseWriter). The chosen mode is
         // recorded on the call so emission picks the matching connection
-        // loop. A handler matching neither form gets a diagnostic naming
-        // both accepted signatures rather than a bare type mismatch.
+        // loop. Each mode also now has an `async` counterpart (spec 511
+        // T012, mirroring `net.createServer`'s own sync/async split):
+        // `async (req) => HttpResponse` (buffered) or a named `async
+        // function` taking `(req, res: AsyncResponseWriter)` (streaming).
+        // Arrows can never be `async` in this language subset (only a
+        // named `async function` declaration can), so an arrow handler can
+        // only ever be the sync form — checked with the same
+        // `checkCbArg`-based path as before T012. A named function
+        // reference's own inferred type instead decides sync vs. async in
+        // one pass (`httpServerHandlerIsAsync`), the same way
+        // `net.createServer`'s `netServerHandlerIsAsync` does. A handler
+        // matching none of the four shapes gets a diagnostic naming all of
+        // them rather than a bare type mismatch.
         var arity: usize = 1;
+        var named_handler_type: ?types.Type = null;
         if (call.args[1].* == .arrow) {
             arity = call.args[1].arrow.params.len;
         } else {
-            const handler_type = self.exprType(program, call.args[1], line, col) orelse return null;
-            if (handler_type == .func_type) arity = handler_type.func_type.params.len;
+            named_handler_type = self.exprType(program, call.args[1], line, col) orelse return null;
+            if (named_handler_type.? == .func_type) arity = named_handler_type.?.func_type.params.len;
         }
         const req_t: types.Type = .{ .named = "__LumenHttpRequest" };
-        const want = if (arity == 2)
-            self.makeFuncType(&.{ req_t, .response_writer_type }, .void) orelse return null
-        else
-            self.makeFuncType(&.{req_t}, .{ .named = "__LumenHttpResponse" }) orelse return null;
-        const actual: ?types.Type = if (call.args[1].* == .arrow)
-            self.checkCbArg(program, call.args[1], want.func_type.params, line, col)
-        else
-            self.exprType(program, call.args[1], line, col);
-        const actual_type = actual orelse return null;
-        if (!types.same(want, actual_type)) {
-            _ = self.fail(line, col, "http.createServer handler must be `(req: HttpRequest) => HttpResponse` (buffered) or `(req: HttpRequest, res: ResponseWriter) => void` (streaming)") catch {};
+        var is_async_handler = false;
+        if (call.args[1].* == .arrow) {
+            const want = if (arity == 2)
+                self.makeFuncType(&.{ req_t, .response_writer_type }, .void) orelse return null
+            else
+                self.makeFuncType(&.{req_t}, .{ .named = "__LumenHttpResponse" }) orelse return null;
+            const actual = self.checkCbArg(program, call.args[1], want.func_type.params, line, col) orelse return null;
+            if (!types.same(want, actual)) {
+                _ = self.fail(line, col, "http.createServer handler must be `(req: HttpRequest) => HttpResponse` (buffered) or `(req: HttpRequest, res: ResponseWriter) => void` (streaming)") catch {};
+                return null;
+            }
+        } else {
+            is_async_handler = httpServerHandlerIsAsync(named_handler_type.?, arity) orelse {
+                _ = self.fail(line, col, "http.createServer handler must be `(req: HttpRequest) => HttpResponse` (buffered), `(req: HttpRequest, res: ResponseWriter) => void` (streaming), or a named `async function` in either of those two async forms") catch {};
+                return null;
+            };
+        }
+        // Native refuses the async form here, with a real diagnostic --
+        // same reasoning and same plumbing as `net.createServer`'s T010.
+        if (is_async_handler and !self.target_is_node) {
+            _ = self.fail(line, col, "http.createServer's `async function` handler is only supported on the node target (spec 511); the native target needs a sync handler [E_TARGET_UNSUPPORTED]") catch {};
             return null;
         }
+        call.net_server_async = is_async_handler;
         if (arity == 2) {
             call.http_streaming = true;
             program.needs_http_server_stream = true;
@@ -899,6 +922,39 @@ fn netServerHandlerIsAsync(t: types.Type) ?bool {
     if (sig.params.len != 1) return null;
     if (types.same(sig.params[0], .socket_type) and sig.ret.* == .void) return false;
     if (types.same(sig.params[0], .async_socket_type) and sig.ret.* == .promise_type and sig.ret.promise_type.* == .void) return true;
+    return null;
+}
+
+/// `http.createServer`'s handler shape (spec 511 T012), for a NAMED
+/// function reference only (an arrow can never be `async` in this
+/// language subset, so it's checked separately, the same way it always
+/// was before T012). `arity` (already read off the type or the arrow's
+/// own param list by the caller) selects buffered vs. streaming; within
+/// that, the parameter/return types select sync vs. async, mirroring
+/// `netServerHandlerIsAsync`'s own `Socket`/`AsyncSocket` split:
+/// - buffered: `(req: HttpRequest) => HttpResponse` (sync, `false`) or
+///   `(req: HttpRequest) => Promise<HttpResponse>` (async, `true`).
+/// - streaming: `(req: HttpRequest, res: ResponseWriter) => void` (sync,
+///   `false`) or `(req: HttpRequest, res: AsyncResponseWriter) =>
+///   Promise<void>` (async, `true`).
+/// Matches none of the four: `null`.
+fn httpServerHandlerIsAsync(t: types.Type, arity: usize) ?bool {
+    if (t != .func_type) return null;
+    const sig = t.func_type;
+    if (sig.params.len != arity) return null;
+    const req_t: types.Type = .{ .named = "__LumenHttpRequest" };
+    if (!types.same(sig.params[0], req_t)) return null;
+    if (arity == 1) {
+        const resp_t: types.Type = .{ .named = "__LumenHttpResponse" };
+        if (types.same(sig.ret.*, resp_t)) return false;
+        if (sig.ret.* == .promise_type and types.same(sig.ret.promise_type.*, resp_t)) return true;
+        return null;
+    }
+    if (arity == 2) {
+        if (types.same(sig.params[1], .response_writer_type) and sig.ret.* == .void) return false;
+        if (types.same(sig.params[1], .async_response_writer_type) and sig.ret.* == .promise_type and sig.ret.promise_type.* == .void) return true;
+        return null;
+    }
     return null;
 }
 

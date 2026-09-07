@@ -1,7 +1,7 @@
-// http.createServer is still refused on the node target -- spec 511 gave
-// net.createServer real async-handler support but did not extend it to
-// http.createServer's buffered/streaming handler forms (511 tasks.md T012,
-// a documented follow-up, not implemented in that pass).
+// A SYNC http.createServer handler is refused on the node target (spec
+// 511 T012, mirroring net.createServer's own sync/async split): native
+// keeps its sync, thread-pooled handler; node needs a named `async
+// function` in one of the two accepted async shapes instead.
 function onRequest(req: HttpRequest): HttpResponse {
   return { status: 200, body: "", ok: true, headers: new Map<string, string>() };
 }

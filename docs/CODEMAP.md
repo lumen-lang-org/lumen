@@ -12,9 +12,9 @@ isBuiltinMarker:1019, main:3908
 The Abstract Syntax Tree -- the data structure shared by the parser, the
 FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumValue:65, EnumMember:67, EnumDecl:73, TypeDecl:81, FunctionParam:113, ExternDecl:149, ClassDecl:158, MemberAssign:180, Accessor:197, FunctionDecl:199, VarDecl:233, UsingDecl:259, DestructBinding:275, DestructureDecl:285, Assign:296, ConsoleLog:314, WhileStmt:324, DoWhileStmt:332, ForStmt:340, ForOfStmt:354, ForInStmt:377, IfStmt:389, SwitchCase:397, SwitchStmt:404, ExprStmt:417, ReturnStmt:423, ThrowStmt:430, TryStmt:436, ControlStmt:449, DeferStmt:457, TestDecl:463, SuperCtor:472, StaticCall:479, Stmt:498, BlockStmt:531, Program:537, Expr:637, FieldBuiltin:676, Capture:686, ArrowExpr:699, TemplatePart:714
 
-## src/lumen_check.zig (1928 lines)
+## src/lumen_check.zig (1929 lines)
 The type checker -- stage 3, between parsing and codegen.
-classImplements:74, hasMustUse:110, Checker:148, refInner:1872, isAddressable:1884, isCSafe:1892, findField:1899, checkProgram:1914
+classImplements:74, hasMustUse:110, Checker:148, refInner:1873, isAddressable:1885, isCSafe:1893, findField:1900, checkProgram:1915
 
 ## src/lumen_check_assign.zig (433 lines)
 Assignability and cast checking: "can a value of type X be used where Y is
@@ -24,9 +24,9 @@ ensureAssignable:19, castAllowed:396, recordConverter:417
 Class member resolution: field/method/accessor lookup across the
 classField:27, resolveField:34, resolveStaticField:46, resolveMethod:60, resolveStaticMethod:72, resolveAccessor:84, isSubclassOf:97, checkVisibility:109, visibilityOk:125
 
-## src/lumen_check_expr.zig (2419 lines)
+## src/lumen_check_expr.zig (2422 lines)
 Expression type-checking -- `exprType` is the heart of the checker: given
-checkCbArg:31, wrapStringify:41, wrapFloat:88, exprType:96, fieldType:2398
+checkCbArg:31, wrapStringify:41, wrapFloat:88, exprType:96, fieldType:2401
 
 ## src/lumen_check_generics.zig (749 lines)
 Generic function/class/type-alias specialization (monomorphization).
@@ -36,13 +36,13 @@ isGenericTemplateStmt:31, appendStmt:41, isIdentChar:50, substAnnotation:57, ann
 `Class.*` — the three things the compiler knows about a class that a
 namespace:32, classMetaCall:37
 
-## src/lumen_check_methods.zig (1402 lines)
+## src/lumen_check_methods.zig (1468 lines)
 Type-checking for stdlib *instance* methods: methods called on a value of
-cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, asyncSocketMethod:833, childProcessMethod:881, httpStreamMethod:928, responseWriterMethod:1001, bufferMethod:1054, numberInstanceMethod:1111, string_method_names:1195, stringMethod:1197, hashMethod:1348, hmacMethod:1377
+cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, asyncSocketMethod:833, childProcessMethod:881, httpStreamMethod:928, responseWriterMethod:1001, asyncResponseWriterMethod:1059, bufferMethod:1120, numberInstanceMethod:1177, string_method_names:1261, stringMethod:1263, hashMethod:1414, hmacMethod:1443
 
-## src/lumen_check_stdlib.zig (1576 lines)
+## src/lumen_check_stdlib.zig (1632 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
-staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:910, jsonSerializable:992, registerLumenHttpResponse:1010, registerLumenHttpRequest:1032, promiseCallType:1053, mathCallType:1125, stringCallType:1377, arrayCallType:1443
+staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:849, jsonCallType:966, jsonSerializable:1048, registerLumenHttpResponse:1066, registerLumenHttpRequest:1088, promiseCallType:1109, mathCallType:1181, stringCallType:1433, arrayCallType:1499
 
 ## src/lumen_check_stdlib_os.zig (1431 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
@@ -91,13 +91,13 @@ CompileError:28, Emitter:32, emitStrLit:236, emitTemplateText:250, emitRegexSour
 Class and enum codegen for the node target.
 emitEnum:37, emitClass:96
 
-## src/lumen_emit_js_expr.zig (953 lines)
+## src/lumen_emit_js_expr.zig (970 lines)
 Expression codegen for the node target: the `Expr`-union counterpart of
-emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:410, emitExpr:414
+emitArgs:88, emitArgsFor:96, emitParams:242, exactAsDouble:425, emitExpr:429
 
-## src/lumen_emit_js_stdlib.zig (193 lines)
+## src/lumen_emit_js_stdlib.zig (180 lines)
 The standard library on the node target: which calls print as written and
-stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:108, iteratorToArray:117
+stringMethodHelper:73, nullOnMissing:81, unsupportedStaticCall:104, iteratorToArray:113
 
 ## src/lumen_emit_js_stmt.zig (679 lines)
 Statement codegen for the node target: the `Stmt`-union counterpart of
@@ -147,9 +147,9 @@ emitNetRuntime:14
 Runtime prelude codegen for stdio/process/OS surfaces: process
 emitStdioRuntime:14, emitOsCryptoRuntime:472
 
-## src/lumen_types.zig (760 lines)
+## src/lumen_types.zig (778 lines)
 The type system.
-Type:18, MapType:66, EnumType:68, FuncSig:70, SigEntry:75, g_sig_registry:76, g_sig_arena:77, TupleEntry:82, g_tuple_registry:83, tupleStructName:86, funcStructName:177, inferExprType:206, same:238, isOptional:340, unwrapOptional:345, isNumeric:352, isInteger:359, isStringLike:366, isMap:373, isSet:377, isEventEmitter:381, isReadableStream:385, isWritableStream:389, isAsyncSocket:393, isSocket:397, isProcess:401, isHttpStream:405, isResponseWriter:409, isBuffer:413, isHash:417, isHmac:421, isArray:425, arrayElem:432, arrayOf:446, arrayOfAlloc:460, toAnnotation:479, fromAnnotation:548, refZigName:591, isRefAllowed:607, isRefScalar:621, tsName:632, zigName:705
+Type:18, MapType:67, EnumType:69, FuncSig:71, SigEntry:76, g_sig_registry:77, g_sig_arena:78, TupleEntry:83, g_tuple_registry:84, tupleStructName:87, funcStructName:179, inferExprType:208, same:240, isOptional:343, unwrapOptional:348, isNumeric:355, isInteger:362, isStringLike:369, isMap:376, isSet:380, isEventEmitter:384, isReadableStream:388, isWritableStream:392, isAsyncSocket:396, isSocket:400, isProcess:404, isHttpStream:408, isResponseWriter:412, isAsyncResponseWriter:416, isBuffer:420, isHash:424, isHmac:428, isArray:432, arrayElem:439, arrayOf:453, arrayOfAlloc:467, toAnnotation:486, fromAnnotation:556, refZigName:603, isRefAllowed:619, isRefScalar:633, tsName:644, zigName:718
 
 ## src/lumen_version.zig (9 lines)
 The version `lumen --version` reports.

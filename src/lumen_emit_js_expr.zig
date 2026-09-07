@@ -282,6 +282,21 @@ fn netServerSyncRefused(e: *Emitter) CompileError {
     return error.ParseError;
 }
 
+/// A clear compile-time diagnostic naming what `http.createServer`'s node
+/// target actually accepts (spec 511 T012): a sync handler works natively
+/// (real OS threads, spec 049) but not here, for the same reason
+/// `net.createServer`'s does not -- see `netServerSyncRefused`. Names both
+/// accepted async forms (buffered and streaming) since, unlike
+/// `net.createServer`, `http.createServer` has two.
+fn httpServerSyncRefused(e: *Emitter) CompileError {
+    e.diag.* = .{
+        .line = e.cur_line,
+        .col = e.cur_col,
+        .msg = std.fmt.allocPrint(e.arena, "http.createServer's handler must be a named `async function` taking `(req: HttpRequest) => Promise<HttpResponse>` (buffered) or `(req: HttpRequest, res: AsyncResponseWriter) => Promise<void>` (streaming) on the node target (spec 511 T012) [E_TARGET_UNSUPPORTED]", .{}) catch return error.OutOfMemory,
+    };
+    return error.ParseError;
+}
+
 /// `Worker.run(fn)` on the node target (spec 508 T009). Node has no way to
 /// hand a live closure to a fresh thread -- `new Worker()` starts a new
 /// module graph, not a call into this one -- so the call becomes a
@@ -694,26 +709,28 @@ pub fn emitExpr(e: *Emitter, x: *const Expr) CompileError!void {
             try emitArgs(e, o.args);
         },
         .static_call => |s| {
-            // `net.createServer` (spec 511): an `async` handler is the only
-            // accepted form on this target -- checked here, before the
-            // generic `unsupportedStaticCall` refusal below, the same way
+            // `net.createServer`/`http.createServer` (spec 511, T012 for
+            // `http`): an `async` handler is the only accepted form on this
+            // target -- checked here, before the generic
+            // `unsupportedStaticCall` refusal below, the same way
             // `Worker.run` special-cases itself. A sync handler still names
-            // the accepted async shape rather than falling through to a
-            // generic "not supported" message. `http.createServer` stays
-            // fully refused either way -- 511's runtime work covers
-            // `net.createServer` only so far.
-            if (std.mem.eql(u8, s.namespace, "net") and std.mem.eql(u8, s.name, "createServer")) {
-                if (!s.net_server_async) return netServerSyncRefused(e);
+            // the accepted async shape(s) rather than falling through to a
+            // generic "not supported" message.
+            if ((std.mem.eql(u8, s.namespace, "net") or std.mem.eql(u8, s.namespace, "http")) and std.mem.eql(u8, s.name, "createServer")) {
+                if (!s.net_server_async) {
+                    return if (std.mem.eql(u8, s.namespace, "net")) netServerSyncRefused(e) else httpServerSyncRefused(e);
+                }
                 // Falls through to the generic passthrough emission below:
-                // `net.createServer(port, handler)` already matches
-                // `lib/net.mjs`'s real export verbatim, no special codegen
-                // needed the way `Worker.run`'s descriptor rewrite is.
+                // `net.createServer(port, handler)`/`http.createServer(port,
+                // handler)` already match `lib/net.mjs`'s/`lib/http.mjs`'s
+                // real exports verbatim, no special codegen needed the way
+                // `Worker.run`'s descriptor rewrite is.
             } else if (js_stdlib.unsupportedStaticCall(s.namespace, s.name)) |what| {
-                // Only `http.createServer` reaches here now (spec 511 took
-                // `net.createServer` out of `unsupportedStaticCall`
-                // entirely -- see above); its refusal reason shifted from
-                // 508's Decision to "511's runtime work doesn't cover it
-                // yet" (511 tasks.md T012), so the spec tag follows.
+                // Nothing reaches here today (spec 511 T012 took
+                // `http.createServer` out of `unsupportedStaticCall`
+                // entirely, the same way `net.createServer` already was --
+                // see above); kept as the fallback path for whatever the
+                // table names next.
                 return e.unsupported(e.cur_line, e.cur_col, what, "511");
             }
             if (std.mem.eql(u8, s.namespace, "Worker") and std.mem.eql(u8, s.name, "run")) {

@@ -53,14 +53,20 @@ means. So:
    intended contract.
 3. **`net.createServer` / `http.createServer` handlers**: rejected on the
    Node target with `E_TARGET_UNSUPPORTED` naming this spec, until the
-   language has a server API whose handlers do not block. That API is a
-   language decision (an `async` handler form, which 479 makes coherent),
-   to be its own spec; it must land on the native target first so both
-   targets run the same program.
+   language has a server API whose handlers do not block. That API arrived
+   as spec 511: an `async` handler form, node-only -- native keeps its
+   existing sync, thread-pooled handler unchanged rather than gaining an
+   `async` form of its own (511's own open question, resolved the opposite
+   way this paragraph originally expected: node ships the new shape first,
+   not after native). A *sync* handler still gets exactly this paragraph's
+   original refusal on the node target; only the async shape is accepted
+   there now.
 
 The consequence for Joule: `joule` (the CLI) and `joule-daemon`'s worker
 paths run on Node after this spec; `relay` and the daemon's listening side
-wait for the server-API spec. That is stated in Joule spec 004.
+needed the server-API spec (511), which now covers both `net.createServer`
+and `http.createServer` -- see Joule spec 004 for the remaining adoption
+work (rewriting the relay's own handlers to the async shape).
 
 ## Spike (done)
 

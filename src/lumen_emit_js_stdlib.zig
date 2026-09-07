@@ -95,20 +95,16 @@ pub fn nullOnMissing(m: anytype) bool {
 /// (`net.connect`, `http.request`/`get`/`stream`, `child_process.spawn`:
 /// spec 508 T005-T007) and prints as written; `Worker.run` is wired too
 /// (T009 — see its own handling in `lumen_emit_js_expr.zig`).
-/// `net.createServer` is ALSO handled in `lumen_emit_js_expr.zig`, before
-/// this function is ever consulted, not here: spec 511 gave it real
-/// support for an `async` handler, so whether it's refused now depends on
-/// the handler's own shape (`sc.net_server_async`), not just its name --
-/// this function only ever answers by name. `http.createServer` stays
-/// refused unconditionally, not just until wired up: spec 511's runtime
-/// work (per-handle broker control blocks, non-blocking Socket I/O) covers
-/// `net.createServer` only so far; `http.createServer`'s own buffered and
-/// streaming handler forms are a documented follow-up (511 tasks.md T012),
-/// not implemented in this pass.
+/// `net.createServer`/`http.createServer` are ALSO handled in
+/// `lumen_emit_js_expr.zig`, before this function is ever consulted, not
+/// here: spec 511 (T012 for `http.createServer`) gave both real support
+/// for an `async` handler, so whether either is refused now depends on the
+/// handler's own shape (`sc.net_server_async`), not just its name -- this
+/// function currently answers `null` for everything the checker accepts.
 pub fn unsupportedStaticCall(ns: []const u8, name: []const u8) ?[]const u8 {
-    const eq = std.mem.eql;
-    if (eq(u8, ns, "http") and eq(u8, name, "createServer")) return "`http.createServer`";
-    return null;
+    _ = ns;
+    _ = name;
+    return null; // spec 511 T012: nothing left in this list.
 }
 
 /// Whether this method answers an iterator in JavaScript where the language
@@ -131,34 +127,25 @@ test "only the methods whose miss is undefined get the null" {
     try t.expect(!nullOnMissing(own_find.method_call));
 }
 
-test "the refusals name calls the checker accepts, and only the still-unwired ones (names.json)" {
-    // `names.json` is what `tools/stdlib_names.py` extracted from the checker:
-    // every namespace call a program can make. A refusal for a name the
-    // checker does not accept would be dead; a call it accepts and this
-    // table lets through would reach the runtime's stub instead of the
-    // compile-time diagnostic FR-005 promises.
+test "unsupportedStaticCall refuses nothing left (names.json)" {
+    // `unsupportedStaticCall` used to carry a table of still-unwired names,
+    // cross-checked against `names.json` (what `tools/stdlib_names.py`
+    // extracted from the checker) so a refusal could never name something
+    // the checker doesn't even accept. `http.createServer` was the table's
+    // last entry; spec 511 T012 moved its refusal (now conditional on the
+    // handler's own shape, not just its name) into
+    // `lumen_emit_js_expr.zig`, the same place `net.createServer`'s already
+    // was -- see the `unsupportedStaticCall(...) == null` assertions below.
     const t = std.testing;
-    var parsed = try std.json.parseFromSlice(std.json.Value, t.allocator, @embedFile("names.json"), .{});
-    defer parsed.deinit();
-    const namespaces = parsed.value.object.get("namespaces").?.object;
-    const refused = [_][2][]const u8{
-        .{ "http", "createServer" },
-    };
-    for (refused) |r| {
-        try t.expect(unsupportedStaticCall(r[0], r[1]) != null);
-        var known = false;
-        for (namespaces.get(r[0]).?.array.items) |n| if (std.mem.eql(u8, n.string, r[1])) {
-            known = true;
-        };
-        try t.expect(known);
-    }
     // spec 508 T005-T007: wired to the I/O broker, real in the runtime
     // package now, no longer refused at compile time.
     try t.expect(unsupportedStaticCall("net", "connect") == null);
-    // spec 511: `net.createServer` is handled (and, for a sync handler,
-    // refused) in `lumen_emit_js_expr.zig` before this function is ever
-    // consulted for it -- always null here regardless of handler shape.
+    // spec 511 (T012 for `http.createServer`): both are handled (and, for
+    // a sync handler, refused) in `lumen_emit_js_expr.zig` before this
+    // function is ever consulted for them -- always null here regardless
+    // of handler shape.
     try t.expect(unsupportedStaticCall("net", "createServer") == null);
+    try t.expect(unsupportedStaticCall("http", "createServer") == null);
     try t.expect(unsupportedStaticCall("http", "request") == null);
     try t.expect(unsupportedStaticCall("http", "get") == null);
     try t.expect(unsupportedStaticCall("http", "stream") == null);

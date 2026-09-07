@@ -1,18 +1,12 @@
-// `http.createServer` is the one call still refused by name (spec 511
-// tasks.md T012, a documented follow-up -- 511 gave `net.createServer`
-// real async-handler support, see net.test.mjs for its own tests).
-// Everything else `net`/`http`/`child_process` accepts is wired to the I/O
-// broker -- see net.test.mjs, http.test.mjs, child_process.test.mjs;
-// `Worker.run` (T009) has its own worker.test.mjs. The constant tables of
-// `http` are real.
+// Nothing `net`/`http`/`child_process` accepts is refused by name on the
+// node target any more (spec 511 T012 was the last one, `http.createServer`
+// -- see `http.test.mjs`'s own createServer tests, and `net.test.mjs` for
+// `net.createServer`'s). `Worker.run` (T009) has its own worker.test.mjs.
+// What's left here: the constant tables of `http`, which are real.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import nhttp from "node:http";
 import * as http from "../lib/http.mjs";
-
-test("http.createServer still names itself unsupported (spec 511 tasks.md T012)", () => {
-  assert.throws(() => http.createServer(0, () => {}), /http\.createServer is not supported on the node target yet \(spec 511/);
-});
 
 test("http.METHODS() and STATUS_CODES() are the native runtime's tables (spec 049)", () => {
   const m = http.METHODS();

@@ -1049,6 +1049,72 @@ pub fn responseWriterMethod(self: *Checker, program: *ast.Program, mc: anytype, 
     return null;
 }
 
+/// Validate a method call on an `AsyncResponseWriter` receiver -- a
+/// streaming `http.createServer`'s async handler's second argument (spec
+/// 511 T012), node only. Mirrors `responseWriterMethod` exactly except
+/// every return type is wrapped in `Promise<T>`, the same split
+/// `asyncSocketMethod` makes from `socketMethod`: a genuinely different
+/// type from `ResponseWriter`'s, not the same type answering differently
+/// depending on the caller's own asyncness.
+pub fn asyncResponseWriterMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {
+    mc.container_type = obj_type;
+    const name = mc.name;
+    const eq = std.mem.eql;
+
+    const promiseOf = struct {
+        fn f(c: *Checker, inner: types.Type) ?types.Type {
+            const p = c.arena.create(types.Type) catch return null;
+            p.* = inner;
+            return .{ .promise_type = p };
+        }
+    }.f;
+
+    if (eq(u8, name, "writeHead")) {
+        if (mc.args.len != 2) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const status_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.i32, status_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        const key_ty = self.arena.create(types.Type) catch return null;
+        key_ty.* = .string;
+        const val_ty = self.arena.create(types.Type) catch return null;
+        val_ty.* = .string;
+        const map_ty = self.arena.create(types.MapType) catch return null;
+        map_ty.* = .{ .key = key_ty, .value = val_ty };
+        const headers_type = self.exprType(program, mc.args[1], line, col) orelse return null;
+        if (!types.same(.{ .map_type = map_ty }, headers_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return promiseOf(self, .void);
+    }
+    if (eq(u8, name, "write")) {
+        if (mc.args.len != 1) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        const chunk_type = self.exprType(program, mc.args[0], line, col) orelse return null;
+        if (!types.same(.string, chunk_type)) {
+            _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+            return null;
+        }
+        return promiseOf(self, .void);
+    }
+    if (eq(u8, name, "end")) {
+        if (mc.args.len != 0) {
+            _ = self.fail(line, col, "E_ARG_COUNT") catch {};
+            return null;
+        }
+        return promiseOf(self, .void);
+    }
+    _ = self.fail(line, col, "E_TYPE_MISMATCH") catch {};
+    return null;
+}
+
 /// Validate a method call on a `Buffer` receiver (spec 056). Mirrors
 /// `readableStreamMethod`/`writableStreamMethod`.
 pub fn bufferMethod(self: *Checker, program: *ast.Program, mc: anytype, obj_type: types.Type, line: u32, col: u32) ?types.Type {

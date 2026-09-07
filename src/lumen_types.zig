@@ -55,7 +55,8 @@ pub const Type = union(enum) {
     async_socket_type, // AsyncSocket (net.createServer's ASYNC handler arg, node only -- spec 511): read/write/close return Promise<T>, a genuinely different type from Socket's sync ones, not merely "Socket used inside an async function" -- a plain net.connect() socket stays sync-backed regardless of its caller's own asyncness on both targets.
     process_type, // ChildProcess (child_process.spawn)  ->  *LumenChildProcess (heap pointer)
     http_stream_type, // HttpStream (http.stream)  ->  *LumenHttpStream (heap pointer)
-    response_writer_type, // ResponseWriter (http.createServer's streaming handler arg)  ->  *LumenResponseWriter (pointer)
+    response_writer_type, // ResponseWriter (http.createServer's SYNC streaming handler arg, native only)  ->  *LumenResponseWriter (pointer)
+    async_response_writer_type, // AsyncResponseWriter (http.createServer's ASYNC streaming handler arg, node only -- spec 511 T012): write/writeHead/end return Promise<void>, mirroring AsyncSocket's split from Socket -- a genuinely distinct type, not "ResponseWriter used inside an async function".
     buffer_type, // Buffer (Buffer.from/Buffer.alloc)  ->  *LumenBuffer (heap pointer)
     hash_type, // Hash (crypto.createHash)  ->  *LumenHash (heap pointer)
     hmac_type, // Hmac (crypto.createHmac)  ->  *LumenHmac (heap pointer)
@@ -145,6 +146,7 @@ fn mangle(arena: std.mem.Allocator, t: Type) error{OutOfMemory}![]const u8 {
         .process_type => "childprocess",
         .http_stream_type => "httpstream",
         .response_writer_type => "responsewriter",
+        .async_response_writer_type => "asyncresponsewriter",
         .buffer_type => "buffer",
         .hash_type => "hash",
         .hmac_type => "hmac",
@@ -317,6 +319,7 @@ pub fn same(a: Type, b: Type) bool {
         .process_type => b == .process_type,
         .http_stream_type => b == .http_stream_type,
         .response_writer_type => b == .response_writer_type,
+        .async_response_writer_type => b == .async_response_writer_type,
         .buffer_type => b == .buffer_type,
         .hash_type => b == .hash_type,
         .hmac_type => b == .hmac_type,
@@ -408,6 +411,10 @@ pub fn isHttpStream(t: Type) bool {
 
 pub fn isResponseWriter(t: Type) bool {
     return t == .response_writer_type;
+}
+
+pub fn isAsyncResponseWriter(t: Type) bool {
+    return t == .async_response_writer_type;
 }
 
 pub fn isBuffer(t: Type) bool {
@@ -522,6 +529,7 @@ pub fn toAnnotation(arena: std.mem.Allocator, t: Type) error{OutOfMemory}!?[]con
         .process_type => "ChildProcess",
         .http_stream_type => "HttpStream",
         .response_writer_type => "ResponseWriter",
+        .async_response_writer_type => "AsyncResponseWriter",
         .buffer_type => "Buffer",
         .hash_type => "Hash",
         .hmac_type => "Hmac",
@@ -572,6 +580,10 @@ pub fn fromAnnotation(name: []const u8) Type {
     // handler — both need a real spelling so they check as annotations.
     if (eq(u8, name, "HttpStream")) return .http_stream_type;
     if (eq(u8, name, "ResponseWriter")) return .response_writer_type;
+    // `AsyncResponseWriter` (spec 511 T012): a streaming http.createServer
+    // handler's ASYNC second parameter, node only -- same reasoning as
+    // `AsyncSocket` above.
+    if (eq(u8, name, "AsyncResponseWriter")) return .async_response_writer_type;
     if (eq(u8, name, "RegExp")) return .regexp;
     if (eq(u8, name, "Error")) return .error_obj;
     if (eq(u8, name, "int") or eq(u8, name, "i32")) return .i32;
@@ -685,6 +697,7 @@ pub fn tsName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .process_type => "ChildProcess",
         .http_stream_type => "HttpStream",
         .response_writer_type => "ResponseWriter",
+        .async_response_writer_type => "AsyncResponseWriter",
         .buffer_type => "Buffer",
         .hash_type => "Hash",
         .hmac_type => "Hmac",
@@ -751,6 +764,11 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .process_type => "*LumenChildProcess",
         .http_stream_type => "*LumenHttpStream",
         .response_writer_type => "*LumenResponseWriter",
+        // Same backstop reasoning as `async_socket_type` above: the checker
+        // (`lumen_check_stdlib.zig`'s `httpServerHandlerIsAsync`, spec 511
+        // T012) refuses an async `http.createServer` handler on any
+        // non-node target before the native emitter ever sees this type.
+        .async_response_writer_type => "*LumenAsyncResponseWriter_NOT_IMPLEMENTED_NATIVELY_spec511",
         .buffer_type => "*LumenBuffer",
         .hash_type => "*LumenHash",
         .hmac_type => "*LumenHmac",

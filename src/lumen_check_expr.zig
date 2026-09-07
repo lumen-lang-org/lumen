@@ -1561,6 +1561,9 @@ pub fn exprType(self: *Checker, program: *ast.Program, e: *ast.Expr, line: u32, 
             if (types.isResponseWriter(obj_type)) {
                 return self.responseWriterMethod(program, mc, obj_type, line, col);
             }
+            if (types.isAsyncResponseWriter(obj_type)) {
+                return self.asyncResponseWriterMethod(program, mc, obj_type, line, col);
+            }
             if (types.isBuffer(obj_type)) {
                 return self.bufferMethod(program, mc, obj_type, line, col);
             }
