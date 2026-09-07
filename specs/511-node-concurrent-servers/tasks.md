@@ -257,5 +257,15 @@ this is what's left for `--share` specifically).
 
 ## Phase 6: Gate
 
-- [ ] T018 `zig build test`, `zig build conformance`, `node --test
-  packages/node-runtime/tests/`; `sh tools/codemap.sh`; commit.
+- [x] T018 `zig build test`: clean. `zig build conformance`: a full sweep
+  across every spec manifest in the repo (not just 511's own), 0
+  failures. `node --test packages/node-runtime/tests/`: 306 passed, 0
+  failed, 0 skipped — but not on the first attempt: the full suite
+  hung, twice, on a real bug this task's own verification run
+  surfaced (see the broker worker-recycle fix above, T004's follow-up),
+  invisible running any single test file alone. `sh tools/codemap.sh`:
+  no public-symbol changes since the last run, output unchanged.
+  Committed (T004's follow-up fix + regression test, and this task
+  list). Phase 1-4 remain the scope actually gated here — T012 and
+  Phase 5 (T015-T017, joule-sh/code) are separate, not-yet-started
+  follow-ups, not part of this gate.
