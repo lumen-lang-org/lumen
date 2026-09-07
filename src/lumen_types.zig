@@ -736,11 +736,16 @@ pub fn zigName(arena: std.mem.Allocator, t: Type) ![]const u8 {
         .writable_stream_type => "*LumenWritableStream",
         .socket_type => "*LumenSocket",
         // No native runtime type exists (spec 511 decision 1: native stays
-        // sync-only; a native `LumenAsyncSocket` is a real, separate, NOT
-        // YET DONE undertaking -- 511 tasks.md T010). Names a Zig type that
-        // does not exist rather than something plausible-looking, so a
-        // native compile of an accidentally-async handler fails loudly at
-        // `zig build-exe` (a real, if unfriendly, error) instead of
+        // sync-only; a native `LumenAsyncSocket` is a real, separate, not
+        // yet done undertaking). Should be unreachable in ordinary
+        // compilation: the checker itself now refuses an async
+        // `net.createServer` handler on any non-node target with a real
+        // `E_TARGET_UNSUPPORTED` diagnostic (`lumen_check_stdlib.zig`'s
+        // `netCallType`, spec 511 tasks.md T010), before the native emitter
+        // ever sees an `async_socket_type` value to name. Kept as a
+        // backstop rather than `unreachable`: names a Zig type that does
+        // not exist, so if some other path ever produced this type for
+        // native anyway, it fails loudly at `zig build-exe` instead of
         // silently miscompiling.
         .async_socket_type => "*LumenAsyncSocket_NOT_IMPLEMENTED_NATIVELY_spec511",
         .process_type => "*LumenChildProcess",

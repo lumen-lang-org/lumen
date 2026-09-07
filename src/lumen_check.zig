@@ -247,6 +247,9 @@ pub const Checker = struct {
     pub const classMetaCall = check_meta.classMetaCall;
 
     arena: std.mem.Allocator,
+    // Whether this compile targets `--target node`, not native (spec 511) --
+    // see `checkProgram`'s own doc comment for why this exists.
+    target_is_node: bool = false,
     scopes: std.ArrayListUnmanaged(Scope) = .empty,
     type_decls: std.StringHashMapUnmanaged(TypeDeclInfo) = .empty,
     // `type X = <annotation>;` aliases, resolved transitively in typeFromAnnotation.
@@ -1900,8 +1903,16 @@ pub fn findField(fields: []ast.FieldInit, name: []const u8) ?ast.FieldInit {
     return null;
 }
 
-pub fn checkProgram(arena: std.mem.Allocator, program: *ast.Program, diag: *Diag, warnings: ?*std.ArrayListUnmanaged(Diag)) CompileError!void {
-    var checker = Checker{ .arena = arena };
+/// `target_is_node`: whether this compile targets `--target node`, not
+/// native -- threaded through so a construct whose accepted SHAPE differs
+/// per target (so far only `net.createServer`'s handler, spec 511: a named
+/// `async function` is node-only, native stays sync) can be refused with a
+/// proper diagnostic here, at check time, rather than either accepting it
+/// unconditionally (native then fails downstream at `zig build-exe` with a
+/// raw, unfriendly error) or needing a separate post-check walk in the
+/// native compile driver.
+pub fn checkProgram(arena: std.mem.Allocator, program: *ast.Program, diag: *Diag, warnings: ?*std.ArrayListUnmanaged(Diag), target_is_node: bool) CompileError!void {
+    var checker = Checker{ .arena = arena, .target_is_node = target_is_node };
     defer if (warnings) |w| {
         w.appendSlice(arena, checker.warnings.items) catch {};
     };

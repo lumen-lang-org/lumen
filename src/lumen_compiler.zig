@@ -282,7 +282,7 @@ fn frontEnd(arena: std.mem.Allocator, source: []const u8, diag: *Diag, options: 
         return e;
     };
 
-    try check.checkProgram(arena, &program, diag, options.warnings);
+    try check.checkProgram(arena, &program, diag, options.warnings, options.target == .node);
     return program;
 }
 

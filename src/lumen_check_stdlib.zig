@@ -854,21 +854,27 @@ pub fn netCallType(self: *Checker, program: *ast.Program, call: *ast.StaticCall,
         // Two accepted handler shapes (spec 511): `(socket: Socket) => void`
         // (native's only form, and node's until 511 lands real support) or
         // a named `async function` taking `AsyncSocket` and returning
-        // `Promise<void>` (node only, decision 1 -- native still refuses
-        // this one, checked at emission since the checker doesn't know the
-        // target here, same pattern as every other node-only construct).
-        // `AsyncSocket` is deliberately a distinct type from `Socket`, not
-        // "Socket used inside an async function" -- see
-        // `asyncSocketMethod`'s own comment. Checked once against the
-        // handler's own inferred type, not `ensureAssignable`-against-sync-
-        // then-retry-against-async: that would risk a spurious diagnostic
-        // from the first attempt leaking through when only the second was
-        // ever going to match.
+        // `Promise<void>` (node only, decision 1). `AsyncSocket` is
+        // deliberately a distinct type from `Socket`, not "Socket used
+        // inside an async function" -- see `asyncSocketMethod`'s own
+        // comment. Checked once against the handler's own inferred type,
+        // not `ensureAssignable`-against-sync-then-retry-against-async:
+        // that would risk a spurious diagnostic from the first attempt
+        // leaking through when only the second was ever going to match.
         const handler_type = self.exprType(program, call.args[1], line, col) orelse return null;
         const is_async_handler = netServerHandlerIsAsync(handler_type) orelse {
             _ = self.fail(line, col, "net.createServer's handler must be `(socket: Socket) => void` or an `async function` taking `AsyncSocket` [E_TYPE_MISMATCH]") catch {};
             return null;
         };
+        // Native refuses the async form here, with a real diagnostic, not
+        // a raw `zig build-exe` "undeclared identifier" failure two stages
+        // downstream: `self.target_is_node` is exactly the plumbing spec
+        // 511's own plan.md flagged as missing for this ("needs the
+        // checker to know the compile target, which it does not today").
+        if (is_async_handler and !self.target_is_node) {
+            _ = self.fail(line, col, "net.createServer's `async function` handler is only supported on the node target (spec 511); the native target needs `(socket: Socket) => void` [E_TARGET_UNSUPPORTED]") catch {};
+            return null;
+        }
         call.net_server_async = is_async_handler;
         program.uses_io = true;
         program.needs_net = true;

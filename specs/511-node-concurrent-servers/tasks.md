@@ -147,23 +147,30 @@ this is what's left for `--share` specifically).
   used for every plain stdlib call) already produces exactly the right JS,
   since the handler is an ordinary named function reference staying on the
   same thread, not a value that needs to cross a new one.
-- [~] T010 Native emitter (`lumen_emit_static.zig`): confirmed empirically,
-  not left to a silent miscompile — `lumen_types.zig`'s `zigName` for
-  `async_socket_type` names a Zig type that deliberately doesn't exist
-  (`*LumenAsyncSocket_NOT_IMPLEMENTED_NATIVELY_spec511`), so compiling the
-  T013 conformance example natively fails at `zig build-exe` with "use of
-  undeclared identifier", surfaced through Lumen's existing "the native
-  backend rejected this statement's generated code" wrapper — a real
-  failure, not a hang or wrong output, but NOT YET a clean Lumen
-  diagnostic either (the wrapper's own wording, "likely a Lumen compiler
-  bug; please report it," is actively misleading for a documented,
-  intentional gap rather than an actual bug). A real target-aware
-  checker-side refusal (raised with a proper line/col and message,
-  matching `E_TARGET_UNSUPPORTED`'s own UX) is the honest remaining task
-  here — left undone, not silently downgraded to "good enough": doing it
-  right needs the checker to know the compile target, which it does not
-  today, and threading that through is real, separate plumbing work
-  (plan.md's own open question 1), not a two-line fix.
+- [x] T010 Done properly, not left as the documented gap it started as: the
+  checker now knows the compile target. `checkProgram` (`lumen_check.zig`)
+  takes a new `target_is_node: bool`, threaded from `lumen_compiler.zig`'s
+  `frontEnd` (`options.target == .node` — the one and only caller), stored
+  on `Checker.target_is_node`. `netCallType`'s `createServer` handling
+  (`lumen_check_stdlib.zig`) refuses an async handler outright when
+  `!self.target_is_node`, with a real `E_TARGET_UNSUPPORTED` diagnostic at
+  the call site's own line/col naming both what's wrong and what native
+  needs instead — resolving plan.md's own open question 1 (whether the
+  checker or each emitter enforces target-appropriate shapes) in the
+  checker's favor for this construct, since the fix turned out to be small
+  (one bool, one field, one call-site update — not the "real, separate
+  plumbing work" the original estimate expected). Before this fix,
+  compiling the T013 conformance example natively failed at `zig
+  build-exe` with a raw "undeclared identifier" error, surfaced through
+  Lumen's generic "the native backend rejected this statement's generated
+  code... likely a Lumen compiler bug" wrapper — a real failure, not a
+  silent miscompile, but actively misleading wording for a documented,
+  intentional gap. Now it fails at check time with the proper message.
+  `lumen_types.zig`'s `async_socket_type` → `*LumenAsyncSocket_...` name
+  is kept as a backstop (should be unreachable now) rather than removed.
+  New conformance case: `511.async-handler-native.diagnostics`
+  (`examples/invalid/async-handler-native.ts`, `phase: "diagnostics"`,
+  `E_TARGET_UNSUPPORTED`).
 
 ## Phase 3: `lib/net.mjs`/`lib/http.mjs`
 

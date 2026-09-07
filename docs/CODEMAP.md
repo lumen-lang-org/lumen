@@ -12,9 +12,9 @@ isBuiltinMarker:1019, main:3908
 The Abstract Syntax Tree -- the data structure shared by the parser, the
 FieldInit:21, Visibility:23, DecoratorArg:28, Decorator:45, TypeField:52, EnumValue:65, EnumMember:67, EnumDecl:73, TypeDecl:81, FunctionParam:113, ExternDecl:149, ClassDecl:158, MemberAssign:180, Accessor:197, FunctionDecl:199, VarDecl:233, UsingDecl:259, DestructBinding:275, DestructureDecl:285, Assign:296, ConsoleLog:314, WhileStmt:324, DoWhileStmt:332, ForStmt:340, ForOfStmt:354, ForInStmt:377, IfStmt:389, SwitchCase:397, SwitchStmt:404, ExprStmt:417, ReturnStmt:423, ThrowStmt:430, TryStmt:436, ControlStmt:449, DeferStmt:457, TestDecl:463, SuperCtor:472, StaticCall:479, Stmt:498, BlockStmt:531, Program:537, Expr:637, FieldBuiltin:676, Capture:686, ArrowExpr:699, TemplatePart:714
 
-## src/lumen_check.zig (1917 lines)
+## src/lumen_check.zig (1928 lines)
 The type checker -- stage 3, between parsing and codegen.
-classImplements:74, hasMustUse:110, Checker:148, refInner:1869, isAddressable:1881, isCSafe:1889, findField:1896, checkProgram:1903
+classImplements:74, hasMustUse:110, Checker:148, refInner:1872, isAddressable:1884, isCSafe:1892, findField:1899, checkProgram:1914
 
 ## src/lumen_check_assign.zig (433 lines)
 Assignability and cast checking: "can a value of type X be used where Y is
@@ -40,9 +40,9 @@ namespace:32, classMetaCall:37
 Type-checking for stdlib *instance* methods: methods called on a value of
 cbParamsMatch:19, arrayMethod:38, mapMethod:483, setMethod:574, eventEmitterMethod:642, readableStreamMethod:718, writableStreamMethod:755, socketMethod:787, asyncSocketMethod:833, childProcessMethod:881, httpStreamMethod:928, responseWriterMethod:1001, bufferMethod:1054, numberInstanceMethod:1111, string_method_names:1195, stringMethod:1197, hashMethod:1348, hmacMethod:1377
 
-## src/lumen_check_stdlib.zig (1570 lines)
+## src/lumen_check_stdlib.zig (1576 lines)
 Type-checking for stdlib/builtin calls: `Math.*`, `String.*`, `Array.*`,
-staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:904, jsonSerializable:986, registerLumenHttpResponse:1004, registerLumenHttpRequest:1026, promiseCallType:1047, mathCallType:1119, stringCallType:1371, arrayCallType:1437
+staticCallType:32, numberCallType:62, workerCallType:128, bufferCallType:163, cryptoCallType:224, zlibCallType:484, urlCallType:512, assertCallType:577, dateCallType:618, timeCallType:633, httpCallType:648, netCallType:826, jsonCallType:910, jsonSerializable:992, registerLumenHttpResponse:1010, registerLumenHttpRequest:1032, promiseCallType:1053, mathCallType:1125, stringCallType:1377, arrayCallType:1443
 
 ## src/lumen_check_stdlib_os.zig (1431 lines)
 Type-checking for the OS-facing stdlib namespaces: `fs.*`, `path.*`,
@@ -147,7 +147,7 @@ emitNetRuntime:14
 Runtime prelude codegen for stdio/process/OS surfaces: process
 emitStdioRuntime:14, emitOsCryptoRuntime:472
 
-## src/lumen_types.zig (755 lines)
+## src/lumen_types.zig (760 lines)
 The type system.
 Type:18, MapType:66, EnumType:68, FuncSig:70, SigEntry:75, g_sig_registry:76, g_sig_arena:77, TupleEntry:82, g_tuple_registry:83, tupleStructName:86, funcStructName:177, inferExprType:206, same:238, isOptional:340, unwrapOptional:345, isNumeric:352, isInteger:359, isStringLike:366, isMap:373, isSet:377, isEventEmitter:381, isReadableStream:385, isWritableStream:389, isAsyncSocket:393, isSocket:397, isProcess:401, isHttpStream:405, isResponseWriter:409, isBuffer:413, isHash:417, isHmac:421, isArray:425, arrayElem:432, arrayOf:446, arrayOfAlloc:460, toAnnotation:479, fromAnnotation:548, refZigName:591, isRefAllowed:607, isRefScalar:621, tsName:632, zigName:705
 
